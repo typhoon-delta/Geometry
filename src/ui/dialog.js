@@ -1,0 +1,80 @@
+// Hộp thoại đơn giản (thay window.confirm/prompt để to, rõ trên máy chiếu và chạy được khi test tự động).
+
+function modal(build) {
+  return new Promise((resolve) => {
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    const box = document.createElement('div');
+    box.className = 'modal';
+    back.appendChild(box);
+    const close = (v) => {
+      back.remove();
+      document.removeEventListener('keydown', onKey, true);
+      resolve(v);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); close(null); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    build(box, close);
+    document.body.appendChild(back);
+    const f = box.querySelector('input, textarea, button.primary');
+    if (f) f.focus();
+  });
+}
+
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+export function confirmDialog(title, message, okLabel = 'Đồng ý') {
+  return modal((box, close) => {
+    box.innerHTML = `<h3>${esc(title)}</h3><div class="modal-body">${message}</div>
+      <div class="modal-actions"><button class="cancel">Huỷ</button><button class="primary">${esc(okLabel)}</button></div>`;
+    box.querySelector('.cancel').onclick = () => close(false);
+    box.querySelector('.primary').onclick = () => close(true);
+  }).then((v) => !!v);
+}
+
+export function promptDialog(title, value = '', hint = '') {
+  return modal((box, close) => {
+    box.innerHTML = `<h3>${esc(title)}</h3>${hint ? `<div class="modal-body">${esc(hint)}</div>` : ''}
+      <input type="text" class="modal-input" value="${esc(value)}">
+      <div class="modal-actions"><button class="cancel">Huỷ</button><button class="primary">OK</button></div>`;
+    const inp = box.querySelector('input');
+    inp.select();
+    inp.onkeydown = (e) => { if (e.key === 'Enter') close(inp.value); };
+    box.querySelector('.cancel').onclick = () => close(null);
+    box.querySelector('.primary').onclick = () => close(inp.value);
+  });
+}
+
+/** Hộp hiển thị văn bản dài (mã TikZ, link chia sẻ) kèm nút sao chép. */
+export function textDialog(title, text, extraHTML = '') {
+  return modal((box, close) => {
+    box.classList.add('wide');
+    box.innerHTML = `<h3>${esc(title)}</h3>${extraHTML}<textarea class="modal-text" readonly spellcheck="false"></textarea>
+      <div class="modal-actions"><span class="copied"></span><button class="copy">Sao chép</button><button class="primary">Đóng</button></div>`;
+    const ta = box.querySelector('textarea');
+    ta.value = text;
+    box.querySelector('.copy').onclick = async () => {
+      ta.select();
+      let ok = false;
+      try { await navigator.clipboard.writeText(text); ok = true; } catch { try { ok = document.execCommand('copy'); } catch { ok = false; } }
+      box.querySelector('.copied').textContent = ok ? 'Đã sao chép ✓' : 'Hãy bấm Ctrl+C để sao chép';
+    };
+    box.querySelector('.primary').onclick = () => close(true);
+  });
+}
+
+let toastTimer = null;
+export function toast(msg, ms = 2600) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
