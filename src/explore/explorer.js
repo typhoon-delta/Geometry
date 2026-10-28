@@ -43,7 +43,8 @@ function figureScale(vals, pointIds) {
   return Number.isFinite(s) && s > 1e-12 ? s : 1;
 }
 
-const TRIANGLE_TYPES = new Set(['circumcenter', 'orthocenter', 'incenter', 'centroid', 'nine_point_center', 'altitude_foot', 'incircle_touch', 'arc_midpoint', 'circle_3pts', 'circumcircle', 'incircle', 'nine_point_circle', 'angle_bisector']);
+const TRIANGLE_TYPES = new Set(['circumcenter', 'orthocenter', 'incenter', 'centroid', 'nine_point_center', 'altitude_foot', 'incircle_touch', 'arc_midpoint', 'circle_3pts', 'circumcircle', 'incircle', 'nine_point_circle', 'angle_bisector',
+  'excenter', 'excircle', 'lemoine', 'kosnita', 'symmedian_foot', 'mixtilinear']);
 
 /**
  * Các tam giác trong hình: bộ 3 điểm dùng trong bước kiểu tam giác, hoặc 3 điểm đôi một nối bằng

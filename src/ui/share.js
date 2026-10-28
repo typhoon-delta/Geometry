@@ -7,7 +7,7 @@ const DRAFT_KEY = 'hinh-hoc-dong:nhap';
 
 /** Tài liệu kèm khung nhìn hiện tại (để mở lại đúng chỗ). */
 function docWithView(app) {
-  const bb = app.board.getBoundingBox().map((v) => Math.round(v * 1000) / 1000);
+  const bb = app.view.getBoundingBox().map((v) => Math.round(v * 1000) / 1000);
   return { ...app.doc, view: { bbox: bb } };
 }
 
@@ -103,7 +103,7 @@ export async function initShare(app) {
     clearTimeout(timer);
     timer = setTimeout(() => saveDraft(app), 300);
   });
-  app.board.on('boundingbox', () => {
+  app.view.onViewChange(() => {
     clearTimeout(timer);
     timer = setTimeout(() => saveDraft(app), 600);
   });

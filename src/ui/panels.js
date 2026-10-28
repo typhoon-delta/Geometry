@@ -3,8 +3,9 @@
 import { kinds, frames, stepById, paramsOf } from '../core/model.js';
 import { STEP_TYPES } from '../core/steps.js';
 import { intersect } from '../core/geom.js';
-import { PALETTE, styleOf, isDraggableType } from './styles.js';
-import { labelHTML } from './render.js';
+import { PALETTE, styleOf, isDraggableType } from '../core/styles.js';
+import { labelHTML } from '../core/names.js';
+import { TOOL_BY_ID } from './tools.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -43,7 +44,7 @@ export function renderStepList(app) {
   let lastFrame = -1;
   const rows = doc.steps.map((s, i) => {
     const f = frameOf.get(s.id);
-    const st = styleOf(s, k.get(s.id));
+    const st = styleOf(s, k.get(s.id), app.theme);
     const cls = ['step'];
     if (app.selection.has(s.id)) cls.push('sel');
     if (app.highlight.has(s.id)) cls.push('hl');
@@ -95,15 +96,16 @@ export function renderProps(app) {
   const host = document.getElementById('props');
   if (!host) return;
   const ids = [...app.selection].filter((id) => stepById(app.doc, id));
+  host.classList.toggle('show', ids.length > 0 && app.mode !== 'present');
   if (!ids.length || app.mode === 'present') {
-    host.innerHTML = '<div class="empty small">Bấm vào một đối tượng (trên hình hoặc trong danh sách) để xem và sửa thuộc tính. Giữ Shift để chọn nhiều.</div>';
+    host.innerHTML = '';
     return;
   }
   const k = kinds(app.doc);
   const steps = ids.map((id) => stepById(app.doc, id));
   const s = steps[0];
   const kind = k.get(s.id);
-  const st = styleOf(s, kind);
+  const st = styleOf(s, kind, app.theme);
   const one = steps.length === 1;
   const allKinds = new Set(steps.map((x) => k.get(x.id)));
   const swatches = PALETTE.map((c) => `<button class="sw ${st.color === c.hex ? 'on' : ''}" data-color="${c.hex}" title="${c.name}" style="background:${c.hex}"></button>`).join('');
@@ -165,12 +167,24 @@ export function renderToolOptions(app) {
   if (!host) return;
   const t = app.toolId;
   const m = app.markDefaults;
-  if (!['angle_mark', 'segment_mark', 'polygon'].includes(t)) { host.innerHTML = ''; return; }
+  const tool = TOOL_BY_ID[t];
+  if (tool && tool.options && app.mode === 'edit') {
+    // tham số số của công cụ (góc quay, tỉ số vị tự…)
+    const vals = (app.toolParams ||= {})[t] ||= {};
+    host.classList.add('show');
+    host.innerHTML = `<div class="tool-group-name">${tool.label}</div>` + tool.options.map((o) =>
+      `<label class="row">${o.label} <input type="number" step="any" data-opt="${o.key}" value="${vals[o.key] ?? o.def}" style="width:80px"></label>`).join('');
+    host.querySelectorAll('[data-opt]').forEach((inp) => (inp.onchange = () => { const v = parseFloat(inp.value); if (Number.isFinite(v)) vals[inp.dataset.opt] = v; }));
+    return;
+  }
+  const show = ['angle_mark', 'segment_mark', 'polygon'].includes(t) && app.mode === 'edit';
+  host.classList.toggle('show', show);
+  if (!show) { host.innerHTML = ''; return; }
   const key = t === 'polygon' ? 'polyColor' : 'color';
-  let html = `<div class="tool-group-name">Kiểu dấu mới</div><div class="swatches">${PALETTE.map((c) => `<button class="sw ${m[key] === c.hex ? 'on' : ''}" data-c="${c.hex}" style="background:${c.hex}" title="${c.name}"></button>`).join('')}</div>`;
+  let html = `<div class="tool-group-name">Kiểu dấu mới</div><div class="swatches"><button class="sw def ${!m[key] ? 'on' : ''}" data-c="" title="Màu mặc định của bộ kiểu"></button>${PALETTE.map((c) => `<button class="sw ${m[key] === c.hex ? 'on' : ''}" data-c="${c.hex}" style="background:${c.hex}" title="${c.name}"></button>`).join('')}</div>`;
   if (t === 'angle_mark') html += `<div class="row">Số cung ${[1, 2, 3].map((n) => `<button class="mini ${m.arcs === n ? 'on' : ''}" data-n="${n}">${n}</button>`).join('')}</div><div class="note">Các góc bằng nhau: dùng cùng màu và cùng số cung.</div>`;
   if (t === 'segment_mark') html += `<div class="row">Số vạch ${[1, 2, 3].map((n) => `<button class="mini ${m.ticks === n ? 'on' : ''}" data-n="${n}">${n}</button>`).join('')}</div>`;
   host.innerHTML = html;
-  host.querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => { m[key] = b.dataset.c; renderToolOptions(app); }));
+  host.querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => { m[key] = b.dataset.c || null; renderToolOptions(app); }));
   host.querySelectorAll('[data-n]').forEach((b) => (b.onclick = () => { m[t === 'angle_mark' ? 'arcs' : 'ticks'] = +b.dataset.n; renderToolOptions(app); }));
 }

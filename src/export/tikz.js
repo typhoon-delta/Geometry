@@ -9,25 +9,22 @@
 import { evaluate, kinds, stepById } from '../core/model.js';
 import * as G from '../core/geom.js';
 import { autoLabelDirs } from '../core/labels.js';
+import { texLabel } from '../core/names.js';
+import { styleOf, PALETTE } from '../core/styles.js';
 
-const NAMED_COLORS = {
-  '#111827': 'black', '#1d4ed8': 'xanhduong', '#dc2626': 'do', '#15803d': 'xanhla', '#ea580c': 'cam',
-  '#7e22ce': 'tim', '#0e7490': 'xanhngoc', '#6b7280': 'xam',
-};
-const DEFAULT_COLOR = { circumcircle: '#1d4ed8', incircle: '#15803d', nine_point_circle: '#7e22ce', polygon: '#1d4ed8', angle_mark: '#dc2626', segment_mark: '#dc2626' };
+// Tên màu dễ đọc cho bảng màu chuẩn; màu khác đặt tên theo mã hex.
+const NAMED_COLORS = Object.fromEntries([
+  ['#000000', 'black'], ['#111827', 'black'], ['#1f2937', 'black'],
+  ...PALETTE.slice(1).map((c) => [c.hex, c.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').replace(/[^A-Za-z]/g, '').toLowerCase()]),
+]);
+const PT_PER_PX = 0.4; // nét 1px trên màn hình ≈ 0,4pt (độ dày "thin" của TikZ)
 const f3 = (v) => {
   const s = (Math.round(v * 1000) / 1000).toFixed(3).replace(/\.?0+$/, '');
   return s === '-0' ? '0' : s;
 };
 const xy = (P) => `(${f3(P.x)}, ${f3(P.y)})`;
 
-/** Tên toán học cho nhãn: A1 → A_1, A' giữ nguyên, ω → \omega. */
-export function texLabel(name) {
-  const greek = { 'ω': '\\omega', 'Ω': '\\Omega', 'α': '\\alpha', 'β': '\\beta', 'γ': '\\gamma', 'δ': '\\delta', 'Δ': '\\Delta', 'φ': '\\varphi', 'θ': '\\theta' };
-  let s = name.replace(/[ωΩαβγδΔφθ]/g, (c) => greek[c] + ' ');
-  s = s.replace(/^(.*?)(\d+)('*)$/, (_, a, d, p) => (a ? `${a.trim()}_{${d}}${p}` : d + p));
-  return `$${s.trim()}$`;
-}
+export { texLabel };
 
 function coordName(name, used) {
   let base = (name || 'P').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/'/g, 'p').replace(/[^A-Za-z0-9]/g, '');
@@ -66,6 +63,7 @@ function clipLine(l, box, tMin = -Infinity) {
  */
 export function toTikZ(doc, opts = {}) {
   const width = opts.width || 12;
+  const theme = opts.theme || 'mono';
   const vals = opts.values || evaluate(doc);
   const k = kinds(doc);
   const visible = doc.steps.filter((s) => !s.hidden && vals.get(s.id));
@@ -88,8 +86,9 @@ export function toTikZ(doc, opts = {}) {
 
   // ---- màu ----
   const colorDefs = new Map();
-  const col = (s) => {
-    const hex = ((s.style && s.style.color) || DEFAULT_COLOR[s.type] || '#111827').toLowerCase();
+  const full = (s) => styleOf(s, k.get(s.id), theme);
+  const hexName = (hex) => {
+    hex = hex.toLowerCase();
     if (NAMED_COLORS[hex]) {
       if (NAMED_COLORS[hex] !== 'black') colorDefs.set(NAMED_COLORS[hex], hex);
       return NAMED_COLORS[hex];
@@ -98,15 +97,20 @@ export function toTikZ(doc, opts = {}) {
     colorDefs.set(nm, hex);
     return nm;
   };
+  const col = (s) => hexName(full(s).color || '#000000');
+  const baseWidth = styleOf({ type: 'line' }, 'line', theme).width;
   const opt = (...xs) => {
     const o = xs.filter((x) => x && x !== 'black');
     return o.length ? `[${o.join(', ')}]` : '';
   };
   const lineOpts = (s) => {
-    const st = s.style || {};
-    const w = st.width && Math.abs(st.width - 1.6) > 1e-9 ? `line width=${f3(st.width * 0.45)}pt` : '';
+    const st = full(s);
+    const w = st.width && Math.abs(st.width - baseWidth) > 1e-9 ? `line width=${f3(st.width * PT_PER_PX)}pt` : '';
     return opt(col(s), st.dash ? 'dashed' : '', w);
   };
+  // tâm đường tròn đã dựng thành điểm → dùng tên điểm thay cho toạ độ số
+  const centerOf = new Map();
+  for (const s of doc.steps) if (s.type === 'center' && !centerOf.has(s.args[0])) centerOf.set(s.args[0], s.id);
 
   // ---- tên toạ độ ----
   const used = new Set();
@@ -124,10 +128,13 @@ export function toTikZ(doc, opts = {}) {
 
   for (const s of visible) {
     const v = vals.get(s.id);
-    const st = s.style || {};
+    const st = full(s);
     const kind = k.get(s.id);
     if (kind === 'circle') {
-      const center = s.type === 'circle' || s.type === 'circle_radius' ? ref(s.args[0]) : xy(v.c);
+      const cId = s.type === 'circle' || s.type === 'circle_radius' ? s.args[0] : centerOf.get(s.id);
+      // tâm là một điểm đã có (dựng kèm, hoặc trùng toạ độ với một điểm như O) → dùng tên điểm
+      const cAt = cId && cname.has(cId) ? cId : [...cname.keys()].find((id) => G.dist(vals.get(id), v.c) < 1e-9 * (1 + v.r));
+      const center = cAt ? ref(cAt) : xy(v.c);
       const fill = st.fill || 0;
       if (fill > 0) out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(fill)}] ${center} circle (${f3(v.r)});`);
       out.circles.push(`\\draw${lineOpts(s)} ${center} circle (${f3(v.r)}); % ${s.name || ''}`);
@@ -150,18 +157,18 @@ export function toTikZ(doc, opts = {}) {
       }
     } else if (s.type === 'polygon') {
       const path = s.args.map(ref).join(' -- ') + ' -- cycle';
-      out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.12)}] ${path};`);
+      out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.1)}] ${path};`);
       if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path};`);
     } else if (s.type === 'angle_mark') {
       out.marks.push(...angleMark(v, s, col(s), cm, ref));
     } else if (s.type === 'segment_mark') {
       out.marks.push(...segMark(v, s, col(s), cm));
     } else if (kind === 'point') {
-      const r = ((st.size || 3) * 0.5).toFixed(1);
-      const pc = st.color && st.color.toLowerCase() !== '#111827' ? col(s) : 'black';
-      out.points.push(`\\fill${opt(pc)} ${ref(s.id)} circle (${r}pt);`);
+      const r = f3((st.size || 3) * 0.5);
+      if (st.hollow) out.points.push(`\\filldraw[fill=white${col(s) === 'black' ? '' : ', draw=' + col(s)}] ${ref(s.id)} circle (${r}pt);`);
+      else out.points.push(`\\fill${opt(hexName(st.fillColor || st.color))} ${ref(s.id)} circle (${r}pt);`);
       const dir = st.labelOffset || (autoDirs.get(s.id) ? [autoDirs.get(s.id).x, autoDirs.get(s.id).y] : [1, 1]);
-      if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}] at ${ref(s.id)} {${texLabel(s.name)}};`);
+      if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}, inner sep=1.5pt] at ${ref(s.id)} {${texLabel(s.name)}};`);
     }
   }
 
@@ -169,7 +176,7 @@ export function toTikZ(doc, opts = {}) {
   L.push(`% ${doc.title ? doc.title + ' — ' : ''}xuất từ Hình học động`);
   L.push('% Cần trong phần mở đầu: \\usepackage{tikz}');
   L.push('% Đổi kích thước hình: sửa x=…, y=… (đơn vị của một ô toạ độ).');
-  L.push(`\\begin{tikzpicture}[x=${f3(unit)}cm, y=${f3(unit)}cm, line width=0.6pt, line cap=round, line join=round]`);
+  L.push(`\\begin{tikzpicture}[x=${f3(unit)}cm, y=${f3(unit)}cm, line width=${f3(baseWidth * PT_PER_PX)}pt, line cap=round, line join=round]`);
   if (colorDefs.size) {
     L.push('  % Màu');
     for (const [n, hex] of colorDefs) L.push(`  \\definecolor{${n}}{HTML}{${hex.slice(1).toUpperCase()}}`);

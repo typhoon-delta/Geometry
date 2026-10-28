@@ -35,7 +35,31 @@ const toPage = async (x, y) => {
   return { x: boardBox.x + s.x, y: boardBox.y + s.y };
 };
 const clickAt = async (x, y) => { const p = await toPage(x, y); await page.mouse.click(p.x, p.y); };
-const tool = (id) => page.click(`.tool[data-tool="${id}"]`);
+// Chọn công cụ qua giao diện thật: bấm biểu tượng nhóm trên thanh dọc rồi chọn trong danh sách bung ra
+const tool = async (id) => {
+  const info = await page.evaluate((id) => {
+    const el = document.querySelector(`#tools .tool[data-tool="${id}"]`);
+    if (!el) return null;
+    const sub = el.closest('.sub');
+    return { g: el.closest('.tb-group').dataset.group, sub: sub ? [...sub.parentElement.querySelectorAll(':scope > .sub')].indexOf(sub) : -1 };
+  }, id);
+  if (!info) { await page.click(`.tb-btn[data-group="${id}"]`); return; }
+  const open = await page.evaluate((g) => document.querySelector(`#tools .tb-group[data-group="${g}"]`).classList.contains('open'), info.g);
+  if (!open) await page.click(`.tb-btn[data-group="${info.g}"]`);
+  const scope = `#tools .tb-group[data-group="${info.g}"]`;
+  if (info.sub >= 0) await page.locator(`${scope} .sub-title`).nth(info.sub).click();
+  await page.click(`${scope} .tool[data-tool="${id}"]`);
+};
+// Bấm một mục trong menu trên cùng (Tệp/Sửa/Hiển thị)
+const menu = async (id) => {
+  const i = await page.evaluate((id) => [...document.querySelectorAll('#topbar .menu')].indexOf(document.getElementById(id).closest('.menu')), id);
+  await page.click(`#topbar .menu:nth-child(${i + 1}) .menu-btn`);
+  await page.click('#' + id);
+};
+const example = async (key) => {
+  await page.click('#topbar .menu:nth-child(1) .menu-btn');
+  await page.click(`[data-example="${key}"]`);
+};
 
 // ---------- Mốc 1: dựng hình, kéo thả, hoàn tác ----------
 console.log('Mốc 1: dựng hình + kéo thả + hoàn tác');
@@ -74,7 +98,7 @@ const far = Opt.reduce((a, b) => (Math.hypot(a.x + 1, a.y - 3) > Math.hypot(b.x 
 await clickAt(far.x, far.y);
 st = await state();
 ok(st.n === before + 1 && st.steps[st.n - 1].type === 'intersection_other', 'giao điểm thứ hai của đường thẳng qua A với (O) dùng "giao điểm thứ hai"');
-await page.click('.tool[data-tool="move"]');
+await tool('move');
 await shot('m1-dung-hinh');
 
 // kéo điểm A
@@ -120,11 +144,11 @@ ok((await page.evaluate(() => __app.doc.steps[0].name)) === 'A1', 'đổi tên A
 await page.keyboard.press('Control+z');
 
 // kéo nhãn
-const labBox = await page.evaluate(() => {
-  const arr = __app.renderer.els.get(__app.doc.steps[1].id);
-  const r = arr[arr.length - 1].label.rendNode.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-});
+const labBox = await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => {
+  const b = __app.renderer.labelBoxes.get(__app.doc.steps[1].id);
+  const r = __app.view.canvas.getBoundingClientRect();
+  res({ x: r.left + b.x + b.w / 2, y: r.top + b.y + b.h / 2 });
+})));
 await page.mouse.move(labBox.x, labBox.y);
 await page.mouse.down();
 await page.mouse.move(labBox.x - 20, labBox.y + 15, { steps: 4 });
@@ -140,7 +164,7 @@ const extra = process.env.SMOKE_ONLY_M1 ? [] : ['./smoke2.mjs'];
 for (const f of extra) {
   try {
     const m = await import(f);
-    await m.run({ page, ok, shot, state, tool, clickAt, toPage, errors });
+    await m.run({ page, ok, shot, state, tool, clickAt, toPage, errors, menu, example });
   } catch (e) {
     if (e.code === 'ERR_MODULE_NOT_FOUND' && String(e.message).includes('smoke2')) continue;
     console.log('  ✗ lỗi khi chạy ' + f + ': ' + e.stack);

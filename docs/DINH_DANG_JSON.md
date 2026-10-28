@@ -36,7 +36,7 @@ khám phá, xuất TikZ, và các công cụ dòng lệnh trong `scripts/`.
 | `steps[].type` | Loại bước (bảng dưới). |
 | `steps[].args` | Danh sách `id` của các bước trước, đúng kiểu yêu cầu. |
 | `steps[].params` | Tham số số của bước (bậc tự do, lựa chọn nghiệm). Thiếu thì dùng mặc định. |
-| `steps[].name` | Nhãn hiển thị (`A`, `A1` → A₁, `A'`, `ω1`…). Không trùng nhau. Dấu trang trí không có tên. |
+| `steps[].name` | Nhãn hiển thị, gõ như công thức: `I_A` (chỉ số dưới), `X_{AB}`, `B'` (phẩy), `A'_1`, `A1` → A₁, `ω1`. Không trùng nhau. Dấu trang trí không có tên. |
 | `steps[].style` | Kiểu hiển thị (không ảnh hưởng toán học): `color`, `fillColor`, `width`, `dash`, `size`, `fill` (độ đậm tô nền 0–1), `showLabel`, `labelOffset` `[dx, dy]` (pixel), `arcs`, `ticks`, `border`. |
 | `steps[].hidden` | `true`: đối tượng phụ, không vẽ (vẫn tính, vẫn dùng làm đối số). |
 | `steps[].joinPrev` | `true`: khi trình bày, hiện cùng **khung** với bước hiển thị phía trước. |
@@ -80,6 +80,33 @@ Kiểu đối số: `point`, `line` (gồm đường thẳng, đoạn, tia), `ci
 | `circle_radius` | O, A, B | Tâm O, bán kính AB (compa). |
 | `circle_3pts` | A, B, C | Đường tròn qua 3 điểm. |
 | `circumcircle`, `incircle`, `nine_point_circle` | A, B, C | Đường tròn ngoại tiếp, nội tiếp, Euler của ABC. |
+
+### Bổ sung từ bản 1.1 (thư viện công cụ)
+
+| `type` | `args` | `params` | Ý nghĩa |
+|---|---|---|---|
+| `center` | `circle` | – | Tâm của đường tròn (mọi công cụ vẽ đường tròn dựng kèm tâm). |
+| `foot` | P, A, B | – | Hình chiếu của P lên đường thẳng AB (không cần dựng đường AB). |
+| `reflect_pts` | P, A, B | – | Đối xứng của P qua đường thẳng AB. |
+| `rotate` | `obj` X, O | `angle` (độ) | Quay X quanh O (ngược chiều kim đồng hồ). |
+| `homothety` | `obj` X, O | `k` | Vị tự tâm O tỉ số k. |
+| `translate` | `obj` X, P, Q | – | Tịnh tiến theo vectơ PQ. |
+| `invert` | P, `circle` | – | Nghịch đảo điểm P qua đường tròn. |
+| `tangent_at` | `circle`, P | – | Tiếp tuyến tại P (đường qua P vuông góc bán kính). |
+| `tangent_point` | `circle`, P | `which` (0/1) | Tiếp điểm của tiếp tuyến kẻ từ P (thứ tự chuẩn như giao hai đường tròn). |
+| `common_tangent` | `circle`, `circle` | `internal`, `which` | Tiếp tuyến chung ngoài/trong (đường đi từ tiếp điểm trên đường tròn 1 tới tiếp điểm trên đường tròn 2). |
+| `radical_axis` | `circle`, `circle` | – | Trục đẳng phương. |
+| `radical_center` | 3 `circle` | – | Tâm đẳng phương. |
+| `homothety_center` | `circle`, `circle` | `internal` | Tâm vị tự ngoài/trong. |
+| `excenter`, `excircle` | A, B, C | – | Tâm / đường tròn bàng tiếp góc A. |
+| `isogonal_conjugate` | P, A, B, C | – | Liên hợp đẳng giác của P (toạ độ tỉ cự (u:v:w) ↦ (a²/u : b²/v : c²/w)). |
+| `lemoine`, `kosnita` | A, B, C | – | Điểm Lemoine (a² : b² : c²); điểm Kosnita (liên hợp đẳng giác của N). |
+| `symmedian_foot` | A, B, C | – | Chân đường đối trung từ A trên BC (BL/LC = AB²/AC²). |
+| `cevian_foot` | P, A, B, C | – | Giao AP với BC. |
+| `isogonal_line` | B, A, C, P | – | Đường đẳng giác của AP trong góc BAC (đỉnh A là đối số thứ hai). |
+| `circle_tangent_at` | A, B, C | – | Đường tròn tiếp xúc AB tại A, đi qua C. |
+| `mixtilinear` | A, B, C | `external` | Đường tròn mixtilinear nội (tiếp xúc trong với (O)) / ngoại (tiếp xúc ngoài) ứng với A. |
+| `circle_diameter` | A, B | – | Đường tròn đường kính AB. |
 
 ### Dấu trang trí (không tham gia khám phá, không cần khi dịch sang hệ khác)
 
@@ -145,3 +172,17 @@ Kết quả khám phá có dạng:
 
 Các loại quan hệ: `collinear`, `concyclic`, `concurrent` (≥ 3 đường thẳng/đường tròn qua một điểm
 chưa dựng), `parallel`, `perpendicular`, `tangent`, `on_line`, `on_circle`, `coincide`, `same_line`, `same_circle`.
+
+## Công cụ tự tạo ("Công cụ › 7. Công cụ của tôi")
+
+Lưu trong trình duyệt (`localStorage`, khoá `hinh-hoc-dong:tools`) và xuất/nhập được ra tệp:
+
+```json
+{ "format": "hinh-hoc-dong-cong-cu", "version": 1,
+  "tools": [ { "id": "user_…", "label": "Trực tâm của tôi", "inputs": ["point", "point", "point"],
+               "hints": ["…"],
+               "steps": [ { "type": "orthocenter", "args": ["in:0", "in:1", "in:2"], "result": true, "name": "H" } ] } ] }
+```
+
+Trong `steps[].args`, `in:k` là đầu vào thứ k (người dùng chọn khi dùng công cụ), `st:j` là bước thứ j của chính
+công cụ. Bước có `result: true` được hiện; các bước trung gian được ẩn.

@@ -40,6 +40,7 @@ export function setupExplore(app) {
   const run = () => {
     const btn = pane.querySelector('#btn-run-explore');
     if (btn) { btn.disabled = true; btn.textContent = 'Đang khám phá…'; }
+    app.togglePanel(true);
     document.querySelector('[data-tab="tab-explore"]').click();
     setTimeout(() => {
       try {
@@ -81,29 +82,26 @@ export function drawRelationOverlay(app) {
   if (!r) return;
   const R = app.renderer;
   const V = (id) => app.values.get(id);
-  const st = { strokeColor: '#f59e0b', strokeWidth: 2.2 * (app.projector ? 1.9 : 1), dash: 2 };
-  const pt = (id) => R.addExtra('point', [() => V(id)?.x ?? NaN, () => V(id)?.y ?? NaN], { visible: false });
+  const style = { color: '#f59e0b', width: 2.2, dash: true };
   if (r.type === 'collinear') {
     // đường qua hai điểm xa nhau nhất
     const ids = r.ids;
     let best = [ids[0], ids[1]], bd = -1;
     for (const a of ids) for (const b of ids) { const d = V(a) && V(b) ? G.dist(V(a), V(b)) : 0; if (d > bd) { bd = d; best = [a, b]; } }
-    R.addExtra('line', best.map(pt), st);
+    R.addExtra({ type: 'line', pts: best.map((id) => () => V(id)), style });
   } else if (r.type === 'concyclic') {
-    R.addExtra('circumcircle', r.ids.slice(0, 3).map(pt), { ...st, center: { visible: false } });
+    R.addExtra({ type: 'circle3', pts: r.ids.slice(0, 3).map((id) => () => V(id)), style });
   } else if (r.type === 'concurrent') {
     const common = () => {
       const [a, b, ...rest] = r.ids.map(V);
       if (!a || !b) return null;
-      const roots = G.intersect(a, b);
       let best = null, bd = Infinity;
-      for (const X of roots) {
+      for (const X of G.intersect(a, b)) {
         const d = rest.reduce((s, c) => s + (c ? G.distToObject(c, X) : 1e9), 0);
         if (d < bd) { bd = d; best = X; }
       }
       return best;
     };
-    R.addExtra('point', [() => common()?.x ?? NaN, () => common()?.y ?? NaN], { size: 7 * (app.projector ? 1.9 : 1), strokeColor: '#f59e0b', fillColor: '#fde68a', strokeWidth: 2 });
+    R.addExtra({ type: 'point', pts: [common], style: { color: '#f59e0b', fill: '#fde68a', size: 7 } });
   }
-  app.board.update();
 }

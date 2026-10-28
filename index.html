@@ -4,43 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hình học động</title>
-<link rel="stylesheet" href="vendor/jsxgraph/jsxgraph.css">
 <link rel="stylesheet" href="css/style.css">
-<script src="vendor/jsxgraph/jsxgraphcore.js"></script>
 </head>
 <body>
 <header id="topbar">
-  <div class="brand">△ Hình học động</div>
-  <div class="group">
-    <button id="btn-new" title="Hình mới">Mới</button>
-    <select id="sel-example" title="Mở hình mẫu"></select>
-    <button id="btn-open" title="Mở tệp .json">📂 Mở</button>
-    <button id="btn-save" title="Lưu hình ra tệp .json">💾 Lưu</button>
-    <button id="btn-share" title="Tạo link chứa toàn bộ hình">🔗 Chia sẻ link</button>
-    <input id="doc-title" type="text" placeholder="Tên hình…" title="Tên hình (dùng làm tên tệp)">
-  </div>
-  <div class="group">
-    <button id="btn-undo" title="Hoàn tác (Ctrl+Z)">↶</button>
-    <button id="btn-redo" title="Làm lại (Ctrl+Y)">↷</button>
-    <button id="btn-delete" title="Xoá đối tượng đang chọn (Delete)">🗑</button>
-  </div>
-  <div class="group">
-    <button id="btn-grid" title="Bật/tắt lưới (bắt điểm theo lưới)">Lưới</button>
-    <button id="btn-fit" title="Thu phóng vừa hình">Vừa khung</button>
-  </div>
-  <div class="group extra-actions">
-    <button id="btn-explore" title="Tìm các quan hệ hình học ẩn trong hình">🔍 Khám phá</button>
-    <button id="btn-tikz" title="Xuất mã TikZ để dán vào LaTeX">TikZ</button>
-  </div>
-  <div class="group right">
-    <button id="btn-present" title="Tua từng bước dựng">▶ Trình bày</button>
-    <button id="btn-projector" title="Nét đậm, chữ to, toàn màn hình">⛶ Trình chiếu</button>
-  </div>
+  <div class="brand" title="Hình học động">△</div>
+  <nav class="menus">
+    <div class="menu">
+      <button class="menu-btn">Tệp</button>
+      <div class="menu-pop">
+        <button id="btn-new">Hình mới</button>
+        <button id="btn-open">Mở tệp… <kbd>Ctrl+O</kbd></button>
+        <button id="btn-save">Lưu tệp <kbd>Ctrl+S</kbd></button>
+        <button id="btn-share">Chia sẻ bằng link…</button>
+        <button id="btn-tikz">Xuất TikZ…</button>
+        <div class="menu-sep"></div>
+        <div class="menu-label">Hình mẫu</div>
+        <div id="example-list"></div>
+      </div>
+    </div>
+    <div class="menu">
+      <button class="menu-btn">Sửa</button>
+      <div class="menu-pop">
+        <button id="menu-undo">Hoàn tác <kbd>Ctrl+Z</kbd></button>
+        <button id="menu-redo">Làm lại <kbd>Ctrl+Y</kbd></button>
+        <button id="btn-delete">Xoá đối tượng đang chọn <kbd>Delete</kbd></button>
+      </div>
+    </div>
+    <div class="menu">
+      <button class="menu-btn">Hiển thị</button>
+      <div class="menu-pop">
+        <div class="menu-label">Bộ kiểu</div>
+        <button id="theme-mono" class="radio" data-theme="mono">Đơn sắc (kiểu Sketchpad)</button>
+        <button id="theme-textbook" class="radio" data-theme="textbook">Sách giáo khoa (màu dịu)</button>
+        <div class="menu-sep"></div>
+        <button id="btn-grid" class="check">Lưới (bắt điểm theo lưới)</button>
+        <button id="btn-fit">Thu phóng vừa hình</button>
+        <button id="menu-panel" class="check">Bảng các bước dựng</button>
+      </div>
+    </div>
+  </nav>
+  <input id="doc-title" type="text" placeholder="Tên hình…" title="Tên hình (dùng làm tên tệp)">
+  <div class="spacer"></div>
+  <button id="btn-undo" class="icon" title="Hoàn tác (Ctrl+Z)"></button>
+  <button id="btn-redo" class="icon" title="Làm lại (Ctrl+Y)"></button>
+  <span class="vsep"></span>
+  <button id="btn-explore" class="icon" title="Khám phá: tìm quan hệ ẩn trong hình"></button>
+  <button id="btn-present" class="icon" title="Trình bày: tua từng bước dựng"></button>
+  <button id="btn-projector" class="icon" title="Trình chiếu: toàn màn hình, nét đậm, chữ to"></button>
+  <button id="btn-panel" class="icon" title="Bảng các bước dựng / khám phá"></button>
 </header>
 <main id="main">
   <aside id="tools"></aside>
   <section id="stage">
-    <div id="board" class="jxgbox"></div>
+    <div id="board"></div>
+    <div id="tool-options"></div>
+    <div id="props"></div>
     <div id="hint"></div>
     <button id="exit-projector" title="Thoát trình chiếu (Esc)">✕ Thoát trình chiếu</button>
     <div id="present-bar">
@@ -54,10 +73,10 @@
     <div class="tabs">
       <button class="tab active" data-tab="tab-steps">Các bước dựng</button>
       <button class="tab" data-tab="tab-explore" id="tab-btn-explore">Khám phá</button>
+      <button class="tab-close" id="btn-close-panel" title="Ẩn bảng">✕</button>
     </div>
     <div id="tab-steps" class="tabpane active">
       <div id="steps"></div>
-      <div id="props"></div>
     </div>
     <div id="tab-explore" class="tabpane"></div>
   </aside>

@@ -1,13 +1,16 @@
 // Ứng dụng: giữ tài liệu (danh sách bước dựng), lịch sử hoàn tác, công cụ, chế độ trình bày/trình chiếu.
 // Mọi thay đổi hình đi qua commit() → lõi tính lại toạ độ → vẽ lại.
 
-/* global JXG */
-import { evaluate, kinds, removeSteps, dependents, newId, nextName, stepById, clone, frames, emptyDoc, describe } from '../core/model.js';
+import { addSpecs } from '../core/apply.js';
+import { evaluate, makeUpdater, kinds, removeSteps, dependents, newId, nextName, stepById, clone, frames, emptyDoc, describe } from '../core/model.js';
 import { STEP_TYPES, argAccepts } from '../core/steps.js';
 import * as G from '../core/geom.js';
 import { Renderer } from './render.js';
-import { TOOLS, TOOL_BY_ID } from './tools.js';
-import { isDraggableType, PALETTE } from './styles.js';
+import { CanvasView } from './view.js';
+import { TOOL_BY_ID, TOOLBAR } from './tools.js';
+import { ICONS } from './icons.js';
+import { createMacro, macroTool, validMacro, USER_MENU } from '../core/macro.js';
+import { isDraggableType, PALETTE, setTheme } from '../core/styles.js';
 import { confirmDialog, promptDialog, toast } from './dialog.js';
 import { renderStepList, renderProps, renderToolOptions } from './panels.js';
 
@@ -29,27 +32,17 @@ export class App {
     this.projector = false;
     this.grid = false;
     this.mouse = { x: 0, y: 0 };
-    this.markDefaults = { color: '#dc2626', arcs: 1, ticks: 1, polyColor: '#1d4ed8' };
+    this.markDefaults = { color: null, arcs: 1, ticks: 1, polyColor: null }; // null = màu mặc định của bộ kiểu
+    this.theme = loadPref('theme', 'mono');
+    setTheme(this.theme);
     this.listeners = { change: [] };
   }
 
   // ================= khởi tạo =================
   mount() {
-    JXG.Options.text.useMathJax = false;
-    JXG.Options.text.display = 'html';
-    this.board = JXG.JSXGraph.initBoard('board', {
-      boundingbox: [-8, 6, 8, -6],
-      keepAspectRatio: true,
-      axis: false,
-      grid: false,
-      showCopyright: false,
-      showNavigation: false,
-      showInfobox: false,
-      pan: { enabled: true, needShift: false, needTwoFingers: false },
-      zoom: { wheel: true, needShift: false, min: 0.02, max: 100, factorX: 1.15, factorY: 1.15 },
-      resize: { enabled: true },
-    });
-    this.renderer = new Renderer(this.board);
+    this.view = new CanvasView(document.getElementById('board'));
+    this.view.setBoundingBox([-8, 6, 8, -6]);
+    this.renderer = new Renderer(this.view);
     this.stage = document.getElementById('stage');
     this.buildToolbar();
     this.bindPointer();
@@ -77,7 +70,7 @@ export class App {
     this.highlight.clear();
     this.relation = null;
     this.cancelTool();
-    if (doc.view && Array.isArray(doc.view.bbox)) this.board.setBoundingBox(doc.view.bbox, true);
+    if (doc.view && Array.isArray(doc.view.bbox)) this.view.setBoundingBox(doc.view.bbox);
     this.refresh();
     this.emit('load');
     this.emit('change');
@@ -136,23 +129,18 @@ export class App {
    * Các bước sau bước đầu được gộp chung khung trình bày. Trả về danh sách id.
    */
   addSteps(specs, { join = true } = {}) {
-    const ids = [];
-    const k = kinds(this.doc);
-    specs.forEach((sp, i) => {
-      const def = STEP_TYPES[sp.type];
-      const id = newId(this.doc);
-      const args = sp.args.map((a) => (typeof a === 'string' && a.startsWith('$') ? ids[+a.slice(1)] : a));
-      const kind = def.kind === 'same' ? k.get(args[0]) : def.kind;
-      const step = { id, type: sp.type, args };
-      if (sp.params && Object.keys(sp.params).length) step.params = { ...sp.params };
-      if (kind !== 'mark') step.name = sp.name && !this.nameUsed(sp.name) ? sp.name : nextName(this.doc, kind, sp.name);
-      if (sp.style) step.style = { ...sp.style };
-      if (i > 0 && join) step.joinPrev = true;
-      this.doc.steps.push(step);
-      k.set(id, kind);
-      ids.push(id);
-    });
-    return ids;
+    return addSpecs(this.doc, specs, { join });
+  }
+
+  /** Tên hiển thị của một đối tượng (dùng khi công cụ đặt tên kết quả, vd I_A). */
+  name(id) {
+    return stepById(this.doc, id)?.name || '';
+  }
+
+  /** Tham số số của công cụ đang dùng (góc quay, tỉ số vị tự…), chỉnh ở thẻ tuỳ chọn. */
+  opt(key, def) {
+    const p = (this.toolParams && this.toolParams[this.toolId]) || {};
+    return key in p ? p[key] : def;
   }
 
   nameUsed(name, exceptId) {
@@ -171,7 +159,9 @@ export class App {
   refresh() {
     this.values = evaluate(this.doc);
     this.renderer.scale = this.projector ? 1.9 : 1;
-    this.renderer.rebuild(this.doc, this.values, {
+    this.renderer.grid = this.grid;
+    this.renderer.setScene(this.doc, this.values, {
+      theme: this.theme,
       visible: this.visibleSet(),
       selected: this.mode === 'present' ? new Set() : this.selection,
       highlight: this.highlight,
@@ -181,35 +171,33 @@ export class App {
     this.renderPanels();
   }
 
-  /** Cập nhật nhanh khi kéo (không dựng lại phần tử). */
+  /** Cập nhật nhanh khi kéo: chỉ tính lại các bước phụ thuộc (nếu có bộ cập nhật), rồi vẽ lại. */
   quickUpdate() {
-    this.values = evaluate(this.doc);
+    if (this.dragUpdater) this.dragUpdater(this.values);
+    else this.values = evaluate(this.doc);
     this.renderer.update(this.values);
-    this.updateCoordsReadout?.();
   }
 
   renderPanels() {
     renderStepList(this);
     renderProps(this);
     renderToolOptions(this);
-    document.getElementById('btn-undo').disabled = !this.undoStack.length;
-    document.getElementById('btn-redo').disabled = !this.redoStack.length;
+    for (const id of ['btn-undo', 'menu-undo']) { const b = document.getElementById(id); if (b) b.disabled = !this.undoStack.length; }
+    for (const id of ['btn-redo', 'menu-redo']) { const b = document.getElementById(id); if (b) b.disabled = !this.redoStack.length; }
     this.updatePresentBar();
   }
 
   // ================= toạ độ & chọn đối tượng =================
   toScreen(P) {
-    const b = this.board;
-    return { x: b.origin.scrCoords[1] + P.x * b.unitX, y: b.origin.scrCoords[2] - P.y * b.unitY };
+    return this.view.toScreen(P);
   }
 
   toUser(sx, sy) {
-    const b = this.board;
-    return { x: (sx - b.origin.scrCoords[1]) / b.unitX, y: (b.origin.scrCoords[2] - sy) / b.unitY };
+    return this.view.toUser(sx, sy);
   }
 
   eventPos(e) {
-    const r = this.board.containerObj.getBoundingClientRect();
+    const r = this.boardRect || (this.boardRect = this.view.canvas.getBoundingClientRect());
     return { sx: e.clientX - r.left, sy: e.clientY - r.top };
   }
 
@@ -218,7 +206,7 @@ export class App {
     const vis = this.visibleSet();
     const k = kinds(this.doc);
     const P = this.toUser(sx, sy);
-    const px = 1 / this.board.unitX;
+    const px = 1 / this.view.scale;
     const f = this.projector ? 1.6 : 1;
     const out = [];
     for (const s of this.doc.steps) {
@@ -252,7 +240,7 @@ export class App {
   /** Điểm đã có trùng (về số) với P. */
   existingPointAt(P, tolPx = 0.5) {
     const k = kinds(this.doc);
-    const tol = Math.max(1e-9 * this.figureScale(), tolPx / this.board.unitX);
+    const tol = Math.max(1e-9 * this.figureScale(), tolPx / this.view.scale);
     for (const s of this.doc.steps) {
       if (k.get(s.id) !== 'point') continue;
       const v = this.values.get(s.id);
@@ -290,7 +278,7 @@ export class App {
     if (pHit) return pHit.id;
     const P = this.toUser(sx, sy);
     const curves = hits.filter((h) => h.kind === 'line' || h.kind === 'circle').slice(0, 4);
-    const px = 1 / this.board.unitX;
+    const px = 1 / this.view.scale;
     let best = null;
     for (let i = 0; i < curves.length; i++)
       for (let j = i + 1; j < curves.length; j++)
@@ -317,9 +305,8 @@ export class App {
   setTool(id) {
     this.cancelTool();
     this.toolId = id;
-    document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
+    this.markActiveTool(id);
     this.stage.classList.toggle('tool-active', id !== 'move');
-    this.board.attr.pan.enabled = id === 'move';
     this.showHint();
     renderToolOptions(this);
   }
@@ -445,51 +432,66 @@ export class App {
 
   markStyle(kind) {
     const m = this.markDefaults;
-    if (kind === 'angle') return { color: m.color, arcs: m.arcs };
-    if (kind === 'segment') return { color: m.color, ticks: m.ticks };
-    return { color: m.polyColor, fill: 0.12 };
+    const c = (x) => (x ? { color: x } : {});
+    if (kind === 'angle') return { ...c(m.color), arcs: m.arcs };
+    if (kind === 'segment') return { ...c(m.color), ticks: m.ticks };
+    return { ...c(m.polyColor) };
   }
 
   startPreview(tool) {
     this.renderer.clearExtra();
     if (!tool.preview || !this.picks.length) return;
     const r = this.renderer;
-    const ptOf = (id) => r.addExtra('point', [() => this.values.get(id)?.x ?? NaN, () => this.values.get(id)?.y ?? NaN], { visible: false });
-    const mouse = r.addExtra('point', [() => this.mouse.x, () => this.mouse.y], { visible: false });
-    const st = { strokeColor: '#9ca3af', strokeWidth: 1.5, dash: 2 };
-    const pts = this.picks.map(ptOf);
-    if (tool.preview === 'segment') r.addExtra('segment', [pts[0], mouse], st);
-    else if (tool.preview === 'line') r.addExtra('line', [pts[0], mouse], st);
-    else if (tool.preview === 'ray') r.addExtra('line', [pts[0], mouse], { ...st, straightFirst: false });
-    else if (tool.preview === 'circle') r.addExtra('circle', [pts[0], mouse], st);
-    else if (tool.preview === 'polygon') {
-      for (let i = 0; i + 1 < pts.length; i++) r.addExtra('segment', [pts[i], pts[i + 1]], st);
-      r.addExtra('segment', [pts[pts.length - 1], mouse], st);
-    }
+    const pts = this.picks.map((id) => () => this.values.get(id));
+    const mouse = () => this.mouse;
+    if (['segment', 'line', 'ray', 'circle'].includes(tool.preview)) r.addExtra({ type: tool.preview, pts: [pts[0], mouse] });
+    else if (tool.preview === 'polygon') r.addExtra({ type: 'polyline', pts: [...pts, mouse] });
   }
 
   // ================= chuột / cảm ứng =================
   bindPointer() {
-    const box = this.board.containerObj;
+    const canvas = this.view.canvas;
     const wrap = this.stage;
+    const resetRect = () => { this.boardRect = null; };
+    window.addEventListener('resize', resetRect);
+    window.addEventListener('scroll', resetRect, true);
+    this.view.onViewChange(resetRect);
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resetRect).observe(canvas);
     wrap.addEventListener('pointerdown', (e) => this.onPointerDown(e), true);
+    // Di chuột (không kéo): chỉ ghi nhận vị trí; cập nhật con trỏ và hình xem trước một lần mỗi khung
+    let hoverPending = false;
+    let lastEvent = null;
     wrap.addEventListener('pointermove', (e) => {
-      const { sx, sy } = this.eventPos(e);
-      this.mouse = this.toUser(sx, sy);
-      if (this.picks.length && this.renderer.extra.length) this.board.update();
-      if (!this.drag) {
+      if (this.drag) return;
+      lastEvent = e;
+      if (hoverPending) return;
+      hoverPending = true;
+      requestAnimationFrame(() => {
+        hoverPending = false;
+        if (this.drag || !lastEvent) return;
+        const ev = lastEvent;
+        const { sx, sy } = this.eventPos(ev);
+        this.mouse = this.toUser(sx, sy);
+        if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
         const hits = this.hitTest(sx, sy);
         let cursor = '';
-        if (this.toolId === 'move' && this.mode !== 'edit-disabled') {
+        if (this.toolId === 'move' || this.mode === 'present') {
           const h = hits[0];
           if (h && h.kind === 'point' && isDraggableType(stepById(this.doc, h.id).type)) cursor = 'grab';
-          else if (h) cursor = 'pointer';
-          else if (this.labelAt(e)) cursor = 'move';
-        } else if (this.toolId !== 'move') cursor = hits.length ? 'pointer' : 'crosshair';
-        box.style.cursor = cursor;
-      }
+          else if (h && this.mode === 'edit') cursor = 'pointer';
+          else if (this.mode === 'edit' && this.labelAt(ev)) cursor = 'move';
+        } else cursor = hits.length ? 'pointer' : 'crosshair';
+        canvas.style.cursor = cursor;
+      });
     });
-    box.addEventListener('dblclick', (e) => {
+    // Lăn chuột: phóng to/thu nhỏ quanh con trỏ
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const { sx, sy } = this.eventPos(e);
+      const dy = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
+      this.view.zoomAt(sx, sy, Math.exp(-dy * 0.0015));
+    }, { passive: false });
+    canvas.addEventListener('dblclick', (e) => {
       if (this.mode === 'present') return;
       const { sx, sy } = this.eventPos(e);
       const h = this.hitTest(sx, sy)[0];
@@ -499,21 +501,52 @@ export class App {
 
   /** Nhãn điểm tại vị trí chuột (để kéo nhãn). */
   labelAt(e) {
-    for (const [id, arr] of this.renderer.els) {
-      const p = arr[arr.length - 1];
-      if (!p || p.elType !== 'point' || !p.label || !p.label.rendNode || !p.visProp.visible || !p.visProp.withlabel) continue;
-      const r = p.label.rendNode.getBoundingClientRect();
-      if (r.width && e.clientX >= r.left - 2 && e.clientX <= r.right + 2 && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2) return id;
+    const { sx, sy } = this.eventPos(e);
+    for (const [id, b] of this.renderer.labelBoxes) {
+      if (sx >= b.x - 2 && sx <= b.x + b.w + 2 && sy >= b.y - 2 && sy <= b.y + b.h + 2) return id;
     }
     return null;
   }
 
+  /** Dời hình bằng cách kéo nền (một ngón/chuột) hoặc chụm hai ngón để phóng (màn hình cảm ứng). */
+  startPan(e) {
+    const pointers = this.panPointers || (this.panPointers = new Map());
+    pointers.set(e.pointerId, this.eventPos(e));
+    if (this.panning) return;
+    this.panning = true;
+    const move = (ev) => {
+      if (!pointers.has(ev.pointerId)) return;
+      const prev = [...pointers.values()];
+      const before = pointers.get(ev.pointerId);
+      const now = this.eventPos(ev);
+      pointers.set(ev.pointerId, now);
+      if (pointers.size >= 2) {
+        const [a0, b0] = prev, [a1, b1] = [...pointers.values()];
+        const d0 = Math.hypot(a0.sx - b0.sx, a0.sy - b0.sy), d1 = Math.hypot(a1.sx - b1.sx, a1.sy - b1.sy);
+        if (d0 > 5) this.view.zoomAt((a1.sx + b1.sx) / 2, (a1.sy + b1.sy) / 2, d1 / d0);
+      } else this.view.panBy(now.sx - before.sx, now.sy - before.sy);
+    };
+    const up = (ev) => {
+      pointers.delete(ev.pointerId);
+      if (pointers.size) return;
+      this.panning = false;
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  }
+
   onPointerDown(e) {
+    if (!e.target.closest('#board')) return; // thẻ nổi (thuộc tính, tuỳ chọn) nằm trên bảng vẽ: để chúng tự xử lý
     if (e.button !== undefined && e.button !== 0) return;
     if (document.querySelector('.modal-back')) return;
+    this.boardRect = null;
     const { sx, sy } = this.eventPos(e);
-    const r = this.board.containerObj.getBoundingClientRect();
-    if (sx < 0 || sy < 0 || sx > r.width || sy > r.height) return;
+    if (sx < 0 || sy < 0 || sx > this.view.W || sy > this.view.H) return;
+    if (this.panning) { this.startPan(e); return; } // ngón thứ hai: chụm để phóng
     this.mouse = this.toUser(sx, sy);
 
     if (this.toolId !== 'move' && this.mode === 'edit') {
@@ -550,28 +583,37 @@ export class App {
       if (this.mode === 'edit') this.select(h.id, e.shiftKey);
       return;
     }
-    // chỗ trống: bỏ chọn, để JSXGraph dời hình
-    if (this.mode === 'edit' && (this.selection.size || this.highlight.size) && !e.shiftKey) {
+    // chỗ trống: bỏ chọn, dời hình
+    e.preventDefault();
+    if (this.mode === 'edit' && this.selection.size && !e.shiftKey) {
       this.selection.clear();
       this.refresh();
     }
+    this.startPan(e);
   }
 
+  /**
+   * Kéo điểm hoặc nhãn. Sự kiện chuột chỉ ghi lại vị trí mới nhất; việc tính lại và vẽ được gom
+   * vào requestAnimationFrame (≤ 1 lần mỗi khung hình) và chỉ tính lại các bước phụ thuộc vào điểm
+   * đang kéo. Ghi lịch sử hoàn tác, đặt lại nhãn tự động, lưu nháp… chỉ làm một lần khi thả chuột.
+   */
   startDrag(e, info) {
     this.drag = info;
     const step = stepById(this.doc, info.id);
     const P0 = this.values.get(info.id);
     if (info.kind === 'point' && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
-    const move = (ev) => {
-      const { sx, sy } = this.eventPos(ev);
+    if (info.kind === 'point') this.dragUpdater = makeUpdater(this.doc, [info.id]);
+    let pending = null;
+    const apply = () => {
+      if (!pending) return;
+      const { sx, sy } = pending;
+      pending = null;
       this.mouse = this.toUser(sx, sy);
       if (info.kind === 'label') {
         const sc = this.projector ? 1.9 : 1;
         const off = [round1(info.off[0] + (sx - info.sx) / sc), round1(info.off[1] - (sy - info.sy) / sc)];
         step.style = { ...(step.style || {}), labelOffset: off };
-        const arr = this.renderer.els.get(info.id);
-        const p = arr && arr[arr.length - 1];
-        if (p && p.label) { p.label.setAttribute({ offset: off.map((v) => v * sc) }); this.board.update(); }
+        this.renderer.setLabelOffset(info.id, off);
         return;
       }
       const target = { x: this.mouse.x + info.grab.x, y: this.mouse.y + info.grab.y };
@@ -584,11 +626,19 @@ export class App {
       }
       this.quickUpdate();
     };
+    this.view.frameHooks.push(apply);
+    const move = (ev) => {
+      pending = this.eventPos(ev);
+      this.view.requestDraw();
+    };
     const up = () => {
       window.removeEventListener('pointermove', move, true);
       window.removeEventListener('pointerup', up, true);
       window.removeEventListener('pointercancel', up, true);
+      apply();
+      this.view.frameHooks = this.view.frameHooks.filter((f) => f !== apply);
       this.drag = null;
+      this.dragUpdater = null;
       if (JSON.stringify(this.doc) !== info.start) {
         this.pushUndo(info.start);
         this.afterChange();
@@ -612,7 +662,7 @@ export class App {
   async renameStep(id) {
     const s = stepById(this.doc, id);
     if (!s || !s.name) return;
-    const v = await promptDialog('Đổi tên', s.name, 'Chữ số ở cuối hiển thị thành chỉ số dưới (A1 → A₁). Có thể dùng dấu phẩy trên: A\'.');
+    const v = await promptDialog('Đổi tên', s.name, 'Gõ như công thức: I_A → I với chỉ số A, X_{AB} → chỉ số AB, B\' → B phẩy, A1 → A₁.');
     if (v == null) return;
     this.setName(id, v.trim());
   }
@@ -682,7 +732,6 @@ export class App {
     if (mode === 'present') {
       this.frameIdx = 0;
       this.selection.clear();
-      this.board.attr.pan.enabled = true;
     } else this.setTool(this.toolId);
     this.refresh();
     this.showHint();
@@ -710,15 +759,36 @@ export class App {
       if (on && !document.fullscreenElement) await document.documentElement.requestFullscreen();
       if (!on && document.fullscreenElement) await document.exitFullscreen();
     } catch { /* trình duyệt có thể chặn toàn màn hình – vẫn dùng được kiểu trình chiếu */ }
-    setTimeout(() => { this.board.resizeContainer(this.stage.clientWidth, this.stage.clientHeight, true, true); this.refresh(); }, 60);
+    setTimeout(() => { this.view.resize(); this.boardRect = null; this.refresh(); }, 80);
+  }
+
+  setThemeId(id) {
+    this.theme = setTheme(id);
+    savePref('theme', this.theme);
+    this.updateMenuChecks();
+    this.refresh();
+  }
+
+  /** Hiện/ẩn bảng các bước dựng (mặc định ẩn để dành chỗ cho bảng vẽ). */
+  togglePanel(show = !document.body.classList.contains('panel-open'), remember = true) {
+    document.body.classList.toggle('panel-open', !!show);
+    if (remember) savePref('panel', show ? '1' : '0');
+    this.updateMenuChecks();
+    setTimeout(() => { this.view.resize(); this.boardRect = null; }, 0);
+  }
+
+  updateMenuChecks() {
+    document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('on', b.dataset.theme === this.theme));
+    document.getElementById('btn-grid')?.classList.toggle('on', this.grid);
+    document.getElementById('menu-panel')?.classList.toggle('on', document.body.classList.contains('panel-open'));
+    document.getElementById('btn-panel')?.classList.toggle('on', document.body.classList.contains('panel-open'));
   }
 
   toggleGrid() {
     this.grid = !this.grid;
-    if (this.gridEl) { this.board.removeObject(this.gridEl); this.gridEl = null; }
-    if (this.grid) this.gridEl = this.board.create('grid', [], { majorStep: [1, 1], minorElements: 0, strokeColor: '#cbd5e1', strokeOpacity: 0.7 });
-    document.getElementById('btn-grid').classList.toggle('on', this.grid);
-    this.board.update();
+    this.renderer.grid = this.grid;
+    this.updateMenuChecks();
+    this.view.requestDraw();
   }
 
   zoomFit() {
@@ -731,16 +801,16 @@ export class App {
       if (v.kind === 'point') pts.push(v);
       if (v.kind === 'circle') pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
     }
-    if (!pts.length) return this.board.setBoundingBox([-8, 6, 8, -6], true);
+    if (!pts.length) return this.view.setBoundingBox([-8, 6, 8, -6]);
     const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
     let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
     const m = Math.max(x2 - x1, y2 - y1, 1) * 0.1;
     [x1, x2, y1, y2] = [x1 - m, x2 + m, y1 - m, y2 + m];
     // giữ tỉ lệ 1:1 theo kích thước khung vẽ
-    const W = this.board.canvasWidth, H = this.board.canvasHeight;
+    const W = this.view.W, H = this.view.H;
     const per = Math.max((x2 - x1) / W, (y2 - y1) / H);
     const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
-    this.board.setBoundingBox([cx - (per * W) / 2, cy + (per * H) / 2, cx + (per * W) / 2, cy - (per * H) / 2], true);
+    this.view.setBoundingBox([cx - (per * W) / 2, cy + (per * H) / 2, cx + (per * W) / 2, cy - (per * H) / 2]);
   }
 
   // ================= bàn phím & nút =================
@@ -776,29 +846,199 @@ export class App {
     });
   }
 
+  /** Nạp công cụ tự tạo (lưu trong trình duyệt) và gắn vào menu "Công cụ › 7. Công cụ của tôi". */
+  loadUserTools() {
+    let list = [];
+    try { list = JSON.parse(loadPref('tools', '[]')); } catch { list = []; }
+    this.userTools = Array.isArray(list) ? list.filter(validMacro) : [];
+    for (const id of Object.keys(TOOL_BY_ID)) if (TOOL_BY_ID[id].user) delete TOOL_BY_ID[id];
+    for (const d of this.userTools) TOOL_BY_ID[d.id] = macroTool(d);
+    const userIds = this.userTools.map((d) => d.id);
+    this.toolbarGroups = TOOLBAR.map((g) => (g.id === 'library' ? { ...g, tools: [...g.tools, ...userIds], submenus: [...g.submenus, USER_MENU] } : g));
+  }
+
+  saveUserTools() {
+    savePref('tools', JSON.stringify(this.userTools));
+    this.loadUserTools();
+    this.buildToolbar();
+    this.markActiveTool(this.toolId);
+  }
+
+  async userToolAction(action, arg) {
+    if (action === 'create') {
+      const r0 = createMacro(this.doc, [...this.selection], 'x');
+      if (!r0.ok) return toast(r0.error, 5000);
+      const name = await promptDialog('Tạo công cụ mới', '', `Đầu vào: ${r0.tool.inputs.length} (${r0.tool.inputs.map((t) => ({ point: 'điểm', line: 'đường thẳng', circle: 'đường tròn' })[t]).join(', ')}); ${r0.tool.steps.length} bước dựng. Đặt tên cho công cụ:`);
+      if (!name || !name.trim()) return;
+      r0.tool.label = name.trim();
+      this.userTools.push(r0.tool);
+      this.saveUserTools();
+      toast(`Đã tạo công cụ "${r0.tool.label}" (Công cụ › ${USER_MENU})`, 4000);
+    } else if (action === 'delete') {
+      const d = this.userTools.find((x) => x.id === arg);
+      if (!d || !(await confirmDialog('Xoá công cụ', `Xoá công cụ <b>${escapeHTML(d.label)}</b>?`, 'Xoá'))) return;
+      this.userTools = this.userTools.filter((x) => x.id !== arg);
+      if (this.toolId === arg) this.setTool('move');
+      this.saveUserTools();
+    } else if (action === 'export') {
+      if (!this.userTools.length) return toast('Chưa có công cụ tự tạo nào');
+      const blob = new Blob([JSON.stringify({ format: 'hinh-hoc-dong-cong-cu', version: 1, tools: this.userTools }, null, 1)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'cong-cu-cua-toi.json';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    } else if (action === 'import') {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = '.json,application/json';
+      inp.onchange = async () => {
+        try {
+          const data = JSON.parse(await inp.files[0].text());
+          const list = (Array.isArray(data) ? data : data.tools || []).filter(validMacro);
+          if (!list.length) throw new Error('Tệp không chứa công cụ hợp lệ');
+          for (const d of list) { this.userTools = this.userTools.filter((x) => x.id !== d.id); this.userTools.push(d); }
+          this.saveUserTools();
+          toast(`Đã nhập ${list.length} công cụ`);
+        } catch (e) { toast('Không nhập được: ' + e.message, 5000); }
+      };
+      inp.click();
+    }
+  }
+
   buildToolbar() {
     const host = document.getElementById('tools');
-    const groups = [];
-    for (const t of TOOLS) {
-      let g = groups.find((x) => x.name === t.group);
-      if (!g) groups.push((g = { name: t.group, tools: [] }));
-      g.tools.push(t);
-    }
+    if (!this.toolbarGroups) this.loadUserTools();
+    const groups = this.toolbarGroups;
+    this.groupCurrent = this.groupCurrent || {};
+    for (const g of groups) if (!this.groupCurrent[g.id]) this.groupCurrent[g.id] = g.tools[0];
     host.innerHTML = groups
-      .map((g) => `<div class="tool-group"><div class="tool-group-name">${g.name}</div><div class="tool-grid">${g.tools
-        .map((t) => `<button class="tool" data-tool="${t.id}" title="${t.label}"><span class="ti">${t.icon}</span><span class="tl">${t.label}</span></button>`)
-        .join('')}</div></div>`)
-      .join('') + '<div id="tool-options"></div>';
-    host.addEventListener('click', (e) => {
-      const b = e.target.closest('.tool');
-      if (b) this.setTool(b.dataset.tool);
+      .map((g) => {
+        const many = g.tools.length > 1 || g.menu;
+        const btn = (id) => {
+          const t = TOOL_BY_ID[id];
+          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t.label)}"><span class="ti">${t.icon}</span><span class="tl">${escapeHTML(t.label)}</span></button>`;
+        };
+        // nhóm có menu con (thư viện "Công cụ"): mỗi mục menu mở ra danh sách công cụ bên phải
+        const items = g.submenus
+          ? g.submenus.map((m) => {
+            const ids = g.tools.filter((id) => TOOL_BY_ID[id].menu === m);
+            let list = ids.map(btn).join('');
+            if (m === USER_MENU) {
+              list = ids.map((id) => `<div class="user-tool">${btn(id)}<button class="tool-del" data-del="${id}" title="Xoá công cụ này">✕</button></div>`).join('') +
+                (ids.length ? '<div class="menu-sep"></div>' : '<div class="note" style="padding:4px 8px">Chưa có công cụ nào. Chọn các đối tượng kết quả trên hình (Shift để chọn nhiều, có thể chọn cả đối tượng ban đầu) rồi bấm "Tạo công cụ".</div>') +
+                '<button class="tool-action" data-action="create">＋ Tạo công cụ từ các đối tượng đang chọn…</button>' +
+                '<button class="tool-action" data-action="export">Xuất các công cụ ra tệp…</button>' +
+                '<button class="tool-action" data-action="import">Nhập công cụ từ tệp…</button>';
+            }
+            return `<div class="sub"><button class="sub-title">${escapeHTML(m)}<span class="caret">›</span></button><div class="sub-pop">${list}</div></div>`;
+          }).join('') + (g.extraHTML ? g.extraHTML(this) : '')
+          : g.tools.map(btn).join('');
+        return `<div class="tb-group" data-group="${g.id}">
+          <button class="tb-btn" data-group="${g.id}" title="${escapeHTML(g.label)}">${ICONS[g.icon] || ''}${many ? '<span class="tb-more"></span>' : ''}</button>
+          ${many ? `<div class="flyout"><div class="flyout-title">${escapeHTML(g.label)}</div>${items}</div>` : ''}
+        </div>`;
+      })
+      .join('');
+    const closeAll = () => host.querySelectorAll('.tb-group.open, .sub.open').forEach((x) => x.classList.remove('open'));
+    if (this.toolbarBound) return;
+    this.toolbarBound = true;
+    // rê chuột qua mục menu con thì mở luôn (như menu thường)
+    host.addEventListener('mouseover', (e) => {
+      const st = e.target.closest('.sub-title');
+      if (!st || st.parentElement.classList.contains('open')) return;
+      st.parentElement.parentElement.querySelectorAll('.sub.open').forEach((x) => x.classList.remove('open'));
+      st.parentElement.classList.add('open');
     });
+    host.onclick = (e) => {
+      const act = e.target.closest('[data-action], [data-del]');
+      if (act) {
+        closeAll();
+        this.userToolAction(act.dataset.action || 'delete', act.dataset.del);
+        return;
+      }
+      const tb = e.target.closest('.tb-btn');
+      const tl = e.target.closest('.tool');
+      const st = e.target.closest('.sub-title');
+      if (st) {
+        const subEl = st.parentElement;
+        subEl.parentElement.querySelectorAll('.sub.open').forEach((x) => x !== subEl && x.classList.remove('open'));
+        subEl.classList.add('open');
+        return;
+      }
+      if (tl) {
+        const g = tl.closest('.tb-group').dataset.group;
+        this.groupCurrent[g] = tl.dataset.tool;
+        closeAll();
+        this.setTool(tl.dataset.tool);
+        return;
+      }
+      if (!tb) return;
+      const gEl = tb.closest('.tb-group');
+      const g = this.toolbarGroups.find((x) => x.id === tb.dataset.group);
+      const wasOpen = gEl.classList.contains('open');
+      closeAll();
+      if (g.menu) { if (!wasOpen) { gEl.classList.add('open'); g.menu(gEl.querySelector('.flyout'), this, closeAll); } return; }
+      if (!g.submenus) this.setTool(this.groupCurrent[g.id]);
+      if (g.tools.length > 1 && !wasOpen) gEl.classList.add('open');
+    };
+    // bấm ra ngoài khi danh sách đang mở: chỉ đóng danh sách (không để lần bấm đó tạo điểm trên hình)
+    document.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('#tools') || !host.querySelector('.tb-group.open')) return;
+      closeAll();
+      if (e.target.closest('#board')) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(); });
+  }
+
+  /** Đánh dấu công cụ đang dùng trên thanh công cụ. */
+  markActiveTool(id) {
+    const groups = this.toolbarGroups || TOOLBAR;
+    this.groupCurrent ||= {};
+    document.querySelectorAll('#tools .tool').forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
+    for (const g of groups) {
+      const on = g.tools.includes(id) || !!(g.isActive && g.isActive(id));
+      if (g.tools.includes(id)) this.groupCurrent[g.id] = id;
+      document.querySelector(`#tools .tb-group[data-group="${g.id}"]`)?.classList.toggle('active', on);
+    }
   }
 
   bindButtons() {
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    // biểu tượng các nút trên thanh trên
+    for (const [id, ic] of [['btn-undo', 'undo'], ['btn-redo', 'redo'], ['btn-explore', 'explore'], ['btn-present', 'present'], ['btn-projector', 'projector'], ['btn-panel', 'panel']]) {
+      const b = document.getElementById(id);
+      if (b) b.innerHTML = ICONS[ic];
+    }
+    // menu thả xuống: bấm để mở, bấm một mục hoặc ra ngoài để đóng
+    const menus = [...document.querySelectorAll('#topbar .menu')];
+    const closeMenus = () => menus.forEach((m) => m.classList.remove('open'));
+    for (const m of menus) {
+      m.querySelector('.menu-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = m.classList.contains('open');
+        closeMenus();
+        if (!open) m.classList.add('open');
+      });
+      m.querySelector('.menu-pop').addEventListener('click', (e) => { if (e.target.closest('button')) closeMenus(); });
+      m.addEventListener('mouseenter', () => { if (menus.some((x) => x.classList.contains('open')) && !m.classList.contains('open')) { closeMenus(); m.classList.add('open'); } });
+    }
+    document.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('#topbar .menu') || !menus.some((m) => m.classList.contains('open'))) return;
+      closeMenus();
+      if (e.target.closest('#board')) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
     on('btn-undo', () => this.undo());
     on('btn-redo', () => this.redo());
+    on('menu-undo', () => this.undo());
+    on('menu-redo', () => this.redo());
+    document.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', () => this.setThemeId(b.dataset.theme)));
+    on('btn-panel', () => this.togglePanel());
+    on('menu-panel', () => this.togglePanel());
+    on('btn-close-panel', () => this.togglePanel(false));
+    this.togglePanel(loadPref('panel', '0') === '1', false);
+    this.updateMenuChecks();
     on('btn-delete', () => this.deleteSteps([...this.selection]));
     on('btn-grid', () => this.toggleGrid());
     on('btn-fit', () => this.zoomFit());
@@ -810,12 +1050,18 @@ export class App {
     on('btn-new', async () => {
       if (this.doc.steps.length && !(await confirmDialog('Hình mới', 'Xoá hình hiện tại để bắt đầu hình mới? (Có thể hoàn tác bằng Ctrl+Z.)', 'Hình mới'))) return;
       this.commit((doc) => { doc.steps = []; doc.title = ''; });
-      this.board.setBoundingBox([-8, 6, 8, -6], true);
+      this.view.setBoundingBox([-8, 6, 8, -6]);
     });
   }
 }
 
 // ---------- tiện ích ----------
+function loadPref(key, def) {
+  try { return localStorage.getItem('hinh-hoc-dong:' + key) ?? def; } catch { return def; }
+}
+function savePref(key, v) {
+  try { localStorage.setItem('hinh-hoc-dong:' + key, v); } catch { /* bỏ qua */ }
+}
 const round6 = (v) => Math.round(v * 1e6) / 1e6;
 const round9 = (v) => Math.round(v * 1e9) / 1e9;
 const round1 = (v) => Math.round(v * 10) / 10;

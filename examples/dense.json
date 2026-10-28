@@ -1,0 +1,773 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Hình dày (mô phỏng đề VMO, dùng đo hiệu năng)",
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 0.6,
+    "y": 3.6
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -1.4,
+    "y": -0.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 2.4,
+    "y": -0.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "line",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d2"
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s3"
+   ],
+   "name": "d3"
+  },
+  {
+   "id": "s7",
+   "type": "angle_bisector",
+   "args": [
+    "s2",
+    "s1",
+    "s3"
+   ],
+   "params": {
+    "external": true
+   },
+   "name": "d4",
+   "hidden": true
+  },
+  {
+   "id": "s8",
+   "type": "angle_bisector",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "params": {
+    "external": true
+   },
+   "name": "d5",
+   "hidden": true
+  },
+  {
+   "id": "s9",
+   "type": "angle_bisector",
+   "args": [
+    "s1",
+    "s3",
+    "s2"
+   ],
+   "params": {
+    "external": true
+   },
+   "name": "d6",
+   "hidden": true
+  },
+  {
+   "id": "s10",
+   "type": "intersection",
+   "args": [
+    "s8",
+    "s9"
+   ],
+   "name": "I_A"
+  },
+  {
+   "id": "s11",
+   "type": "intersection",
+   "args": [
+    "s7",
+    "s9"
+   ],
+   "name": "I_B"
+  },
+  {
+   "id": "s12",
+   "type": "intersection",
+   "args": [
+    "s7",
+    "s8"
+   ],
+   "name": "I_C"
+  },
+  {
+   "id": "s13",
+   "type": "projection",
+   "args": [
+    "s10",
+    "s4"
+   ],
+   "name": "T"
+  },
+  {
+   "id": "s14",
+   "type": "projection",
+   "args": [
+    "s11",
+    "s4"
+   ],
+   "name": "Q"
+  },
+  {
+   "id": "s15",
+   "type": "projection",
+   "args": [
+    "s12",
+    "s4"
+   ],
+   "name": "P"
+  },
+  {
+   "id": "s16",
+   "type": "circle",
+   "args": [
+    "s10",
+    "s13"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s17",
+   "type": "circle",
+   "args": [
+    "s11",
+    "s14"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s18",
+   "type": "circle",
+   "args": [
+    "s12",
+    "s15"
+   ],
+   "name": "ω3"
+  },
+  {
+   "id": "s19",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω4"
+  },
+  {
+   "id": "s20",
+   "type": "incenter",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "I",
+   "hidden": true
+  },
+  {
+   "id": "s21",
+   "type": "segment",
+   "args": [
+    "s12",
+    "s11"
+   ],
+   "name": "d7"
+  },
+  {
+   "id": "s22",
+   "type": "segment",
+   "args": [
+    "s12",
+    "s2"
+   ],
+   "name": "d8"
+  },
+  {
+   "id": "s23",
+   "type": "segment",
+   "args": [
+    "s12",
+    "s3"
+   ],
+   "name": "d9"
+  },
+  {
+   "id": "s24",
+   "type": "segment",
+   "args": [
+    "s11",
+    "s2"
+   ],
+   "name": "d10"
+  },
+  {
+   "id": "s25",
+   "type": "segment",
+   "args": [
+    "s11",
+    "s3"
+   ],
+   "name": "d11"
+  },
+  {
+   "id": "s26",
+   "type": "segment",
+   "args": [
+    "s10",
+    "s2"
+   ],
+   "name": "d12"
+  },
+  {
+   "id": "s27",
+   "type": "segment",
+   "args": [
+    "s10",
+    "s3"
+   ],
+   "name": "d13"
+  },
+  {
+   "id": "s28",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s10"
+   ],
+   "name": "d14"
+  },
+  {
+   "id": "s29",
+   "type": "segment",
+   "args": [
+    "s12",
+    "s15"
+   ],
+   "name": "d15"
+  },
+  {
+   "id": "s30",
+   "type": "segment",
+   "args": [
+    "s11",
+    "s14"
+   ],
+   "name": "d16"
+  },
+  {
+   "id": "s31",
+   "type": "line",
+   "args": [
+    "s2",
+    "s11"
+   ],
+   "name": "d17",
+   "hidden": true
+  },
+  {
+   "id": "s32",
+   "type": "line",
+   "args": [
+    "s3",
+    "s12"
+   ],
+   "name": "d18",
+   "hidden": true
+  },
+  {
+   "id": "s33",
+   "type": "intersection_other",
+   "args": [
+    "s31",
+    "s19",
+    "s2"
+   ],
+   "name": "U"
+  },
+  {
+   "id": "s34",
+   "type": "intersection_other",
+   "args": [
+    "s32",
+    "s19",
+    "s3"
+   ],
+   "name": "V"
+  },
+  {
+   "id": "s35",
+   "type": "midpoint",
+   "args": [
+    "s20",
+    "s10"
+   ],
+   "name": "X_A"
+  },
+  {
+   "id": "s36",
+   "type": "midpoint",
+   "args": [
+    "s20",
+    "s11"
+   ],
+   "name": "X_B"
+  },
+  {
+   "id": "s37",
+   "type": "midpoint",
+   "args": [
+    "s20",
+    "s12"
+   ],
+   "name": "X_C"
+  },
+  {
+   "id": "s38",
+   "type": "segment",
+   "args": [
+    "s33",
+    "s34"
+   ],
+   "name": "d19"
+  },
+  {
+   "id": "s39",
+   "type": "projection",
+   "args": [
+    "s1",
+    "s38"
+   ],
+   "name": "P_A"
+  },
+  {
+   "id": "s40",
+   "type": "midpoint",
+   "args": [
+    "s2",
+    "s33"
+   ],
+   "name": "P_B"
+  },
+  {
+   "id": "s41",
+   "type": "midpoint",
+   "args": [
+    "s3",
+    "s34"
+   ],
+   "name": "P_C"
+  },
+  {
+   "id": "s42",
+   "type": "reflect",
+   "args": [
+    "s2",
+    "s32"
+   ],
+   "name": "B'"
+  },
+  {
+   "id": "s43",
+   "type": "reflect",
+   "args": [
+    "s3",
+    "s31"
+   ],
+   "name": "C'"
+  },
+  {
+   "id": "s44",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s33"
+   ],
+   "name": "d20"
+  },
+  {
+   "id": "s45",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s34"
+   ],
+   "name": "d21"
+  },
+  {
+   "id": "s46",
+   "type": "segment",
+   "args": [
+    "s12",
+    "s33"
+   ],
+   "name": "d22"
+  },
+  {
+   "id": "s47",
+   "type": "segment",
+   "args": [
+    "s11",
+    "s34"
+   ],
+   "name": "d23"
+  },
+  {
+   "id": "s48",
+   "type": "segment",
+   "args": [
+    "s34",
+    "s11"
+   ],
+   "name": "d24"
+  },
+  {
+   "id": "s49",
+   "type": "segment",
+   "args": [
+    "s33",
+    "s12"
+   ],
+   "name": "d25"
+  },
+  {
+   "id": "s50",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s35"
+   ],
+   "name": "d26"
+  },
+  {
+   "id": "s51",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s36"
+   ],
+   "name": "d27"
+  },
+  {
+   "id": "s52",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s37"
+   ],
+   "name": "d28"
+  },
+  {
+   "id": "s53",
+   "type": "segment",
+   "args": [
+    "s40",
+    "s41"
+   ],
+   "name": "d29"
+  },
+  {
+   "id": "s54",
+   "type": "segment",
+   "args": [
+    "s39",
+    "s35"
+   ],
+   "name": "d30"
+  },
+  {
+   "id": "s55",
+   "type": "segment",
+   "args": [
+    "s36",
+    "s37"
+   ],
+   "name": "d31"
+  },
+  {
+   "id": "s56",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s42"
+   ],
+   "name": "d32"
+  },
+  {
+   "id": "s57",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s43"
+   ],
+   "name": "d33"
+  },
+  {
+   "id": "s58",
+   "type": "segment",
+   "args": [
+    "s43",
+    "s10"
+   ],
+   "name": "d34"
+  },
+  {
+   "id": "s59",
+   "type": "segment",
+   "args": [
+    "s42",
+    "s10"
+   ],
+   "name": "d35"
+  },
+  {
+   "id": "s60",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s43"
+   ],
+   "name": "d36"
+  },
+  {
+   "id": "s61",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s41"
+   ],
+   "name": "d37"
+  },
+  {
+   "id": "s62",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s40"
+   ],
+   "name": "d38"
+  },
+  {
+   "id": "s63",
+   "type": "segment",
+   "args": [
+    "s34",
+    "s36"
+   ],
+   "name": "d39"
+  },
+  {
+   "id": "s64",
+   "type": "segment",
+   "args": [
+    "s33",
+    "s37"
+   ],
+   "name": "d40"
+  },
+  {
+   "id": "s65",
+   "type": "segment",
+   "args": [
+    "s10",
+    "s33"
+   ],
+   "name": "d41"
+  },
+  {
+   "id": "s66",
+   "type": "segment",
+   "args": [
+    "s10",
+    "s34"
+   ],
+   "name": "d42"
+  },
+  {
+   "id": "s67",
+   "type": "segment",
+   "args": [
+    "s40",
+    "s35"
+   ],
+   "name": "d43"
+  },
+  {
+   "id": "s68",
+   "type": "segment",
+   "args": [
+    "s41",
+    "s35"
+   ],
+   "name": "d44"
+  },
+  {
+   "id": "s69",
+   "type": "projection",
+   "args": [
+    "s10",
+    "s5"
+   ],
+   "name": "D"
+  },
+  {
+   "id": "s70",
+   "type": "projection",
+   "args": [
+    "s10",
+    "s6"
+   ],
+   "name": "E"
+  },
+  {
+   "id": "s71",
+   "type": "projection",
+   "args": [
+    "s11",
+    "s5"
+   ],
+   "name": "F"
+  },
+  {
+   "id": "s72",
+   "type": "projection",
+   "args": [
+    "s11",
+    "s6"
+   ],
+   "name": "K"
+  },
+  {
+   "id": "s73",
+   "type": "projection",
+   "args": [
+    "s12",
+    "s5"
+   ],
+   "name": "L"
+  },
+  {
+   "id": "s74",
+   "type": "projection",
+   "args": [
+    "s12",
+    "s6"
+   ],
+   "name": "M"
+  },
+  {
+   "id": "s75",
+   "type": "midpoint",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "R"
+  },
+  {
+   "id": "s76",
+   "type": "midpoint",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "S"
+  },
+  {
+   "id": "s77",
+   "type": "midpoint",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "X"
+  },
+  {
+   "id": "s78",
+   "type": "segment",
+   "args": [
+    "s69",
+    "s70"
+   ],
+   "name": "d45"
+  },
+  {
+   "id": "s79",
+   "type": "segment",
+   "args": [
+    "s75",
+    "s76"
+   ],
+   "name": "d46"
+  },
+  {
+   "id": "s80",
+   "type": "segment",
+   "args": [
+    "s76",
+    "s77"
+   ],
+   "name": "d47"
+  },
+  {
+   "id": "s81",
+   "type": "nine_point_circle",
+   "args": [
+    "s10",
+    "s11",
+    "s12"
+   ],
+   "name": "ω5",
+   "hidden": true
+  },
+  {
+   "id": "s82",
+   "type": "circle_3pts",
+   "args": [
+    "s33",
+    "s34",
+    "s20"
+   ],
+   "name": "ω6"
+  }
+ ]
+}

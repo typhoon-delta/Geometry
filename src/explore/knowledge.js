@@ -60,7 +60,7 @@ export class Knowledge {
       const def = STEP_TYPES[s.type];
       if (!def || !def.facts) continue;
       let facts = [];
-      try { facts = def.facts(s, s.args.map((a) => k.get(a))) || []; } catch { facts = []; }
+      try { facts = def.facts(s, s.args.map((a) => k.get(a)), doc) || []; } catch { facts = []; }
       for (const f of facts) this.addFact(f);
     }
     this.saturate();
