@@ -1,6 +1,7 @@
 // Ứng dụng: giữ tài liệu (danh sách bước dựng), lịch sử hoàn tác, công cụ, chế độ trình bày/trình chiếu.
 // Mọi thay đổi hình đi qua commit() → lõi tính lại toạ độ → vẽ lại.
 
+import { addSpecs } from '../core/apply.js';
 import { evaluate, makeUpdater, kinds, removeSteps, dependents, newId, nextName, stepById, clone, frames, emptyDoc, describe } from '../core/model.js';
 import { STEP_TYPES, argAccepts } from '../core/steps.js';
 import * as G from '../core/geom.js';
@@ -8,6 +9,7 @@ import { Renderer } from './render.js';
 import { CanvasView } from './view.js';
 import { TOOL_BY_ID, TOOLBAR } from './tools.js';
 import { ICONS } from './icons.js';
+import { createMacro, macroTool, validMacro, USER_MENU } from '../core/macro.js';
 import { isDraggableType, PALETTE, setTheme } from '../core/styles.js';
 import { confirmDialog, promptDialog, toast } from './dialog.js';
 import { renderStepList, renderProps, renderToolOptions } from './panels.js';
@@ -127,23 +129,18 @@ export class App {
    * Các bước sau bước đầu được gộp chung khung trình bày. Trả về danh sách id.
    */
   addSteps(specs, { join = true } = {}) {
-    const ids = [];
-    const k = kinds(this.doc);
-    specs.forEach((sp, i) => {
-      const def = STEP_TYPES[sp.type];
-      const id = newId(this.doc);
-      const args = sp.args.map((a) => (typeof a === 'string' && a.startsWith('$') ? ids[+a.slice(1)] : a));
-      const kind = def.kind === 'same' ? k.get(args[0]) : def.kind;
-      const step = { id, type: sp.type, args };
-      if (sp.params && Object.keys(sp.params).length) step.params = { ...sp.params };
-      if (kind !== 'mark') step.name = sp.name && !this.nameUsed(sp.name) ? sp.name : nextName(this.doc, kind, sp.name);
-      if (sp.style && Object.keys(sp.style).length) step.style = { ...sp.style };
-      if (i > 0 && join) step.joinPrev = true;
-      this.doc.steps.push(step);
-      k.set(id, kind);
-      ids.push(id);
-    });
-    return ids;
+    return addSpecs(this.doc, specs, { join });
+  }
+
+  /** Tên hiển thị của một đối tượng (dùng khi công cụ đặt tên kết quả, vd I_A). */
+  name(id) {
+    return stepById(this.doc, id)?.name || '';
+  }
+
+  /** Tham số số của công cụ đang dùng (góc quay, tỉ số vị tự…), chỉnh ở thẻ tuỳ chọn. */
+  opt(key, def) {
+    const p = (this.toolParams && this.toolParams[this.toolId]) || {};
+    return key in p ? p[key] : def;
   }
 
   nameUsed(name, exceptId) {
@@ -849,28 +846,127 @@ export class App {
     });
   }
 
+  /** Nạp công cụ tự tạo (lưu trong trình duyệt) và gắn vào menu "Công cụ › 7. Công cụ của tôi". */
+  loadUserTools() {
+    let list = [];
+    try { list = JSON.parse(loadPref('tools', '[]')); } catch { list = []; }
+    this.userTools = Array.isArray(list) ? list.filter(validMacro) : [];
+    for (const id of Object.keys(TOOL_BY_ID)) if (TOOL_BY_ID[id].user) delete TOOL_BY_ID[id];
+    for (const d of this.userTools) TOOL_BY_ID[d.id] = macroTool(d);
+    const userIds = this.userTools.map((d) => d.id);
+    this.toolbarGroups = TOOLBAR.map((g) => (g.id === 'library' ? { ...g, tools: [...g.tools, ...userIds], submenus: [...g.submenus, USER_MENU] } : g));
+  }
+
+  saveUserTools() {
+    savePref('tools', JSON.stringify(this.userTools));
+    this.loadUserTools();
+    this.buildToolbar();
+    this.markActiveTool(this.toolId);
+  }
+
+  async userToolAction(action, arg) {
+    if (action === 'create') {
+      const r0 = createMacro(this.doc, [...this.selection], 'x');
+      if (!r0.ok) return toast(r0.error, 5000);
+      const name = await promptDialog('Tạo công cụ mới', '', `Đầu vào: ${r0.tool.inputs.length} (${r0.tool.inputs.map((t) => ({ point: 'điểm', line: 'đường thẳng', circle: 'đường tròn' })[t]).join(', ')}); ${r0.tool.steps.length} bước dựng. Đặt tên cho công cụ:`);
+      if (!name || !name.trim()) return;
+      r0.tool.label = name.trim();
+      this.userTools.push(r0.tool);
+      this.saveUserTools();
+      toast(`Đã tạo công cụ "${r0.tool.label}" (Công cụ › ${USER_MENU})`, 4000);
+    } else if (action === 'delete') {
+      const d = this.userTools.find((x) => x.id === arg);
+      if (!d || !(await confirmDialog('Xoá công cụ', `Xoá công cụ <b>${escapeHTML(d.label)}</b>?`, 'Xoá'))) return;
+      this.userTools = this.userTools.filter((x) => x.id !== arg);
+      if (this.toolId === arg) this.setTool('move');
+      this.saveUserTools();
+    } else if (action === 'export') {
+      if (!this.userTools.length) return toast('Chưa có công cụ tự tạo nào');
+      const blob = new Blob([JSON.stringify({ format: 'hinh-hoc-dong-cong-cu', version: 1, tools: this.userTools }, null, 1)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'cong-cu-cua-toi.json';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    } else if (action === 'import') {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = '.json,application/json';
+      inp.onchange = async () => {
+        try {
+          const data = JSON.parse(await inp.files[0].text());
+          const list = (Array.isArray(data) ? data : data.tools || []).filter(validMacro);
+          if (!list.length) throw new Error('Tệp không chứa công cụ hợp lệ');
+          for (const d of list) { this.userTools = this.userTools.filter((x) => x.id !== d.id); this.userTools.push(d); }
+          this.saveUserTools();
+          toast(`Đã nhập ${list.length} công cụ`);
+        } catch (e) { toast('Không nhập được: ' + e.message, 5000); }
+      };
+      inp.click();
+    }
+  }
+
   buildToolbar() {
     const host = document.getElementById('tools');
-    const groups = this.toolbarGroups || TOOLBAR;
+    if (!this.toolbarGroups) this.loadUserTools();
+    const groups = this.toolbarGroups;
     this.groupCurrent = this.groupCurrent || {};
     for (const g of groups) if (!this.groupCurrent[g.id]) this.groupCurrent[g.id] = g.tools[0];
     host.innerHTML = groups
       .map((g) => {
         const many = g.tools.length > 1 || g.menu;
-        const items = g.menu ? '' : g.tools.map((id) => {
+        const btn = (id) => {
           const t = TOOL_BY_ID[id];
           return `<button class="tool" data-tool="${id}" title="${escapeHTML(t.label)}"><span class="ti">${t.icon}</span><span class="tl">${escapeHTML(t.label)}</span></button>`;
-        }).join('');
+        };
+        // nhóm có menu con (thư viện "Công cụ"): mỗi mục menu mở ra danh sách công cụ bên phải
+        const items = g.submenus
+          ? g.submenus.map((m) => {
+            const ids = g.tools.filter((id) => TOOL_BY_ID[id].menu === m);
+            let list = ids.map(btn).join('');
+            if (m === USER_MENU) {
+              list = ids.map((id) => `<div class="user-tool">${btn(id)}<button class="tool-del" data-del="${id}" title="Xoá công cụ này">✕</button></div>`).join('') +
+                (ids.length ? '<div class="menu-sep"></div>' : '<div class="note" style="padding:4px 8px">Chưa có công cụ nào. Chọn các đối tượng kết quả trên hình (Shift để chọn nhiều, có thể chọn cả đối tượng ban đầu) rồi bấm "Tạo công cụ".</div>') +
+                '<button class="tool-action" data-action="create">＋ Tạo công cụ từ các đối tượng đang chọn…</button>' +
+                '<button class="tool-action" data-action="export">Xuất các công cụ ra tệp…</button>' +
+                '<button class="tool-action" data-action="import">Nhập công cụ từ tệp…</button>';
+            }
+            return `<div class="sub"><button class="sub-title">${escapeHTML(m)}<span class="caret">›</span></button><div class="sub-pop">${list}</div></div>`;
+          }).join('') + (g.extraHTML ? g.extraHTML(this) : '')
+          : g.tools.map(btn).join('');
         return `<div class="tb-group" data-group="${g.id}">
           <button class="tb-btn" data-group="${g.id}" title="${escapeHTML(g.label)}">${ICONS[g.icon] || ''}${many ? '<span class="tb-more"></span>' : ''}</button>
           ${many ? `<div class="flyout"><div class="flyout-title">${escapeHTML(g.label)}</div>${items}</div>` : ''}
         </div>`;
       })
       .join('');
-    const closeAll = () => host.querySelectorAll('.tb-group.open').forEach((x) => x.classList.remove('open'));
+    const closeAll = () => host.querySelectorAll('.tb-group.open, .sub.open').forEach((x) => x.classList.remove('open'));
+    if (this.toolbarBound) return;
+    this.toolbarBound = true;
+    // rê chuột qua mục menu con thì mở luôn (như menu thường)
+    host.addEventListener('mouseover', (e) => {
+      const st = e.target.closest('.sub-title');
+      if (!st || st.parentElement.classList.contains('open')) return;
+      st.parentElement.parentElement.querySelectorAll('.sub.open').forEach((x) => x.classList.remove('open'));
+      st.parentElement.classList.add('open');
+    });
     host.onclick = (e) => {
+      const act = e.target.closest('[data-action], [data-del]');
+      if (act) {
+        closeAll();
+        this.userToolAction(act.dataset.action || 'delete', act.dataset.del);
+        return;
+      }
       const tb = e.target.closest('.tb-btn');
       const tl = e.target.closest('.tool');
+      const st = e.target.closest('.sub-title');
+      if (st) {
+        const subEl = st.parentElement;
+        subEl.parentElement.querySelectorAll('.sub.open').forEach((x) => x !== subEl && x.classList.remove('open'));
+        subEl.classList.add('open');
+        return;
+      }
       if (tl) {
         const g = tl.closest('.tb-group').dataset.group;
         this.groupCurrent[g] = tl.dataset.tool;
@@ -880,11 +976,11 @@ export class App {
       }
       if (!tb) return;
       const gEl = tb.closest('.tb-group');
-      const g = groups.find((x) => x.id === tb.dataset.group);
+      const g = this.toolbarGroups.find((x) => x.id === tb.dataset.group);
       const wasOpen = gEl.classList.contains('open');
       closeAll();
       if (g.menu) { if (!wasOpen) { gEl.classList.add('open'); g.menu(gEl.querySelector('.flyout'), this, closeAll); } return; }
-      this.setTool(this.groupCurrent[g.id]);
+      if (!g.submenus) this.setTool(this.groupCurrent[g.id]);
       if (g.tools.length > 1 && !wasOpen) gEl.classList.add('open');
     };
     // bấm ra ngoài khi danh sách đang mở: chỉ đóng danh sách (không để lần bấm đó tạo điểm trên hình)
@@ -899,6 +995,7 @@ export class App {
   /** Đánh dấu công cụ đang dùng trên thanh công cụ. */
   markActiveTool(id) {
     const groups = this.toolbarGroups || TOOLBAR;
+    this.groupCurrent ||= {};
     document.querySelectorAll('#tools .tool').forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
     for (const g of groups) {
       const on = g.tools.includes(id) || !!(g.isActive && g.isActive(id));

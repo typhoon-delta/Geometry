@@ -5,6 +5,7 @@ import { STEP_TYPES } from '../core/steps.js';
 import { intersect } from '../core/geom.js';
 import { PALETTE, styleOf, isDraggableType } from '../core/styles.js';
 import { labelHTML } from '../core/names.js';
+import { TOOL_BY_ID } from './tools.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -166,6 +167,16 @@ export function renderToolOptions(app) {
   if (!host) return;
   const t = app.toolId;
   const m = app.markDefaults;
+  const tool = TOOL_BY_ID[t];
+  if (tool && tool.options && app.mode === 'edit') {
+    // tham số số của công cụ (góc quay, tỉ số vị tự…)
+    const vals = (app.toolParams ||= {})[t] ||= {};
+    host.classList.add('show');
+    host.innerHTML = `<div class="tool-group-name">${tool.label}</div>` + tool.options.map((o) =>
+      `<label class="row">${o.label} <input type="number" step="any" data-opt="${o.key}" value="${vals[o.key] ?? o.def}" style="width:80px"></label>`).join('');
+    host.querySelectorAll('[data-opt]').forEach((inp) => (inp.onchange = () => { const v = parseFloat(inp.value); if (Number.isFinite(v)) vals[inp.dataset.opt] = v; }));
+    return;
+  }
   const show = ['angle_mark', 'segment_mark', 'polygon'].includes(t) && app.mode === 'edit';
   host.classList.toggle('show', show);
   if (!show) { host.innerHTML = ''; return; }

@@ -77,6 +77,21 @@ body.panel-open #side { display: flex; }
 .tool.active { background: var(--accent-soft); }
 .tool.active .ti { color: var(--accent); }
 
+.sub { position: relative; }
+.sub-title { display: flex; width: 100%; text-align: left; padding: 5px 8px; align-items: center; }
+.sub-title .caret { margin-left: auto; color: var(--muted); }
+.sub.open > .sub-title { background: var(--accent-soft); }
+.sub-pop {
+  display: none; position: absolute; left: 100%; top: -4px; margin-left: 4px; background: #fff; border: 1px solid var(--line); border-radius: 7px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .14); padding: 4px; min-width: 290px; max-height: calc(100vh - 80px); overflow-y: auto; z-index: 61;
+}
+.sub.open > .sub-pop { display: block; }
+.flyout:has(.sub) { overflow: visible; min-width: 200px; }
+.user-tool { display: flex; align-items: center; }
+.user-tool .tool { flex: 1; }
+.tool-del { color: var(--muted); padding: 2px 6px; }
+.tool-action { display: block; width: 100%; text-align: left; padding: 5px 8px; color: var(--accent); }
+
 /* ---------- thanh trạng thái (gợi ý) ---------- */
 #hint {
   position: absolute; left: 0; bottom: 0; right: 0; pointer-events: none; font-size: 12px; color: #52525b;

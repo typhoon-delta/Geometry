@@ -37,10 +37,18 @@ const toPage = async (x, y) => {
 const clickAt = async (x, y) => { const p = await toPage(x, y); await page.mouse.click(p.x, p.y); };
 // Chọn công cụ qua giao diện thật: bấm biểu tượng nhóm trên thanh dọc rồi chọn trong danh sách bung ra
 const tool = async (id) => {
-  const g = await page.evaluate((id) => document.querySelector(`.tool[data-tool="${id}"]`)?.closest('.tb-group')?.dataset.group || null, id);
-  if (!g) { await page.click(`.tb-btn[data-group="${id}"]`); return; }
-  await page.click(`.tb-btn[data-group="${g}"]`);
-  await page.click(`.tool[data-tool="${id}"]`);
+  const info = await page.evaluate((id) => {
+    const el = document.querySelector(`#tools .tool[data-tool="${id}"]`);
+    if (!el) return null;
+    const sub = el.closest('.sub');
+    return { g: el.closest('.tb-group').dataset.group, sub: sub ? [...sub.parentElement.querySelectorAll(':scope > .sub')].indexOf(sub) : -1 };
+  }, id);
+  if (!info) { await page.click(`.tb-btn[data-group="${id}"]`); return; }
+  const open = await page.evaluate((g) => document.querySelector(`#tools .tb-group[data-group="${g}"]`).classList.contains('open'), info.g);
+  if (!open) await page.click(`.tb-btn[data-group="${info.g}"]`);
+  const scope = `#tools .tb-group[data-group="${info.g}"]`;
+  if (info.sub >= 0) await page.locator(`${scope} .sub-title`).nth(info.sub).click();
+  await page.click(`${scope} .tool[data-tool="${id}"]`);
 };
 // Bấm một mục trong menu trên cùng (Tệp/Sửa/Hiển thị)
 const menu = async (id) => {

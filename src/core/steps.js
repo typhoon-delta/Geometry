@@ -226,6 +226,135 @@ export const STEP_TYPES = {
     compute: tri((A, B, C) => G.circleThrough(G.mid(A, B), G.mid(B, C), G.mid(C, A))),
   },
 
+  // ---------- BỔ SUNG (bản 1.1: thư viện công cụ) ----------
+  foot: {
+    // Hình chiếu của P lên đường thẳng AB (không cần dựng đường AB).
+    kind: 'point', args: ['point', 'point', 'point'], label: 'Chân đường vuông góc',
+    compute: ([Q, A, B]) => (G.dist(A, B) < G.EPS ? null : G.project(Q, G.lineThrough(A, B))),
+    facts: (s) => {
+      const [Q, A, B] = s.args;
+      return [{ col: [A, s.id, B] }, { perp: [{ L: [Q, s.id] }, { L: [A, B] }] }];
+    },
+  },
+  reflect_pts: {
+    // Điểm đối xứng của P qua đường thẳng AB.
+    kind: 'point', args: ['point', 'point', 'point'], label: 'Đối xứng qua đường thẳng',
+    compute: ([Q, A, B]) => (G.dist(A, B) < G.EPS ? null : G.reflectPointOverLine(Q, G.lineThrough(A, B))),
+    facts: (s) => [{ perp: [{ L: [s.args[0], s.id] }, { L: [s.args[1], s.args[2]] }] }],
+  },
+  rotate: {
+    // Quay đối tượng quanh tâm O một góc (độ, ngược chiều kim đồng hồ).
+    kind: 'same', args: ['obj', 'point'], params: { angle: 90 }, label: 'Phép quay',
+    compute: ([X, O], p) => G.mapObject(X, (P) => G.rotatePoint(P, O, p.angle)),
+  },
+  homothety: {
+    kind: 'same', args: ['obj', 'point'], params: { k: 2 }, label: 'Phép vị tự',
+    compute: ([X, O], p) => G.mapObject(X, (P) => G.homothetyPoint(P, O, p.k)),
+    facts: (s, kinds) => (kinds[0] === 'point' ? [{ col: [s.args[1], s.args[0], s.id] }] : []),
+  },
+  translate: {
+    // Tịnh tiến theo vectơ PQ.
+    kind: 'same', args: ['obj', 'point', 'point'], label: 'Phép tịnh tiến',
+    compute: ([X, P, Q]) => G.mapObject(X, (Z) => G.translatePoint(Z, P, Q)),
+  },
+  invert: {
+    kind: 'point', args: ['point', 'circle'], label: 'Phép nghịch đảo',
+    compute: ([P, c]) => G.invertPoint(P, c),
+  },
+  tangent_at: {
+    kind: 'line', args: ['circle', 'point'], label: 'Tiếp tuyến tại một điểm',
+    compute: ([c, P]) => G.tangentAt(c, P),
+    facts: (s) => [{ on: [s.args[1], s.id] }, { tan: [s.id, s.args[0]] }],
+  },
+  tangent_point: {
+    // Tiếp điểm của tiếp tuyến kẻ từ P tới đường tròn (which = 0/1).
+    kind: 'point', args: ['circle', 'point'], params: { which: 0 }, label: 'Tiếp điểm',
+    compute: ([c, P], p) => G.tangentPoints(c, P)[p.which] || null,
+    facts: (s) => [{ on: [s.id, s.args[0]] }, { tan: [{ L: [s.args[1], s.id] }, s.args[0]] }],
+  },
+  common_tangent: {
+    kind: 'line', args: ['circle', 'circle'], params: { internal: false, which: 0 }, label: 'Tiếp tuyến chung',
+    compute: ([a, b], p) => G.commonTangent(a, b, !!p.internal, p.which),
+    facts: (s) => [{ tan: [s.id, s.args[0]] }, { tan: [s.id, s.args[1]] }],
+  },
+  radical_axis: {
+    kind: 'line', args: ['circle', 'circle'], label: 'Trục đẳng phương',
+    compute: ([a, b]) => G.radicalAxis(a, b),
+  },
+  radical_center: {
+    kind: 'point', args: ['circle', 'circle', 'circle'], label: 'Tâm đẳng phương',
+    compute: ([a, b, c]) => G.radicalCenter(a, b, c),
+  },
+  homothety_center: {
+    kind: 'point', args: ['circle', 'circle'], params: { internal: false }, label: 'Tâm vị tự',
+    compute: ([a, b], p) => G.homothetyCenter(a, b, !!p.internal),
+  },
+  excenter: {
+    // Tâm bàng tiếp đối diện đỉnh thứ nhất (A).
+    kind: 'point', args: ['point', 'point', 'point'], label: 'Tâm bàng tiếp', tag: 'excenter',
+    compute: tri(G.excenter),
+  },
+  excircle: {
+    kind: 'circle', args: ['point', 'point', 'point'], label: 'Đường tròn bàng tiếp', tag: 'excircle',
+    compute: tri((A, B, C) => { const J = G.excenter(A, B, C); return J ? G.circle(J, G.distPointLine(J, G.lineThrough(B, C))) : null; }),
+    facts: (s) => {
+      const [A, B, C] = s.args;
+      return [{ tan: [s.id, { L: [B, C] }] }, { tan: [s.id, { L: [C, A] }] }, { tan: [s.id, { L: [A, B] }] }];
+    },
+  },
+  isogonal_conjugate: {
+    kind: 'point', args: ['point', 'point', 'point', 'point'], label: 'Điểm liên hợp đẳng giác',
+    compute: ([P, A, B, C]) => G.isogonalConjugate(P, A, B, C),
+  },
+  lemoine: {
+    kind: 'point', args: ['point', 'point', 'point'], label: 'Điểm Lemoine', tag: 'K',
+    compute: tri(G.lemoine),
+  },
+  kosnita: {
+    kind: 'point', args: ['point', 'point', 'point'], label: 'Điểm Kosnita',
+    compute: tri(G.kosnita),
+  },
+  symmedian_foot: {
+    // Chân đường đối trung từ A trên BC.
+    kind: 'point', args: ['point', 'point', 'point'], label: 'Chân đường đối trung',
+    compute: tri(G.symmedianFoot),
+    facts: (s) => [{ col: [s.args[1], s.id, s.args[2]] }],
+  },
+  cevian_foot: {
+    // Giao của AP với BC (args: P, A, B, C).
+    kind: 'point', args: ['point', 'point', 'point', 'point'], label: 'Chân đường Cevian',
+    compute: ([P, A, B, C]) => (G.dist(A, P) < G.EPS || G.dist(B, C) < G.EPS ? null : G.intersectLL(G.lineThrough(A, P), G.lineThrough(B, C))),
+    facts: (s) => {
+      const [P, A, B, C] = s.args;
+      return [{ col: [B, s.id, C] }, { col: [A, P, s.id] }];
+    },
+  },
+  isogonal_line: {
+    // Đường đẳng giác của AP trong góc BAC (args: B, A, C, P; đỉnh là đối số thứ hai).
+    kind: 'line', args: ['point', 'point', 'point', 'point'], label: 'Đường đẳng giác',
+    compute: ([B, A, C, P]) => G.isogonalLine(B, A, C, P),
+    facts: (s) => [{ on: [s.args[1], s.id] }],
+  },
+  circle_tangent_at: {
+    // Đường tròn tiếp xúc AB tại A và đi qua C.
+    kind: 'circle', args: ['point', 'point', 'point'], label: 'Đường tròn tiếp xúc AB tại A, qua C',
+    compute: ([A, B, C]) => G.circleTangentAt(A, B, C),
+    facts: (s) => [{ on: [s.args[0], s.id] }, { on: [s.args[2], s.id] }, { tan: [s.id, { L: [s.args[0], s.args[1]] }] }],
+  },
+  mixtilinear: {
+    kind: 'circle', args: ['point', 'point', 'point'], params: { external: false }, label: 'Đường tròn mixtilinear',
+    compute: ([A, B, C], p) => (G.triangleOK(A, B, C) ? G.mixtilinear(A, B, C, !!p.external) : null),
+    facts: (s) => {
+      const [A, B, C] = s.args;
+      return [{ tan: [s.id, { L: [A, B] }] }, { tan: [s.id, { L: [A, C] }] }, { tan: [s.id, { C: [A, B, C] }] }];
+    },
+  },
+  circle_diameter: {
+    kind: 'circle', args: ['point', 'point'], label: 'Đường tròn đường kính',
+    compute: ([A, B]) => G.circle(G.mid(A, B), G.dist(A, B) / 2),
+    facts: (s) => [{ on: [s.args[0], s.id] }, { on: [s.args[1], s.id] }],
+  },
+
   // ---------- ĐÁNH DẤU (không tham gia khám phá) ----------
   polygon: {
     kind: 'mark', args: ['...point'], label: 'Miền đa giác',

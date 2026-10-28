@@ -175,5 +175,57 @@ export async function run({ page, ok, shot, state, tool, clickAt, menu, example 
   ok(s3.steps[s3.n - 1].type === 'reflect', 'đối xứng qua đường thẳng');
   await shot('bo-sung');
 
+  // ---------- Bản 1.1: menu Công cụ ----------
+  console.log('Bản 1.1: thư viện công cụ');
+  await page.evaluate(() => __app.loadDoc(GeoCore.emptyDoc()));
+  await page.click('.tb-btn[data-group="library"]');
+  await page.locator('#tools .tb-group[data-group="library"] .sub-title').nth(5).hover();
+  await shot('p3-menu-cong-cu');
+  await tool('model_excentral');
+  await clickAt(0.5, 2.2); await clickAt(-1.2, -0.6); await clickAt(2.2, -0.6);
+  let s4 = await state();
+  const centers = s4.steps.filter((x) => x.type === 'center').map((x) => x.name);
+  ok(['O', 'I', 'I_A', 'I_B', 'I_C'].every((n) => centers.includes(n)), `mô hình tâm nội tiếp – bàng tiếp: có tâm ${centers.join(', ')}`);
+  await page.evaluate(() => __app.zoomFit());
+  await tool('move');
+  await shot('p3-mo-hinh-bang-tiep');
+  // công cụ có tham số: quay 60°
+  await tool('rotate');
+  await page.fill('#tool-options [data-opt="angle"]', '60');
+  await page.dispatchEvent('#tool-options [data-opt="angle"]', 'change');
+  const pa = await page.evaluate(() => { const v = __app.values.get(__app.doc.steps.find((x) => x.name === 'B').id); return v; });
+  const pc = await page.evaluate(() => { const v = __app.values.get(__app.doc.steps.find((x) => x.name === 'A').id); return v; });
+  await clickAt(pa.x, pa.y); await clickAt(pc.x, pc.y);
+  s4 = await state();
+  const rot = s4.steps[s4.n - 1];
+  ok(rot.type === 'rotate' && rot.params.angle === 60, 'công cụ Quay dùng góc 60° đặt ở thẻ tuỳ chọn');
+
+  // ---------- Bản 1.1: tự tạo công cụ ----------
+  console.log('Bản 1.1: tự tạo công cụ');
+  await example('euler_line');
+  await tool('move');
+  await page.evaluate(() => __app.select(__app.doc.steps.find((x) => x.name === 'H').id));
+  await page.click('.tb-btn[data-group="library"]');
+  await page.locator('#tools .tb-group[data-group="library"] .sub-title').nth(6).click();
+  await shot('p3-cong-cu-cua-toi');
+  await page.click('[data-action="create"]');
+  await page.waitForSelector('.modal input');
+  await page.fill('.modal input', 'Trực tâm của tôi');
+  await page.click('.modal .primary');
+  const uid = await page.evaluate(() => __app.userTools[0] && __app.userTools[0].id);
+  ok(!!uid && (await page.locator(`#tools .tool[data-tool="${uid}"]`).count()) === 1, 'công cụ tự tạo xuất hiện trong menu "7. Công cụ của tôi"');
+  await page.evaluate(() => __app.loadDoc(GeoCore.emptyDoc()));
+  await tool(uid);
+  await clickAt(0, 3); await clickAt(-3, -1); await clickAt(4, -1);
+  const okH = await page.evaluate(() => {
+    const pts = __app.doc.steps.filter((x) => x.type === 'free_point').map((x) => __app.values.get(x.id));
+    const H = __app.values.get(__app.doc.steps.find((x) => x.type === 'orthocenter').id);
+    const h = GeoCore.geom.orthocenter(...pts);
+    return Math.hypot(H.x - h.x, H.y - h.y) < 1e-9;
+  });
+  ok(okH, 'dùng công cụ tự tạo trên tam giác mới cho đúng trực tâm');
+  const savedTools = await page.evaluate(() => localStorage.getItem('hinh-hoc-dong:tools'));
+  ok(savedTools && savedTools.includes('Trực tâm của tôi'), 'công cụ tự tạo được lưu trong trình duyệt');
+
   if (globalThis.__smokeMore) await globalThis.__smokeMore({ page, ok, shot, state, tool, clickAt });
 }

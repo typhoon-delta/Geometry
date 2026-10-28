@@ -210,3 +210,70 @@ luồng chính < 8 ms ở ×1.
   tên điểm nếu có.
 * Mọi công cụ vẽ đường tròn (qua 3 điểm, ngoại tiếp, nội tiếp, Euler, …) **dựng kèm tâm** (bước `center`);
   nếu tâm đã có sẵn (vd đã dựng O trước) thì không dựng thêm điểm trùng.
+
+## C. Thư viện công cụ (menu "Công cụ")
+
+Menu **Công cụ** (biểu tượng cuối của thanh công cụ dọc) có đúng các nhóm và mục như thư mục công cụ của thầy/cô:
+
+* **1. Dựng hình** (15): tam giác, tam giác vuông, vuông cân, đều, hình thang, thang cân, bình hành, chữ nhật,
+  thoi, vuông, tứ giác điều hoà, đường tròn tiếp xúc AB tại A và qua C, tam giác Cevian, tứ giác, tứ giác nội tiếp.
+  Các hình có bậc tự do (tam giác vuông, hình thang, chữ nhật, thoi, tứ giác nội tiếp) dựng đỉnh cuối là điểm
+  ràng buộc kéo được, giữ đúng tính chất khi kéo.
+* **2. Đường đặc biệt** (14): đường cao, trung tuyến, trung trực, đẳng giác, đối trung, phân giác ngoài, phân giác
+  trong và ngoài, tiếp tuyến tại một điểm, giao điểm của hai tiếp tuyến, tiếp tuyến kẻ từ một điểm, tiếp tuyến
+  chung (dựng mọi tiếp tuyến chung đang tồn tại), đường thẳng Euler, Simson, Steiner.
+* **3. Đường tròn** (11): ngoại tiếp, pedal, pedal chi tiết, nội tiếp, bàng tiếp, đường kính, mixtilinear nội,
+  mixtilinear ngoại, trục đẳng phương, tâm đẳng phương, đường tròn Euler – tất cả dựng kèm tâm.
+* **4. Điểm đặc biệt** (11 + 7 bổ sung): trọng tâm (và chi tiết), trực tâm (và chi tiết), liên hợp đẳng giác,
+  Lemoine, chân đường vuông góc hạ xuống ba cạnh, tâm vị tự ngoài, tâm vị tự trong, Kosnita, tâm Euler; bổ sung
+  tâm ngoại tiếp, nội tiếp, bàng tiếp, tiếp điểm nội tiếp, hai điểm chính giữa cung, chân đường cao.
+* **5. Phép biến hình** (tự bổ sung, 7): đối xứng tâm, đối xứng trục, quay (góc nhập ở thẻ tuỳ chọn), vị tự
+  (tỉ số nhập ở thẻ tuỳ chọn), tịnh tiến, nghịch đảo (điểm), chiếu vuông góc. Quay/vị tự/tịnh tiến/đối xứng áp
+  được cho điểm, đường thẳng và đường tròn.
+* **6. Mô hình** (tự bổ sung, 6): tam giác với tâm nội tiếp – bàng tiếp (giống hình mẫu), đường thẳng và đường
+  tròn Euler, tam giác orthic, tam giác trung bình, điểm Miquel, đường tròn mixtilinear và tâm nội tiếp.
+* **7. Công cụ của tôi**: **tự tạo công cụ** từ hình đã dựng (giống *Create New Tool*) – chọn kết quả (và nếu
+  muốn, đầu vào), đặt tên, dùng lại như mọi công cụ; lưu trong trình duyệt, xuất/nhập ra tệp JSON, xoá.
+
+Bản **chi tiết** giữ các đường dựng phụ (nét đứt xám), bản thường ẩn chúng. Công cụ tự dùng lại điểm đã có
+(vd đã có O thì "Đường tròn ngoại tiếp" không tạo O thứ hai) – có test kiểm tra không tạo điểm trùng.
+
+**Kiểm thử theo định nghĩa toán học** (`tests/library.test.mjs`, 73 test): mỗi công cụ được chạy bằng Node trên
+một hình mẫu rồi đối chiếu định nghĩa ở cấu hình gốc **và 4 cấu hình xê dịch ngẫu nhiên**, ví dụ: Lemoine là
+liên hợp đẳng giác của trọng tâm và nằm trên đường đối trung; chân Simson của điểm trên (O) thẳng hàng; đường
+Steiner qua trực tâm; Kosnita là điểm đồng quy của A–tâm(BOC)…; tứ giác điều hoà có AB·CD = BC·DA; mixtilinear
+tiếp xúc AB, AC và tiếp xúc trong/ngoài với (O); tiếp tuyến chung tiếp xúc cả hai đường tròn; định lý Ceva cho
+tam giác Cevian; liên hợp đẳng giác hai lần trở về P… Có một test bắt buộc **mọi** công cụ trong menu phải có bài
+kiểm tra. Đã thử làm sai cố ý 4 công thức (Lemoine, tiếp tuyến chung, mixtilinear, phép quay): test đều phát hiện.
+Công cụ tự tạo có test riêng (`tests/macro.test.mjs`).
+
+## D. Tổng kết bản 1.1
+
+**Kiểm thử**: `npm test` 100 test (Node) đều đạt; `npm run test:browser` đạt toàn bộ (thêm kiểm tra menu Công cụ,
+công cụ có tham số, tự tạo công cụ); `npm run test:perf` đạt ngưỡng. Ảnh tự kiểm tra được chụp sau mỗi phần
+(hình dày kiểu đề VMO ở bộ Đơn sắc, menu Công cụ nhiều tầng, mô hình tâm bàng tiếp, bộ Sách giáo khoa…).
+
+**Quyết định thiết kế bổ sung**
+1. **Bỏ JSXGraph, tự viết bộ vẽ canvas** (thay cho quyết định 4.1 ở bản 1): đo được JSXGraph là nút thắt; canvas
+   cho toàn quyền về phong cách (điểm rỗng, nhãn công thức) và nhẹ hơn ~1 MB. Lõi hình học không đổi.
+2. **Bộ kiểu là sở thích của người xem** (lưu trong trình duyệt), không lưu trong tệp hình: cùng một tệp/link mở
+   ra theo bộ kiểu người xem chọn; màu đặt riêng cho từng đối tượng vẫn nằm trong tệp.
+3. **Công cụ = hàm sinh danh sách bước dựng** (`make`), không phải bước dựng "hộp đen": tệp hình vẫn chỉ gồm các
+   bước cơ bản nên dịch sang Python/Newclid dễ, và mọi công cụ dùng chung bộ máy kéo thả/khám phá/TikZ.
+4. **Công cụ tự tạo lưu dạng JSON thuần** (`in:k` / `st:j`), không chứa toạ độ; dịch/chia sẻ được.
+5. Hình có bậc tự do (tam giác vuông…) dựng đỉnh cuối là **điểm ràng buộc** thay vì hỏi thêm một lần bấm: nhanh
+   hơn, và kéo đỉnh đó vẫn giữ tính chất.
+
+**Hạn chế / lỗi đã biết (bản 1.1)**
+* Phép nghịch đảo hiện chỉ áp cho điểm (ảnh của đường thẳng/đường tròn qua nghịch đảo đổi loại đối tượng – để sau).
+* Góc quay/tỉ số vị tự là hằng số nhập trước khi dựng (chưa lấy theo một góc/tỉ số đo trên hình); sửa sau được
+  bằng cách xoá và dựng lại.
+* Nhãn tự đặt tránh đường đi qua điểm và điểm gần đó, nhưng hai điểm rất gần nhau (vd O và I gần trùng) vẫn có
+  thể chồng nhãn – kéo nhãn để chỉnh.
+* Số liệu hiệu năng đo trên Chromium headless (không GPU); máy thật thường nhanh hơn ở khâu vẽ.
+* Ngoài nhóm 5 và 6 (tự bổ sung theo lời dặn), bộ công cụ bám đúng danh sách menu trong ảnh; nhóm "Example Tools"
+  của Sketchpad không làm.
+
+**Gợi ý tiếp theo**: góc/tỉ số động cho quay và vị tự; nghịch đảo đường thẳng/đường tròn; thêm vài mô hình hay
+gặp ở VMO (cấu hình tứ giác toàn phần, đường tròn Apollonius…); cho phép gán phím tắt cho công cụ hay dùng; lưu
+"Công cụ của tôi" kèm trong tệp hình khi chia sẻ.

@@ -7,6 +7,7 @@
 //   preview : kiểu xem trước khi đang chọn ('segment'|'line'|'ray'|'circle'|'polygon')
 
 import { STEP_TYPES } from '../core/steps.js';
+import { LIBRARY, MENUS } from './library.js';
 
 const T = (id, label, group, icon, inputs, hints, make, extra = {}) => ({ id, label, group, icon, inputs, hints, make, ...extra });
 const one = (type, params, name) => (picks) => [{ type, args: picks, params, name }];
@@ -44,31 +45,13 @@ export const TOOLS = [
   T('reflect', 'Đối xứng', 'Biến hình', '⇋', ['obj', 'pl'], ['Chọn đối tượng cần lấy đối xứng (điểm, đường, đường tròn)', 'Chọn tâm đối xứng (điểm) hoặc trục đối xứng (đường thẳng)'], one('reflect')),
   T('projection', 'Hình chiếu', 'Biến hình', '⊾', ['point', 'line'], ['Chọn điểm và đường thẳng (thứ tự bất kỳ)', 'Chọn nốt đối tượng còn lại'], (p) => [{ type: 'projection', args: p }], { anyOrder: true }),
 
-  T('triangle', 'Tam giác', 'Tam giác', '△', ['point', 'point', 'point'], TRI, ([A, B, C]) => [
-    { type: 'segment', args: [A, B] }, { type: 'segment', args: [B, C] }, { type: 'segment', args: [C, A] },
-  ], { preview: 'polygon' }),
-  T('circumcenter', 'Tâm ngoại tiếp O', 'Tam giác', 'O', ['point', 'point', 'point'], TRI, one('circumcenter', undefined, 'O')),
-  T('circumcircle', 'Đường tròn ngoại tiếp', 'Tam giác', '(O)', ['point', 'point', 'point'], TRI, withCenter('circumcircle', undefined, 'O')),
-  T('orthocenter', 'Trực tâm H', 'Tam giác', 'H', ['point', 'point', 'point'], TRI, one('orthocenter', undefined, 'H')),
-  T('incenter', 'Tâm nội tiếp I', 'Tam giác', 'I', ['point', 'point', 'point'], TRI, one('incenter', undefined, 'I')),
-  T('incircle', 'Đường tròn nội tiếp', 'Tam giác', '(I)', ['point', 'point', 'point'], TRI, withCenter('incircle', undefined, 'I')),
-  T('centroid', 'Trọng tâm G', 'Tam giác', 'G', ['point', 'point', 'point'], TRI, one('centroid', undefined, 'G')),
-  T('nine_point_center', 'Tâm Euler N', 'Tam giác', 'N', ['point', 'point', 'point'], TRI, one('nine_point_center', undefined, 'N')),
-  T('nine_point_circle', 'Đường tròn Euler', 'Tam giác', '(N)', ['point', 'point', 'point'], TRI, withCenter('nine_point_circle', undefined, 'N')),
-  T('altitude_foot', 'Chân đường cao', 'Tam giác', 'h', ['point', 'point', 'point'], VTX, ([A, B, C]) => [
-    { type: 'altitude_foot', args: [A, B, C] },
-    { type: 'segment', args: [A, '$0'], style: { dash: true } },
-  ]),
-  T('incircle_touch', 'Tiếp điểm nội tiếp', 'Tam giác', 'T', ['point', 'point', 'point'], VTX, one('incircle_touch')),
-  T('arc_mid_no', 'Điểm giữa cung BC không chứa A', 'Tam giác', '⌒', ['point', 'point', 'point'], VTX, one('arc_midpoint', { contains: false })),
-  T('arc_mid_yes', 'Điểm giữa cung BC chứa A', 'Tam giác', '⌒A', ['point', 'point', 'point'], VTX, one('arc_midpoint', { contains: true })),
-
   T('angle_mark', 'Đánh dấu góc', 'Đánh dấu', '∡', ['point', 'point', 'point'], ['Chọn điểm trên cạnh thứ nhất', 'Chọn ĐỈNH góc', 'Chọn điểm trên cạnh thứ hai'], (p, app) => [{ type: 'angle_mark', args: p, style: { ...app.markStyle('angle') } }]),
   T('segment_mark', 'Đánh dấu đoạn', 'Đánh dấu', '⫽', ['point', 'point'], ['Chọn đầu mút thứ nhất (hoặc bấm vào một đoạn thẳng)', 'Chọn đầu mút thứ hai'], (p, app) => [{ type: 'segment_mark', args: p, style: { ...app.markStyle('segment') } }], { segmentShortcut: true }),
   T('polygon', 'Tô miền đa giác', 'Đánh dấu', '▱', ['...point'], ['Chọn lần lượt các đỉnh; bấm lại đỉnh đầu (hoặc Enter) để kết thúc'], (p, app) => [{ type: 'polygon', args: p, style: { ...app.markStyle('polygon') } }], { preview: 'polygon' }),
 ];
 
-export const TOOL_BY_ID = Object.fromEntries(TOOLS.map((t) => [t.id, t]));
+// Công cụ cơ bản + thư viện "Công cụ" (library.js). Công cụ trùng id dùng chung một định nghĩa.
+export const TOOL_BY_ID = Object.fromEntries([...TOOLS, ...LIBRARY].map((t) => [t.id, t]));
 
 /**
  * Thanh công cụ dọc: mỗi nhóm là một biểu tượng; bấm vào là dùng công cụ đang chọn của nhóm, đồng thời mở
@@ -80,6 +63,6 @@ export const TOOLBAR = [
   { id: 'circle', label: 'Đường tròn', icon: 'circle', tools: ['circle', 'circle_3pts', 'circle_radius'] },
   { id: 'line', label: 'Đoạn, tia, đường thẳng', icon: 'line', tools: ['segment', 'ray', 'line'] },
   { id: 'construct', label: 'Dựng', icon: 'construct', tools: ['perpendicular', 'parallel', 'perp_bisector', 'angle_bisector', 'ext_bisector', 'projection', 'reflect'] },
-  { id: 'triangle', label: 'Tam giác', icon: 'triangle', tools: ['triangle', 'circumcenter', 'circumcircle', 'orthocenter', 'incenter', 'incircle', 'centroid', 'nine_point_center', 'nine_point_circle', 'altitude_foot', 'incircle_touch', 'arc_mid_no', 'arc_mid_yes'] },
   { id: 'mark', label: 'Đánh dấu', icon: 'mark', tools: ['angle_mark', 'segment_mark', 'polygon'] },
+  { id: 'library', label: 'Công cụ', icon: 'tools', tools: LIBRARY.map((t) => t.id), submenus: MENUS },
 ];

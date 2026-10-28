@@ -12,26 +12,40 @@
     add: () => add,
     angleBisector: () => angleBisector,
     arcMidpoint: () => arcMidpoint,
+    barycentric: () => barycentric,
     centroid: () => centroid,
     circle: () => circle,
+    circleTangentAt: () => circleTangentAt,
     circleThrough: () => circleThrough,
     circumcenter: () => circumcenter,
+    commonTangent: () => commonTangent,
     cross: () => cross,
     dist: () => dist,
     distPointLine: () => distPointLine,
     distToObject: () => distToObject,
     dot: () => dot,
+    excenter: () => excenter,
     finite: () => finite,
+    fromBarycentric: () => fromBarycentric,
+    homothetyCenter: () => homothetyCenter,
+    homothetyPoint: () => homothetyPoint,
     incenter: () => incenter,
     inradius: () => inradius,
     intersect: () => intersect,
     intersectCC: () => intersectCC,
     intersectLC: () => intersectLC,
     intersectLL: () => intersectLL,
+    invertPoint: () => invertPoint,
+    isogonalConjugate: () => isogonalConjugate,
+    isogonalLine: () => isogonalLine,
+    kosnita: () => kosnita,
+    lemoine: () => lemoine,
     line: () => line,
     lineParam: () => lineParam,
     lineThrough: () => lineThrough,
+    mapObject: () => mapObject,
     mid: () => mid,
+    mixtilinear: () => mixtilinear,
     mul: () => mul,
     ninePointCenter: () => ninePointCenter,
     norm: () => norm,
@@ -41,10 +55,17 @@
     pointOn: () => pointOn,
     project: () => project,
     pt: () => pt,
+    radicalAxis: () => radicalAxis,
+    radicalCenter: () => radicalCenter,
     reflectObject: () => reflectObject,
     reflectPointOverLine: () => reflectPointOverLine,
     reflectPointOverPoint: () => reflectPointOverPoint,
+    rotatePoint: () => rotatePoint,
     sub: () => sub,
+    symmedianFoot: () => symmedianFoot,
+    tangentAt: () => tangentAt,
+    tangentPoints: () => tangentPoints,
+    translatePoint: () => translatePoint,
     triangleOK: () => triangleOK,
     unit: () => unit
   });
@@ -238,6 +259,143 @@
     }
     if (X.kind === "circle") return circle(f(X.c), X.r);
     return null;
+  }
+  function rotatePoint(P2, O, deg) {
+    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    const x = P2.x - O.x, y = P2.y - O.y;
+    return pt(O.x + c * x - s * y, O.y + s * x + c * y);
+  }
+  var homothetyPoint = (P2, O, k) => pt(O.x + k * (P2.x - O.x), O.y + k * (P2.y - O.y));
+  var translatePoint = (P2, A, B) => pt(P2.x + B.x - A.x, P2.y + B.y - A.y);
+  function invertPoint(P2, c) {
+    const dx = P2.x - c.c.x, dy = P2.y - c.c.y, d2 = dx * dx + dy * dy;
+    if (d2 < EPS * EPS) return null;
+    const k = c.r * c.r / d2;
+    return pt(c.c.x + k * dx, c.c.y + k * dy);
+  }
+  function mapObject(X, f) {
+    if (!X) return null;
+    if (X.kind === "point") return f(X);
+    if (X.kind === "line") {
+      const a = f(X.p), b = f(add(X.p, X.d));
+      return a && b ? line(a, sub(b, a), X.sub) : null;
+    }
+    if (X.kind === "circle") {
+      const c = f(X.c), q = f(add(X.c, { x: X.r, y: 0 }));
+      return c && q ? circle(c, dist(c, q)) : null;
+    }
+    return null;
+  }
+  function tangentAt(c, P2) {
+    const r = sub(P2, c.c);
+    if (norm(r) < EPS) return null;
+    return line(P2, perp(r));
+  }
+  function tangentPoints(c, P2) {
+    const M = mid(c.c, P2);
+    return intersectCC(c, { kind: "circle", c: M, r: dist(M, P2) });
+  }
+  function commonTangent(c1, c2, internal, which) {
+    const D = sub(c2.c, c1.c);
+    const d2 = dot(D, D);
+    const k = (internal ? -c2.r : c2.r) - c1.r;
+    const h2 = d2 - k * k;
+    if (d2 < EPS || h2 < -1e-12 * d2) return null;
+    const h = Math.sqrt(Math.max(0, h2));
+    const sg = which ? 1 : -1;
+    const n = { x: (k * D.x + sg * h * -D.y) / d2, y: (k * D.y + sg * h * D.x) / d2 };
+    const T1 = { x: c1.c.x - c1.r * n.x, y: c1.c.y - c1.r * n.y };
+    const s2 = internal ? -1 : 1;
+    const T22 = { x: c2.c.x - s2 * c2.r * n.x, y: c2.c.y - s2 * c2.r * n.y };
+    const dir = dist(T1, T22) > EPS ? sub(T22, T1) : perp(n);
+    return line(T1, dir);
+  }
+  function radicalAxis(c1, c2) {
+    const D = sub(c2.c, c1.c);
+    const d = norm(D);
+    if (d < EPS) return null;
+    const t = (d * d + c1.r * c1.r - c2.r * c2.r) / (2 * d);
+    const u = { x: D.x / d, y: D.y / d };
+    return line(pt(c1.c.x + t * u.x, c1.c.y + t * u.y), perp(D));
+  }
+  function radicalCenter(c1, c2, c3) {
+    const a = radicalAxis(c1, c2), b = radicalAxis(c1, c3);
+    return a && b ? intersectLL(a, b) : null;
+  }
+  function homothetyCenter(c1, c2, internal) {
+    if (internal) {
+      const s2 = c1.r + c2.r;
+      return pt((c2.r * c1.c.x + c1.r * c2.c.x) / s2, (c2.r * c1.c.y + c1.r * c2.c.y) / s2);
+    }
+    const s = c2.r - c1.r;
+    if (Math.abs(s) < 1e-12 * Math.max(c1.r, c2.r)) return null;
+    return pt((c2.r * c1.c.x - c1.r * c2.c.x) / s, (c2.r * c1.c.y - c1.r * c2.c.y) / s);
+  }
+  var area2 = (P2, Q, R) => cross(sub(Q, P2), sub(R, P2));
+  function barycentric(P2, A, B, C) {
+    return [area2(P2, B, C), area2(P2, C, A), area2(P2, A, B)];
+  }
+  function fromBarycentric(u, v, w, A, B, C) {
+    const s = u + v + w;
+    const m = Math.max(Math.abs(u), Math.abs(v), Math.abs(w));
+    if (!(m > 0) || Math.abs(s) < 1e-12 * m) return null;
+    return pt((u * A.x + v * B.x + w * C.x) / s, (u * A.y + v * B.y + w * C.y) / s);
+  }
+  var sides2 = (A, B, C) => [dist(B, C) ** 2, dist(C, A) ** 2, dist(A, B) ** 2];
+  function excenter(A, B, C) {
+    if (!triangleOK(A, B, C)) return null;
+    const a = dist(B, C), b = dist(C, A), c = dist(A, B);
+    return fromBarycentric(-a, b, c, A, B, C);
+  }
+  function isogonalConjugate(P2, A, B, C) {
+    if (!triangleOK(A, B, C)) return null;
+    const [u, v, w] = barycentric(P2, A, B, C);
+    const sc = Math.abs(area2(A, B, C));
+    if ([u, v, w].some((x) => Math.abs(x) < 1e-12 * sc)) return null;
+    const [a2, b2, c2] = sides2(A, B, C);
+    return fromBarycentric(a2 / u, b2 / v, c2 / w, A, B, C);
+  }
+  function lemoine(A, B, C) {
+    if (!triangleOK(A, B, C)) return null;
+    const [a2, b2, c2] = sides2(A, B, C);
+    return fromBarycentric(a2, b2, c2, A, B, C);
+  }
+  function symmedianFoot(A, B, C) {
+    if (!triangleOK(A, B, C)) return null;
+    const b2 = dist(C, A) ** 2, c2 = dist(A, B) ** 2;
+    return pt((b2 * B.x + c2 * C.x) / (b2 + c2), (b2 * B.y + c2 * C.y) / (b2 + c2));
+  }
+  function kosnita(A, B, C) {
+    const N = ninePointCenter(A, B, C);
+    return N ? isogonalConjugate(N, A, B, C) : null;
+  }
+  function isogonalLine(B, A, C, P2) {
+    const u = unit(sub(B, A)), v = unit(sub(C, A)), p = sub(P2, A);
+    if (!u || !v || norm(p) < EPS) return null;
+    let w = add(u, v);
+    w = norm(w) < 1e-9 ? perp(u) : unit(w);
+    const k = 2 * dot(p, w);
+    return line(A, { x: k * w.x - p.x, y: k * w.y - p.y });
+  }
+  function circleTangentAt(A, B, C) {
+    const l1 = line(A, perp(sub(B, A)));
+    const l2 = dist(A, C) < EPS ? null : line(mid(A, C), perp(sub(C, A)));
+    if (!l1 || !l2) return null;
+    const O = intersectLL(l1, l2);
+    return O ? circle(O, dist(O, A)) : null;
+  }
+  function mixtilinear(A, B, C, external = false) {
+    const circ = circleThrough(A, B, C);
+    if (!circ) return null;
+    const u0 = unit(sub(B, A)), v0 = unit(sub(C, A));
+    const u = unit(add(u0, v0));
+    if (!u) return null;
+    const s = Math.abs(cross(u, u0));
+    const c2 = 1 - s * s;
+    const AO = sub(A, circ.c);
+    const t = -2 * (dot(u, AO) + (external ? -1 : 1) * circ.r * s) / c2;
+    if (!(t > 0)) return null;
+    return circle(pt(A.x + t * u.x, A.y + t * u.y), t * s);
   }
 
   // src/core/steps.js
@@ -509,6 +667,192 @@
       tag: "ninepoint",
       compute: tri((A, B, C) => circleThrough(mid(A, B), mid(B, C), mid(C, A)))
     },
+    // ---------- BỔ SUNG (bản 1.1: thư viện công cụ) ----------
+    foot: {
+      // Hình chiếu của P lên đường thẳng AB (không cần dựng đường AB).
+      kind: "point",
+      args: ["point", "point", "point"],
+      label: "Ch\xE2n \u0111\u01B0\u1EDDng vu\xF4ng g\xF3c",
+      compute: ([Q, A, B]) => dist(A, B) < EPS ? null : project(Q, lineThrough(A, B)),
+      facts: (s) => {
+        const [Q, A, B] = s.args;
+        return [{ col: [A, s.id, B] }, { perp: [{ L: [Q, s.id] }, { L: [A, B] }] }];
+      }
+    },
+    reflect_pts: {
+      // Điểm đối xứng của P qua đường thẳng AB.
+      kind: "point",
+      args: ["point", "point", "point"],
+      label: "\u0110\u1ED1i x\u1EE9ng qua \u0111\u01B0\u1EDDng th\u1EB3ng",
+      compute: ([Q, A, B]) => dist(A, B) < EPS ? null : reflectPointOverLine(Q, lineThrough(A, B)),
+      facts: (s) => [{ perp: [{ L: [s.args[0], s.id] }, { L: [s.args[1], s.args[2]] }] }]
+    },
+    rotate: {
+      // Quay đối tượng quanh tâm O một góc (độ, ngược chiều kim đồng hồ).
+      kind: "same",
+      args: ["obj", "point"],
+      params: { angle: 90 },
+      label: "Ph\xE9p quay",
+      compute: ([X, O], p) => mapObject(X, (P2) => rotatePoint(P2, O, p.angle))
+    },
+    homothety: {
+      kind: "same",
+      args: ["obj", "point"],
+      params: { k: 2 },
+      label: "Ph\xE9p v\u1ECB t\u1EF1",
+      compute: ([X, O], p) => mapObject(X, (P2) => homothetyPoint(P2, O, p.k)),
+      facts: (s, kinds2) => kinds2[0] === "point" ? [{ col: [s.args[1], s.args[0], s.id] }] : []
+    },
+    translate: {
+      // Tịnh tiến theo vectơ PQ.
+      kind: "same",
+      args: ["obj", "point", "point"],
+      label: "Ph\xE9p t\u1ECBnh ti\u1EBFn",
+      compute: ([X, P2, Q]) => mapObject(X, (Z) => translatePoint(Z, P2, Q))
+    },
+    invert: {
+      kind: "point",
+      args: ["point", "circle"],
+      label: "Ph\xE9p ngh\u1ECBch \u0111\u1EA3o",
+      compute: ([P2, c]) => invertPoint(P2, c)
+    },
+    tangent_at: {
+      kind: "line",
+      args: ["circle", "point"],
+      label: "Ti\u1EBFp tuy\u1EBFn t\u1EA1i m\u1ED9t \u0111i\u1EC3m",
+      compute: ([c, P2]) => tangentAt(c, P2),
+      facts: (s) => [{ on: [s.args[1], s.id] }, { tan: [s.id, s.args[0]] }]
+    },
+    tangent_point: {
+      // Tiếp điểm của tiếp tuyến kẻ từ P tới đường tròn (which = 0/1).
+      kind: "point",
+      args: ["circle", "point"],
+      params: { which: 0 },
+      label: "Ti\u1EBFp \u0111i\u1EC3m",
+      compute: ([c, P2], p) => tangentPoints(c, P2)[p.which] || null,
+      facts: (s) => [{ on: [s.id, s.args[0]] }, { tan: [{ L: [s.args[1], s.id] }, s.args[0]] }]
+    },
+    common_tangent: {
+      kind: "line",
+      args: ["circle", "circle"],
+      params: { internal: false, which: 0 },
+      label: "Ti\u1EBFp tuy\u1EBFn chung",
+      compute: ([a, b], p) => commonTangent(a, b, !!p.internal, p.which),
+      facts: (s) => [{ tan: [s.id, s.args[0]] }, { tan: [s.id, s.args[1]] }]
+    },
+    radical_axis: {
+      kind: "line",
+      args: ["circle", "circle"],
+      label: "Tr\u1EE5c \u0111\u1EB3ng ph\u01B0\u01A1ng",
+      compute: ([a, b]) => radicalAxis(a, b)
+    },
+    radical_center: {
+      kind: "point",
+      args: ["circle", "circle", "circle"],
+      label: "T\xE2m \u0111\u1EB3ng ph\u01B0\u01A1ng",
+      compute: ([a, b, c]) => radicalCenter(a, b, c)
+    },
+    homothety_center: {
+      kind: "point",
+      args: ["circle", "circle"],
+      params: { internal: false },
+      label: "T\xE2m v\u1ECB t\u1EF1",
+      compute: ([a, b], p) => homothetyCenter(a, b, !!p.internal)
+    },
+    excenter: {
+      // Tâm bàng tiếp đối diện đỉnh thứ nhất (A).
+      kind: "point",
+      args: ["point", "point", "point"],
+      label: "T\xE2m b\xE0ng ti\u1EBFp",
+      tag: "excenter",
+      compute: tri(excenter)
+    },
+    excircle: {
+      kind: "circle",
+      args: ["point", "point", "point"],
+      label: "\u0110\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp",
+      tag: "excircle",
+      compute: tri((A, B, C) => {
+        const J = excenter(A, B, C);
+        return J ? circle(J, distPointLine(J, lineThrough(B, C))) : null;
+      }),
+      facts: (s) => {
+        const [A, B, C] = s.args;
+        return [{ tan: [s.id, { L: [B, C] }] }, { tan: [s.id, { L: [C, A] }] }, { tan: [s.id, { L: [A, B] }] }];
+      }
+    },
+    isogonal_conjugate: {
+      kind: "point",
+      args: ["point", "point", "point", "point"],
+      label: "\u0110i\u1EC3m li\xEAn h\u1EE3p \u0111\u1EB3ng gi\xE1c",
+      compute: ([P2, A, B, C]) => isogonalConjugate(P2, A, B, C)
+    },
+    lemoine: {
+      kind: "point",
+      args: ["point", "point", "point"],
+      label: "\u0110i\u1EC3m Lemoine",
+      tag: "K",
+      compute: tri(lemoine)
+    },
+    kosnita: {
+      kind: "point",
+      args: ["point", "point", "point"],
+      label: "\u0110i\u1EC3m Kosnita",
+      compute: tri(kosnita)
+    },
+    symmedian_foot: {
+      // Chân đường đối trung từ A trên BC.
+      kind: "point",
+      args: ["point", "point", "point"],
+      label: "Ch\xE2n \u0111\u01B0\u1EDDng \u0111\u1ED1i trung",
+      compute: tri(symmedianFoot),
+      facts: (s) => [{ col: [s.args[1], s.id, s.args[2]] }]
+    },
+    cevian_foot: {
+      // Giao của AP với BC (args: P, A, B, C).
+      kind: "point",
+      args: ["point", "point", "point", "point"],
+      label: "Ch\xE2n \u0111\u01B0\u1EDDng Cevian",
+      compute: ([P2, A, B, C]) => dist(A, P2) < EPS || dist(B, C) < EPS ? null : intersectLL(lineThrough(A, P2), lineThrough(B, C)),
+      facts: (s) => {
+        const [P2, A, B, C] = s.args;
+        return [{ col: [B, s.id, C] }, { col: [A, P2, s.id] }];
+      }
+    },
+    isogonal_line: {
+      // Đường đẳng giác của AP trong góc BAC (args: B, A, C, P; đỉnh là đối số thứ hai).
+      kind: "line",
+      args: ["point", "point", "point", "point"],
+      label: "\u0110\u01B0\u1EDDng \u0111\u1EB3ng gi\xE1c",
+      compute: ([B, A, C, P2]) => isogonalLine(B, A, C, P2),
+      facts: (s) => [{ on: [s.args[1], s.id] }]
+    },
+    circle_tangent_at: {
+      // Đường tròn tiếp xúc AB tại A và đi qua C.
+      kind: "circle",
+      args: ["point", "point", "point"],
+      label: "\u0110\u01B0\u1EDDng tr\xF2n ti\u1EBFp x\xFAc AB t\u1EA1i A, qua C",
+      compute: ([A, B, C]) => circleTangentAt(A, B, C),
+      facts: (s) => [{ on: [s.args[0], s.id] }, { on: [s.args[2], s.id] }, { tan: [s.id, { L: [s.args[0], s.args[1]] }] }]
+    },
+    mixtilinear: {
+      kind: "circle",
+      args: ["point", "point", "point"],
+      params: { external: false },
+      label: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear",
+      compute: ([A, B, C], p) => triangleOK(A, B, C) ? mixtilinear(A, B, C, !!p.external) : null,
+      facts: (s) => {
+        const [A, B, C] = s.args;
+        return [{ tan: [s.id, { L: [A, B] }] }, { tan: [s.id, { L: [A, C] }] }, { tan: [s.id, { C: [A, B, C] }] }];
+      }
+    },
+    circle_diameter: {
+      kind: "circle",
+      args: ["point", "point"],
+      label: "\u0110\u01B0\u1EDDng tr\xF2n \u0111\u01B0\u1EDDng k\xEDnh",
+      compute: ([A, B]) => circle(mid(A, B), dist(A, B) / 2),
+      facts: (s) => [{ on: [s.args[0], s.id] }, { on: [s.args[1], s.id] }]
+    },
     // ---------- ĐÁNH DẤU (không tham gia khám phá) ----------
     polygon: {
       kind: "mark",
@@ -749,6 +1093,30 @@
     }
   }
 
+  // src/core/apply.js
+  function addSpecs(doc, specs, { join = true } = {}) {
+    const ids = [];
+    const k = kinds(doc);
+    const used = (n) => doc.steps.some((s) => s.name === n);
+    specs.forEach((sp, i) => {
+      const def = STEP_TYPES[sp.type];
+      if (!def) throw new Error("Lo\u1EA1i b\u01B0\u1EDBc kh\xF4ng r\xF5: " + sp.type);
+      const id = newId(doc);
+      const args = sp.args.map((a) => typeof a === "string" && a.startsWith("$") ? ids[+a.slice(1)] : a);
+      const kind = def.kind === "same" ? k.get(args[0]) : def.kind;
+      const step = { id, type: sp.type, args };
+      if (sp.params && Object.keys(sp.params).length) step.params = { ...sp.params };
+      if (kind !== "mark") step.name = sp.name && !used(sp.name) ? sp.name : nextName(doc, kind, sp.name);
+      if (sp.style && Object.keys(sp.style).length) step.style = { ...sp.style };
+      if (sp.hidden) step.hidden = true;
+      if (i > 0 && join) step.joinPrev = true;
+      doc.steps.push(step);
+      k.set(id, kind);
+      ids.push(id);
+    });
+    return ids;
+  }
+
   // src/core/names.js
   function parseLabel(name) {
     const s = String(name ?? "");
@@ -763,17 +1131,17 @@
   var escHTML = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   function labelHTML(name) {
     if (!name) return "";
-    const { base, sub: sub2, primes } = parseLabel(name);
-    return `<i class="lb">${escHTML(base)}${"\u2032".repeat(primes)}${sub2 ? `<sub>${escHTML(sub2)}</sub>` : ""}</i>`;
+    const { base, sub: sub3, primes } = parseLabel(name);
+    return `<i class="lb">${escHTML(base)}${"\u2032".repeat(primes)}${sub3 ? `<sub>${escHTML(sub3)}</sub>` : ""}</i>`;
   }
   var GREEK = { "\u03B1": "\\alpha", "\u03B2": "\\beta", "\u03B3": "\\gamma", "\u03B4": "\\delta", "\u0394": "\\Delta", "\u03B5": "\\varepsilon", "\u03B8": "\\theta", "\u03BB": "\\lambda", "\u03BC": "\\mu", "\u03C0": "\\pi", "\u03C1": "\\rho", "\u03C3": "\\sigma", "\u03C6": "\\varphi", "\u03C9": "\\omega", "\u03A9": "\\Omega", "\u0393": "\\Gamma" };
   var texText = (s) => s.replace(/[αβγδΔεθλμπρσφωΩΓ]/g, (c) => GREEK[c] + " ").replace(/[#$%&{}]/g, (c) => "\\" + c).trim();
   function texLabel(name) {
-    const { base, sub: sub2, primes } = parseLabel(name);
+    const { base, sub: sub3, primes } = parseLabel(name);
     const b = texText(base);
     const p = "'".repeat(primes);
-    if (!sub2) return `$${b}${p}$`;
-    const sb = texText(sub2);
+    if (!sub3) return `$${b}${p}$`;
+    const sb = texText(sub3);
     return sb.length === 1 ? `$${b}${p}_${sb}$` : `$${b}${p}_{${sb}}$`;
   }
 
@@ -810,9 +1178,9 @@
         if (v.kind === "line") {
           const a = Math.atan2(v.d.y, v.d.x);
           const t = lineParam(P2, v);
-          const sub2 = c.type === "segment" ? "segment" : c.type === "ray" ? "ray" : v.sub;
-          const fwd = sub2 === "line" || (sub2 === "ray" ? true : t < 1 - 1e-9);
-          const back = sub2 === "line" || t > 1e-9;
+          const sub3 = c.type === "segment" ? "segment" : c.type === "ray" ? "ray" : v.sub;
+          const fwd = sub3 === "line" || (sub3 === "ray" ? true : t < 1 - 1e-9);
+          const back = sub3 === "line" || t > 1e-9;
           if (fwd) blocked.push([a, 1]);
           if (back) blocked.push([a + Math.PI, 1]);
         } else {
@@ -997,10 +1365,10 @@
         const color = hl ? RELATION : st.color;
         const width = (st.width || 1) * sc * (hl ? 1.8 : 1);
         if (kind === "line") {
-          const sub2 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
-          if (sel) strokeLine(ctx, view, v, sub2, HALO, width + 7 * sc, false);
-          strokeLine(ctx, view, v, sub2, color, width, st.dash);
-          if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: lineLabelPos(view, v, sub2), color, off: [0, 10] });
+          const sub3 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
+          if (sel) strokeLine(ctx, view, v, sub3, HALO, width + 7 * sc, false);
+          strokeLine(ctx, view, v, sub3, color, width, st.dash);
+          if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: lineLabelPos(view, v, sub3), color, off: [0, 10] });
         } else if (kind === "circle") {
           const c = view.toScreen(v.c), r = v.r * view.scale;
           if (st.fill) fillCircle(ctx, c, r, st.fillColor || st.color, st.fill);
@@ -1066,17 +1434,17 @@
     }
     return t0 < t1 ? [t0, t1] : null;
   }
-  function screenLine(view, v, sub2) {
+  function screenLine(view, v, sub3) {
     const p = view.toScreen(v.p);
     const q = view.toScreen({ x: v.p.x + v.d.x, y: v.p.y + v.d.y });
     const d = { x: q.x - p.x, y: q.y - p.y };
     const m = 20;
-    const r = clip(p, d, -m, -m, view.W + m, view.H + m, sub2 === "line" ? -Infinity : 0, sub2 === "segment" ? 1 : Infinity);
+    const r = clip(p, d, -m, -m, view.W + m, view.H + m, sub3 === "line" ? -Infinity : 0, sub3 === "segment" ? 1 : Infinity);
     if (!r) return null;
     return [{ x: p.x + r[0] * d.x, y: p.y + r[0] * d.y }, { x: p.x + r[1] * d.x, y: p.y + r[1] * d.y }];
   }
-  function strokeLine(ctx, view, v, sub2, color, width, dash) {
-    const seg = screenLine(view, v, sub2);
+  function strokeLine(ctx, view, v, sub3, color, width, dash) {
+    const seg = screenLine(view, v, sub3);
     if (!seg) return;
     setStroke(ctx, color, width, dash);
     ctx.beginPath();
@@ -1084,10 +1452,10 @@
     ctx.lineTo(seg[1].x, seg[1].y);
     ctx.stroke();
   }
-  function lineLabelPos(view, v, sub2) {
-    const seg = screenLine(view, v, sub2);
+  function lineLabelPos(view, v, sub3) {
+    const seg = screenLine(view, v, sub3);
     if (!seg) return { x: -1e4, y: -1e4 };
-    const t = sub2 === "segment" ? 0.5 : 0.85;
+    const t = sub3 === "segment" ? 0.5 : 0.85;
     return { x: seg[0].x + t * (seg[1].x - seg[0].x), y: seg[0].y + t * (seg[1].y - seg[0].y) };
   }
   function strokeCircle(ctx, c, r, color, width, dash) {
@@ -1158,15 +1526,15 @@
     const key = name + "|" + fontPx;
     let m = labelCache.get(key);
     if (m) return m;
-    const { base, sub: sub2, primes } = parseLabel(name);
+    const { base, sub: sub3, primes } = parseLabel(name);
     const subPx = Math.round(fontPx * 0.68);
-    m = { base, sub: sub2, pr: "\u2032".repeat(primes), fBase: `italic ${fontPx}px ${LABEL_FONT}`, fPr: `${fontPx}px ${LABEL_FONT}`, fSub: `italic ${subPx}px ${LABEL_FONT}` };
+    m = { base, sub: sub3, pr: "\u2032".repeat(primes), fBase: `italic ${fontPx}px ${LABEL_FONT}`, fPr: `${fontPx}px ${LABEL_FONT}`, fSub: `italic ${subPx}px ${LABEL_FONT}` };
     ctx.font = m.fBase;
     m.wBase = ctx.measureText(base).width;
     ctx.font = m.fPr;
     m.wPr = m.pr ? ctx.measureText(m.pr).width : 0;
     ctx.font = m.fSub;
-    m.wSub = sub2 ? ctx.measureText(sub2).width + 1 : 0;
+    m.wSub = sub3 ? ctx.measureText(sub3).width + 1 : 0;
     m.w = m.wBase + m.wPr + m.wSub;
     if (labelCache.size > 2e3) labelCache.clear();
     labelCache.set(key, m);
@@ -1370,8 +1738,806 @@
     }
   };
 
+  // src/ui/library.js
+  var AUX_STYLE = { dash: true, color: "#9ca3af" };
+  var P3 = ["point", "point", "point"];
+  var TRI = ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"];
+  var TRI_P = ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C", "Ch\u1ECDn \u0111i\u1EC3m P"];
+  var sub2 = (n) => n ? `_${n.length > 1 ? `{${n}}` : n}` : "";
+  var Specs = class {
+    constructor(ctx) {
+      this.ctx = ctx;
+      this.list = [];
+      this.vals = /* @__PURE__ */ new Map();
+    }
+    val(ref) {
+      return ref.startsWith("$") ? this.vals.get(ref) : this.ctx.values.get(ref);
+    }
+    /** Thêm bước; trả về tham chiếu '$k'. opts: {name, params, style, hidden} */
+    add(type, args, opts = {}) {
+      const def = STEP_TYPES[type];
+      const ref = "$" + this.list.length;
+      this.list.push({ type, args, ...opts });
+      let v = null;
+      try {
+        const argv = args.map((a) => this.val(a));
+        if (argv.every(Boolean)) v = def.compute(argv, { ...def.params || {}, ...opts.params || {} });
+      } catch {
+        v = null;
+      }
+      this.vals.set(ref, v || null);
+      return ref;
+    }
+    /** Như add cho một điểm, nhưng dùng lại điểm đã có nếu trùng. */
+    point(type, args, opts = {}) {
+      const def = STEP_TYPES[type];
+      let v = null;
+      try {
+        v = def.compute(args.map((a) => this.val(a)), { ...def.params || {}, ...opts.params || {} });
+      } catch {
+        v = null;
+      }
+      if (v && v.kind === "point") {
+        for (const [ref, w] of this.vals) if (w && w.kind === "point" && dist(w, v) < 1e-9 * (1 + Math.hypot(v.x, v.y))) return ref;
+        const ex = this.ctx.existingPointAt(v, 0.01);
+        if (ex) return ex;
+      }
+      return this.add(type, args, opts);
+    }
+    /** Bước phụ: ẩn ở bản thường, nét đứt mờ ở bản chi tiết. */
+    aux(type, args, detailed, opts = {}) {
+      return this.add(type, args, detailed ? { ...opts, style: { ...AUX_STYLE, ...opts.style || {} } } : { ...opts, hidden: true });
+    }
+    seg(a, b, style) {
+      return this.add("segment", [a, b], style ? { style } : {});
+    }
+    /** Đường tròn kèm tâm (tâm dùng lại điểm có sẵn nếu trùng). */
+    circleWithCenter(type, args, centerName, opts = {}) {
+      const c = this.add(type, args, opts);
+      this.point("center", [c], centerName ? { name: centerName } : {});
+      return c;
+    }
+  };
+  var T = (menu, id, label, inputs, hints, make, extra = {}) => ({ id, label, menu, icon: extra.icon || "\u2022", inputs, hints, make, ...extra });
+  var run = (fn) => (picks, ctx) => {
+    const S = new Specs(ctx);
+    fn(S, picks, ctx);
+    return S.list;
+  };
+  var poly = (S, pts) => pts.forEach((p, i) => S.seg(p, pts[(i + 1) % pts.length]));
+  var MENUS = ["1. D\u1EF1ng h\xECnh", "2. \u0110\u01B0\u1EDDng \u0111\u1EB7c bi\u1EC7t", "3. \u0110\u01B0\u1EDDng tr\xF2n", "4. \u0110i\u1EC3m \u0111\u1EB7c bi\u1EC7t", "5. Ph\xE9p bi\u1EBFn h\xECnh", "6. M\xF4 h\xECnh"];
+  var [M1, M2, M3, M4, M5, M6] = MENUS;
+  var LIBRARY = [
+    // ======================= 1. DỰNG HÌNH =======================
+    T(M1, "triangle", "D\u1EF1ng tam gi\xE1c", P3, TRI, run((S, [A, B, C]) => poly(S, [A, B, C])), { icon: "\u25B3", preview: "polygon" }),
+    T(
+      M1,
+      "right_triangle",
+      "Tam gi\xE1c vu\xF4ng",
+      ["point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh g\xF3c vu\xF4ng A", "Ch\u1ECDn \u0111\u1EC9nh B (\u0111\u1EC9nh C d\u1EF1ng tr\xEAn \u0111\u01B0\u1EDDng vu\xF4ng g\xF3c t\u1EA1i A, k\xE9o \u0111\u01B0\u1EE3c)"],
+      run((S, [A, B]) => {
+        const ab = S.seg(A, B);
+        const p = S.add("perpendicular", [A, ab], { hidden: true });
+        const C = S.add("point_on", [p], { params: { t: 0.75 } });
+        S.seg(A, C);
+        S.seg(B, C);
+      }),
+      { icon: "\u25FA" }
+    ),
+    T(
+      M1,
+      "right_isosceles",
+      "Tam gi\xE1c vu\xF4ng c\xE2n",
+      ["point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh g\xF3c vu\xF4ng A", "Ch\u1ECDn \u0111\u1EC9nh B"],
+      run((S, [A, B]) => {
+        const C = S.add("rotate", [B, A], { params: { angle: 90 } });
+        poly(S, [A, B, C]);
+      }),
+      { icon: "\u25FA" }
+    ),
+    T(
+      M1,
+      "equilateral",
+      "Tam gi\xE1c \u0111\u1EC1u",
+      ["point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B (tam gi\xE1c d\u1EF1ng ng\u01B0\u1EE3c chi\u1EC1u kim \u0111\u1ED3ng h\u1ED3)"],
+      run((S, [A, B]) => {
+        const C = S.add("rotate", [B, A], { params: { angle: 60 } });
+        poly(S, [A, B, C]);
+      }),
+      { icon: "\u25B3" }
+    ),
+    T(
+      M1,
+      "trapezoid",
+      "H\xECnh thang",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B (\u0111\xE1y AB)", "Ch\u1ECDn \u0111\u1EC9nh C (D d\u1EF1ng tr\xEAn \u0111\u01B0\u1EDDng qua C song song AB, k\xE9o \u0111\u01B0\u1EE3c)"],
+      run((S, [A, B, C]) => {
+        const ab = S.seg(A, B);
+        const par = S.add("parallel", [C, ab], { hidden: true });
+        const D = S.add("point_on", [par], { params: { t: -0.6 } });
+        S.seg(B, C);
+        S.seg(C, D);
+        S.seg(D, A);
+      }),
+      { icon: "\u23E2" }
+    ),
+    T(
+      M1,
+      "isosceles_trapezoid",
+      "H\xECnh thang c\xE2n",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B (\u0111\xE1y AB)", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, [A, B, C]) => {
+        const pb = S.add("perp_bisector", [A, B], { hidden: true });
+        const D = S.add("reflect", [C, pb]);
+        poly(S, [A, B, C, D]);
+      }),
+      { icon: "\u23E2" }
+    ),
+    T(
+      M1,
+      "parallelogram",
+      "H\xECnh b\xECnh h\xE0nh",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C (D = A + C \u2212 B)"],
+      run((S, [A, B, C]) => {
+        const D = S.add("translate", [C, B, A]);
+        poly(S, [A, B, C, D]);
+      }),
+      { icon: "\u25B1" }
+    ),
+    T(
+      M1,
+      "rectangle",
+      "H\xECnh ch\u1EEF nh\u1EADt",
+      ["point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B (C tr\xEAn \u0111\u01B0\u1EDDng vu\xF4ng g\xF3c t\u1EA1i B, k\xE9o \u0111\u01B0\u1EE3c)"],
+      run((S, [A, B]) => {
+        const ab = S.seg(A, B);
+        const p = S.add("perpendicular", [B, ab], { hidden: true });
+        const C = S.add("point_on", [p], { params: { t: 0.6 } });
+        const D = S.add("translate", [C, B, A]);
+        S.seg(B, C);
+        S.seg(C, D);
+        S.seg(D, A);
+      }),
+      { icon: "\u25AD" }
+    ),
+    T(
+      M1,
+      "rhombus",
+      "H\xECnh thoi",
+      ["point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B (C tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n t\xE2m B qua A, k\xE9o \u0111\u01B0\u1EE3c)"],
+      run((S, [A, B], ctx) => {
+        const c = S.add("circle", [B, A], { hidden: true });
+        const a = ctx.values.get(A), b = ctx.values.get(B);
+        const t = a && b ? Math.atan2(a.y - b.y, a.x - b.x) - 1.2 : 0;
+        const C = S.add("point_on", [c], { params: { t } });
+        const D = S.add("translate", [C, B, A]);
+        poly(S, [A, B, C, D]);
+      }),
+      { icon: "\u25C7" }
+    ),
+    T(
+      M1,
+      "square",
+      "H\xECnh vu\xF4ng",
+      ["point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B (h\xECnh vu\xF4ng ABCD ng\u01B0\u1EE3c chi\u1EC1u kim \u0111\u1ED3ng h\u1ED3)"],
+      run((S, [A, B]) => {
+        const D = S.add("rotate", [B, A], { params: { angle: 90 } });
+        const C = S.add("translate", [D, A, B]);
+        poly(S, [A, B, C, D]);
+      }),
+      { icon: "\u25A1" }
+    ),
+    T(
+      M1,
+      "harmonic_quad",
+      "T\u1EE9 gi\xE1c \u0111i\u1EC1u ho\xE0",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C (D: BD l\xE0 \u0111\u01B0\u1EDDng \u0111\u1ED1i trung c\u1EE7a tam gi\xE1c ABC)"],
+      run((S, [A, B, C]) => {
+        const w = S.circleWithCenter("circle_3pts", [A, B, C]);
+        const ta = S.add("tangent_at", [w, A], { hidden: true });
+        const tc = S.add("tangent_at", [w, C], { hidden: true });
+        const T0 = S.add("intersection", [ta, tc], { hidden: true });
+        const bt = S.add("line", [B, T0], { hidden: true });
+        const D = S.add("intersection_other", [bt, w, B]);
+        poly(S, [A, B, C, D]);
+      }),
+      { icon: "\u22A1" }
+    ),
+    T(
+      M1,
+      "circle_tangent_at",
+      "Ti\u1EBFp x\xFAc v\u1EDBi AB t\u1EA1i A v\xE0 qua C",
+      P3,
+      ["Ch\u1ECDn ti\u1EBFp \u0111i\u1EC3m A", "Ch\u1ECDn \u0111i\u1EC3m B (\u0111\u01B0\u1EDDng AB l\xE0 ti\u1EBFp tuy\u1EBFn)", "Ch\u1ECDn \u0111i\u1EC3m C thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n"],
+      run((S, [A, B, C]) => S.circleWithCenter("circle_tangent_at", [A, B, C])),
+      { icon: "\u25EF" }
+    ),
+    T(
+      M1,
+      "cevian_triangle",
+      "Tam gi\xE1c Cevian",
+      ["point", "point", "point", "point"],
+      TRI_P,
+      run((S, [A, B, C, P2]) => {
+        const D = S.add("cevian_foot", [P2, A, B, C]);
+        const E = S.add("cevian_foot", [P2, B, C, A]);
+        const F = S.add("cevian_foot", [P2, C, A, B]);
+        S.seg(A, D);
+        S.seg(B, E);
+        S.seg(C, F);
+        poly(S, [D, E, F]);
+      }),
+      { icon: "\u27D1" }
+    ),
+    T(
+      M1,
+      "quadrilateral",
+      "D\u1EF1ng t\u1EE9 gi\xE1c",
+      ["point", "point", "point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C", "Ch\u1ECDn \u0111\u1EC9nh D"],
+      run((S, pts) => poly(S, pts)),
+      { icon: "\u2B20" }
+    ),
+    T(
+      M1,
+      "cyclic_quad",
+      "D\u1EF1ng t\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C (D tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n, k\xE9o \u0111\u01B0\u1EE3c)"],
+      run((S, [A, B, C], ctx) => {
+        const w = S.circleWithCenter("circle_3pts", [A, B, C]);
+        const cv = S.vals.get(w), bv = ctx.values.get(B);
+        const t = cv && bv ? Math.atan2(cv.c.y - bv.y, cv.c.x - bv.x) : 0;
+        const D = S.add("point_on", [w], { params: { t } });
+        poly(S, [A, B, C, D]);
+      }),
+      { icon: "\u2299" }
+    ),
+    // ======================= 2. ĐƯỜNG ĐẶC BIỆT =======================
+    T(
+      M2,
+      "altitude",
+      "\u0110\u01B0\u1EDDng cao",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A (k\u1EBB \u0111\u01B0\u1EDDng cao t\u1EEB A)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, [A, B, C]) => {
+        const D = S.point("foot", [A, B, C]);
+        S.seg(A, D);
+      }),
+      { icon: "h" }
+    ),
+    T(
+      M2,
+      "median",
+      "\u0110\u01B0\u1EDDng trung tuy\u1EBFn",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A (trung tuy\u1EBFn t\u1EEB A)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, [A, B, C]) => {
+        const M = S.point("midpoint", [B, C]);
+        S.seg(A, M);
+      }),
+      { icon: "m" }
+    ),
+    T(
+      M2,
+      "perp_bisector",
+      "\u0110\u01B0\u1EDDng trung tr\u1EF1c",
+      ["point", "point"],
+      ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"],
+      run((S, [A, B]) => S.add("perp_bisector", [A, B])),
+      { icon: "\u22A5", segmentShortcut: true }
+    ),
+    T(
+      M2,
+      "isogonal_line",
+      "\u0110\u01B0\u1EDDng \u0111\u1EB3ng gi\xE1c",
+      ["point", "point", "point", "point"],
+      ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai", "Ch\u1ECDn \u0111i\u1EC3m P (d\u1EF1ng \u0111\u01B0\u1EDDng \u0111\u1EB3ng gi\xE1c c\u1EE7a \u0111\u1EC9nh\u2013P)"],
+      run((S, [B, A, C, P2]) => S.add("isogonal_line", [B, A, C, P2])),
+      { icon: "\u2221" }
+    ),
+    T(
+      M2,
+      "symmedian",
+      "\u0110\u01B0\u1EDDng \u0111\u1ED1i trung",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A (\u0111\u1ED1i trung t\u1EEB A)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, [A, B, C]) => {
+        const L = S.point("symmedian_foot", [A, B, C]);
+        S.seg(A, L);
+      }),
+      { icon: "k" }
+    ),
+    T(
+      M2,
+      "ext_bisector",
+      "\u0110\u01B0\u1EDDng ph\xE2n gi\xE1c ngo\xE0i",
+      P3,
+      ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"],
+      run((S, p) => S.add("angle_bisector", p, { params: { external: true } })),
+      { icon: "\u2220" }
+    ),
+    T(
+      M2,
+      "int_ext_bisector",
+      "\u0110\u01B0\u1EDDng ph\xE2n gi\xE1c trong v\xE0 ngo\xE0i",
+      P3,
+      ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"],
+      run((S, p) => {
+        S.add("angle_bisector", p);
+        S.add("angle_bisector", p, { params: { external: true } });
+      }),
+      { icon: "\u2220" }
+    ),
+    T(
+      M2,
+      "tangent_at",
+      "Ti\u1EBFp tuy\u1EBFn t\u1EA1i m\u1ED9t \u0111i\u1EC3m",
+      ["circle", "point"],
+      ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n v\xE0 m\u1ED9t \u0111i\u1EC3m tr\xEAn n\xF3 (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"],
+      run((S, [c, P2]) => S.add("tangent_at", [c, P2])),
+      { icon: "\u27C2", anyOrder: true }
+    ),
+    T(
+      M2,
+      "tangents_meet",
+      "Giao \u0111i\u1EC3m c\u1EE7a hai ti\u1EBFp tuy\u1EBFn",
+      ["circle", "point", "point"],
+      ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n", "Ch\u1ECDn ti\u1EBFp \u0111i\u1EC3m th\u1EE9 nh\u1EA5t", "Ch\u1ECDn ti\u1EBFp \u0111i\u1EC3m th\u1EE9 hai"],
+      run((S, [c, P2, Q]) => {
+        const a = S.add("tangent_at", [c, P2]), b = S.add("tangent_at", [c, Q]);
+        S.add("intersection", [a, b]);
+      }),
+      { icon: "\u22CF" }
+    ),
+    T(
+      M2,
+      "tangents_from",
+      "Ti\u1EBFp tuy\u1EBFn k\u1EBB t\u1EEB m\u1ED9t \u0111i\u1EC3m",
+      ["circle", "point"],
+      ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n v\xE0 m\u1ED9t \u0111i\u1EC3m n\u1EB1m ngo\xE0i (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"],
+      run((S, [c, P2]) => {
+        for (const which of [0, 1]) {
+          const T0 = S.add("tangent_point", [c, P2], { params: { which } });
+          S.add("line", [P2, T0]);
+        }
+      }),
+      { icon: "\u22CE", anyOrder: true }
+    ),
+    T(
+      M2,
+      "common_tangents",
+      "Ti\u1EBFp tuy\u1EBFn chung",
+      ["circle", "circle"],
+      ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 hai (d\u1EF1ng m\u1ECDi ti\u1EBFp tuy\u1EBFn chung \u0111ang t\u1ED3n t\u1EA1i)"],
+      run((S, [a, b], ctx) => {
+        const ca = ctx.values.get(a), cb = ctx.values.get(b);
+        for (const internal of [false, true]) for (const which of [0, 1]) {
+          if (ca && cb && !commonTangent(ca, cb, internal, which)) continue;
+          S.add("common_tangent", [a, b], { params: { internal, which } });
+        }
+      }),
+      { icon: "\u2312" }
+    ),
+    T(
+      M2,
+      "euler_line",
+      "\u0110\u01B0\u1EDDng th\u1EB3ng Euler",
+      P3,
+      TRI,
+      run((S, [A, B, C]) => {
+        const O = S.point("circumcenter", [A, B, C], { name: "O" });
+        S.point("centroid", [A, B, C], { name: "G" });
+        const H = S.point("orthocenter", [A, B, C], { name: "H" });
+        S.add("line", [O, H]);
+      }),
+      { icon: "e" }
+    ),
+    T(
+      M2,
+      "simson_line",
+      "\u0110\u01B0\u1EDDng th\u1EB3ng Simson",
+      ["point", "point", "point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C", "Ch\u1ECDn \u0111i\u1EC3m P (th\u01B0\u1EDDng l\u1EA5y tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp)"],
+      run((S, [A, B, C, P2]) => {
+        const D = S.point("foot", [P2, B, C]), E = S.point("foot", [P2, C, A]);
+        S.point("foot", [P2, A, B]);
+        S.add("line", [D, E]);
+      }),
+      { icon: "s" }
+    ),
+    T(
+      M2,
+      "steiner_line",
+      "\u0110\u01B0\u1EDDng th\u1EB3ng Steiner",
+      ["point", "point", "point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C", "Ch\u1ECDn \u0111i\u1EC3m P (th\u01B0\u1EDDng l\u1EA5y tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp)"],
+      run((S, [A, B, C, P2]) => {
+        const X = S.add("reflect_pts", [P2, B, C]), Y = S.add("reflect_pts", [P2, C, A]);
+        S.add("reflect_pts", [P2, A, B]);
+        S.add("line", [X, Y]);
+      }),
+      { icon: "\u2113" }
+    ),
+    // ======================= 3. ĐƯỜNG TRÒN =======================
+    T(M3, "circumcircle", "\u0110\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", P3, TRI, run((S, p) => S.circleWithCenter("circumcircle", p, "O")), { icon: "(O)" }),
+    T(
+      M3,
+      "pedal_circle",
+      "\u0110\u01B0\u1EDDng tr\xF2n Pedal",
+      ["point", "point", "point", "point"],
+      TRI_P,
+      run((S, [A, B, C, P2]) => {
+        const f = [S.aux("foot", [P2, B, C], false), S.aux("foot", [P2, C, A], false), S.aux("foot", [P2, A, B], false)];
+        S.circleWithCenter("circle_3pts", f);
+      }),
+      { icon: "(P)" }
+    ),
+    T(
+      M3,
+      "pedal_circle_detail",
+      "\u0110\u01B0\u1EDDng tr\xF2n Pedal chi ti\u1EBFt",
+      ["point", "point", "point", "point"],
+      TRI_P,
+      run((S, [A, B, C, P2]) => {
+        const f = [S.point("foot", [P2, B, C]), S.point("foot", [P2, C, A]), S.point("foot", [P2, A, B])];
+        for (const X of f) S.seg(P2, X, AUX_STYLE);
+        S.circleWithCenter("circle_3pts", f);
+      }),
+      { icon: "(P)" }
+    ),
+    T(M3, "incircle", "\u0110\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp", P3, TRI, run((S, p) => S.circleWithCenter("incircle", p, "I")), { icon: "(I)" }),
+    T(
+      M3,
+      "excircle",
+      "\u0110\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A (b\xE0ng ti\u1EBFp g\xF3c A)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, [A, B, C], ctx) => S.circleWithCenter("excircle", [A, B, C], "I" + sub2(ctx.name(A)))),
+      { icon: "(J)" }
+    ),
+    T(
+      M3,
+      "circle_diameter",
+      "\u0110\u01B0\u1EDDng tr\xF2n \u0111\u01B0\u1EDDng k\xEDnh",
+      ["point", "point"],
+      ["Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"],
+      run((S, [A, B]) => S.circleWithCenter("circle_diameter", [A, B])),
+      { icon: "\u2296", segmentShortcut: true }
+    ),
+    T(
+      M3,
+      "mixtilinear_in",
+      "\u0110\u01B0\u1EDDng tr\xF2n Mixtilinear n\u1ED9i",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A (mixtilinear \u1EE9ng v\u1EDBi A)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, p) => S.circleWithCenter("mixtilinear", p)),
+      { icon: "\u25D0" }
+    ),
+    T(
+      M3,
+      "mixtilinear_ex",
+      "\u0110\u01B0\u1EDDng tr\xF2n Mixtilinear ngo\u1EA1i",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A (mixtilinear ngo\u1EA1i \u1EE9ng v\u1EDBi A)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, p) => S.circleWithCenter("mixtilinear", p, void 0, { params: { external: true } })),
+      { icon: "\u25D1" }
+    ),
+    T(
+      M3,
+      "radical_axis",
+      "Tr\u1EE5c \u0111\u1EB3ng ph\u01B0\u01A1ng",
+      ["circle", "circle"],
+      ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 hai"],
+      run((S, p) => S.add("radical_axis", p)),
+      { icon: "\u2AFC" }
+    ),
+    T(
+      M3,
+      "radical_center",
+      "T\xE2m \u0111\u1EB3ng ph\u01B0\u01A1ng",
+      ["circle", "circle", "circle"],
+      ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 hai", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 ba"],
+      run((S, p) => S.point("radical_center", p)),
+      { icon: "\u2733" }
+    ),
+    T(M3, "nine_point_circle", "\u0110\u01B0\u1EDDng tr\xF2n Euler", P3, TRI, run((S, p) => S.circleWithCenter("nine_point_circle", p, "N")), { icon: "(N)" }),
+    // ======================= 4. ĐIỂM ĐẶC BIỆT =======================
+    T(M4, "centroid", "Tr\u1ECDng t\xE2m", P3, TRI, run((S, p) => S.point("centroid", p, { name: "G" })), { icon: "G" }),
+    T(
+      M4,
+      "centroid_detail",
+      "Tr\u1ECDng t\xE2m chi ti\u1EBFt",
+      P3,
+      TRI,
+      run((S, [A, B, C]) => {
+        for (const [X, Y, Z] of [[A, B, C], [B, C, A], [C, A, B]]) S.seg(X, S.point("midpoint", [Y, Z]), AUX_STYLE);
+        S.point("centroid", [A, B, C], { name: "G" });
+      }),
+      { icon: "G" }
+    ),
+    T(M4, "orthocenter", "Tr\u1EF1c t\xE2m", P3, TRI, run((S, p) => S.point("orthocenter", p, { name: "H" })), { icon: "H" }),
+    T(
+      M4,
+      "orthocenter_detail",
+      "Tr\u1EF1c t\xE2m chi ti\u1EBFt",
+      P3,
+      TRI,
+      run((S, [A, B, C]) => {
+        for (const [X, Y, Z] of [[A, B, C], [B, C, A], [C, A, B]]) S.seg(X, S.point("foot", [X, Y, Z]), AUX_STYLE);
+        S.point("orthocenter", [A, B, C], { name: "H" });
+      }),
+      { icon: "H" }
+    ),
+    T(
+      M4,
+      "isogonal_conjugate",
+      "\u0110i\u1EC3m li\xEAn h\u1EE3p \u0111\u1EB3ng gi\xE1c",
+      ["point", "point", "point", "point"],
+      TRI_P,
+      run((S, [A, B, C, P2], ctx) => S.point("isogonal_conjugate", [P2, A, B, C], { name: ctx.name(P2) ? ctx.name(P2) + "*" : void 0 })),
+      { icon: "P*" }
+    ),
+    T(M4, "lemoine", "\u0110i\u1EC3m Lemoine", P3, TRI, run((S, p) => S.point("lemoine", p, { name: "K" })), { icon: "K" }),
+    T(
+      M4,
+      "pedal_feet",
+      "Ch\xE2n \u0111\u01B0\u1EDDng vu\xF4ng g\xF3c h\u1EA1 xu\u1ED1ng ba c\u1EA1nh",
+      ["point", "point", "point", "point"],
+      TRI_P,
+      run((S, [A, B, C, P2]) => {
+        for (const [X, Y] of [[B, C], [C, A], [A, B]]) S.seg(P2, S.point("foot", [P2, X, Y]), AUX_STYLE);
+      }),
+      { icon: "\u22BE" }
+    ),
+    T(
+      M4,
+      "ext_homothety_center",
+      "T\xE2m v\u1ECB t\u1EF1 ngo\xE0i",
+      ["circle", "circle"],
+      ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 hai"],
+      run((S, p) => S.point("homothety_center", p)),
+      { icon: "S" }
+    ),
+    T(
+      M4,
+      "int_homothety_center",
+      "T\xE2m v\u1ECB t\u1EF1 trong",
+      ["circle", "circle"],
+      ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n th\u1EE9 hai"],
+      run((S, p) => S.point("homothety_center", p, { params: { internal: true } })),
+      { icon: "s" }
+    ),
+    T(M4, "kosnita", "\u0110i\u1EC3m Kosnita", P3, TRI, run((S, p) => S.point("kosnita", p)), { icon: "Ko" }),
+    T(M4, "nine_point_center", "T\xE2m \u0111\u01B0\u1EDDng tr\xF2n Euler", P3, TRI, run((S, p) => S.point("nine_point_center", p, { name: "N" })), { icon: "N" }),
+    // bổ sung
+    T(M4, "circumcenter", "T\xE2m ngo\u1EA1i ti\u1EBFp", P3, TRI, run((S, p) => S.point("circumcenter", p, { name: "O" })), { icon: "O" }),
+    T(M4, "incenter", "T\xE2m n\u1ED9i ti\u1EBFp", P3, TRI, run((S, p) => S.point("incenter", p, { name: "I" })), { icon: "I" }),
+    T(
+      M4,
+      "excenter",
+      "T\xE2m b\xE0ng ti\u1EBFp",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A (t\xE2m b\xE0ng ti\u1EBFp g\xF3c A)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, [A, B, C], ctx) => S.point("excenter", [A, B, C], { name: "I" + sub2(ctx.name(A)) })),
+      { icon: "J" }
+    ),
+    T(
+      M4,
+      "incircle_touch",
+      "Ti\u1EBFp \u0111i\u1EC3m \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp v\u1EDBi BC",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A (ti\u1EBFp \u0111i\u1EC3m tr\xEAn c\u1EA1nh \u0111\u1ED1i di\u1EC7n)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, p) => S.point("incircle_touch", p)),
+      { icon: "T" }
+    ),
+    T(
+      M4,
+      "arc_mid_no",
+      "\u0110i\u1EC3m ch\xEDnh gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, p) => S.point("arc_midpoint", p, { params: { contains: false } })),
+      { icon: "\u2312" }
+    ),
+    T(
+      M4,
+      "arc_mid_yes",
+      "\u0110i\u1EC3m ch\xEDnh gi\u1EEFa cung BC ch\u1EE9a A",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, p) => S.point("arc_midpoint", p, { params: { contains: true } })),
+      { icon: "\u2312" }
+    ),
+    T(
+      M4,
+      "altitude_foot",
+      "Ch\xE2n \u0111\u01B0\u1EDDng cao",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A (ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB A)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, [A, B, C]) => {
+        const D = S.point("altitude_foot", [A, B, C]);
+        S.seg(A, D, { dash: true });
+      }),
+      { icon: "h" }
+    ),
+    // ======================= 5. PHÉP BIẾN HÌNH =======================
+    T(
+      M5,
+      "reflect_point",
+      "\u0110\u1ED1i x\u1EE9ng t\xE2m",
+      ["obj", "point"],
+      ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn t\xE2m \u0111\u1ED1i x\u1EE9ng"],
+      run((S, p) => S.add("reflect", p)),
+      { icon: "\u2299" }
+    ),
+    T(
+      M5,
+      "reflect_line",
+      "\u0110\u1ED1i x\u1EE9ng tr\u1EE5c",
+      ["obj", "line"],
+      ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn tr\u1EE5c \u0111\u1ED1i x\u1EE9ng"],
+      run((S, p) => S.add("reflect", p)),
+      { icon: "\u21CB" }
+    ),
+    T(
+      M5,
+      "rotate",
+      "Quay",
+      ["obj", "point"],
+      ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n quay", "Ch\u1ECDn t\xE2m quay (g\xF3c quay \u0111\u1EB7t \u1EDF th\u1EBB tu\u1EF3 ch\u1ECDn)"],
+      run((S, p, ctx) => S.add("rotate", p, { params: { angle: ctx.opt("angle", 90) } })),
+      { icon: "\u21BB", options: [{ key: "angle", label: "G\xF3c quay (\u0111\u1ED9, ng\u01B0\u1EE3c chi\u1EC1u kim \u0111\u1ED3ng h\u1ED3)", def: 90 }] }
+    ),
+    T(
+      M5,
+      "homothety",
+      "V\u1ECB t\u1EF1",
+      ["obj", "point"],
+      ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng", "Ch\u1ECDn t\xE2m v\u1ECB t\u1EF1 (t\u1EC9 s\u1ED1 \u0111\u1EB7t \u1EDF th\u1EBB tu\u1EF3 ch\u1ECDn)"],
+      run((S, p, ctx) => S.add("homothety", p, { params: { k: ctx.opt("k", 2) } })),
+      { icon: "\u2922", options: [{ key: "k", label: "T\u1EC9 s\u1ED1 v\u1ECB t\u1EF1 k", def: 2 }] }
+    ),
+    T(
+      M5,
+      "translate",
+      "T\u1ECBnh ti\u1EBFn",
+      ["obj", "point", "point"],
+      ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng", "Ch\u1ECDn \u0111i\u1EC3m \u0111\u1EA7u c\u1EE7a vect\u01A1", "Ch\u1ECDn \u0111i\u1EC3m cu\u1ED1i c\u1EE7a vect\u01A1"],
+      run((S, p) => S.add("translate", p)),
+      { icon: "\u21C9" }
+    ),
+    T(
+      M5,
+      "invert",
+      "Ngh\u1ECBch \u0111\u1EA3o",
+      ["point", "circle"],
+      ["Ch\u1ECDn \u0111i\u1EC3m c\u1EA7n ngh\u1ECBch \u0111\u1EA3o", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n ngh\u1ECBch \u0111\u1EA3o"],
+      run((S, p) => S.add("invert", p)),
+      { icon: "\u229B" }
+    ),
+    T(
+      M5,
+      "projection",
+      "Chi\u1EBFu vu\xF4ng g\xF3c l\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng",
+      ["point", "line"],
+      ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"],
+      run((S, p) => S.add("projection", p)),
+      { icon: "\u22BE", anyOrder: true }
+    ),
+    // ======================= 6. MÔ HÌNH =======================
+    T(
+      M6,
+      "model_excentral",
+      "Tam gi\xE1c v\u1EDBi t\xE2m n\u1ED9i ti\u1EBFp, b\xE0ng ti\u1EBFp",
+      P3,
+      TRI,
+      run((S, [A, B, C], ctx) => {
+        poly(S, [A, B, C]);
+        S.circleWithCenter("circumcircle", [A, B, C], "O");
+        S.circleWithCenter("incircle", [A, B, C], "I");
+        for (const [X, Y, Z] of [[A, B, C], [B, C, A], [C, A, B]]) S.circleWithCenter("excircle", [X, Y, Z], "I" + sub2(ctx.name(X)));
+      }),
+      { icon: "\u29BF" }
+    ),
+    T(
+      M6,
+      "model_euler",
+      "\u0110\u01B0\u1EDDng th\u1EB3ng v\xE0 \u0111\u01B0\u1EDDng tr\xF2n Euler",
+      P3,
+      TRI,
+      run((S, [A, B, C]) => {
+        poly(S, [A, B, C]);
+        S.circleWithCenter("circumcircle", [A, B, C], "O");
+        const O = S.point("circumcenter", [A, B, C], { name: "O" });
+        S.point("centroid", [A, B, C], { name: "G" });
+        const H = S.point("orthocenter", [A, B, C], { name: "H" });
+        S.circleWithCenter("nine_point_circle", [A, B, C], "N");
+        S.add("line", [O, H]);
+      }),
+      { icon: "E" }
+    ),
+    T(
+      M6,
+      "model_orthic",
+      "Tam gi\xE1c tr\u1EF1c t\xE2m (orthic)",
+      P3,
+      TRI,
+      run((S, [A, B, C]) => {
+        poly(S, [A, B, C]);
+        const f = [[A, B, C], [B, C, A], [C, A, B]].map(([X, Y, Z]) => {
+          const D = S.point("foot", [X, Y, Z]);
+          S.seg(X, D, AUX_STYLE);
+          return D;
+        });
+        S.point("orthocenter", [A, B, C], { name: "H" });
+        poly(S, f);
+      }),
+      { icon: "\u22BF" }
+    ),
+    T(
+      M6,
+      "model_medial",
+      "Tam gi\xE1c trung b\xECnh",
+      P3,
+      TRI,
+      run((S, [A, B, C]) => {
+        poly(S, [A, B, C]);
+        const m = [[B, C], [C, A], [A, B]].map((pr) => S.point("midpoint", pr));
+        poly(S, m);
+        S.point("centroid", [A, B, C], { name: "G" });
+      }),
+      { icon: "\u25B3" }
+    ),
+    T(
+      M6,
+      "model_miquel",
+      "\u0110i\u1EC3m Miquel c\u1EE7a tam gi\xE1c",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C (D, E, F d\u1EF1ng tr\xEAn c\xE1c c\u1EA1nh, k\xE9o \u0111\u01B0\u1EE3c)"],
+      run((S, [A, B, C]) => {
+        const bc = S.seg(B, C), ca = S.seg(C, A), ab = S.seg(A, B);
+        const D = S.add("point_on", [bc], { params: { t: 0.4 } });
+        const E = S.add("point_on", [ca], { params: { t: 0.35 } });
+        const F = S.add("point_on", [ab], { params: { t: 0.55 } });
+        const w1 = S.add("circle_3pts", [A, E, F]), w2 = S.add("circle_3pts", [B, F, D]);
+        S.add("circle_3pts", [C, D, E]);
+        S.add("intersection_other", [w1, w2, F], { name: "M" });
+      }),
+      { icon: "M" }
+    ),
+    T(
+      M6,
+      "model_mixtilinear",
+      "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear v\xE0 t\xE2m n\u1ED9i ti\u1EBFp",
+      P3,
+      ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"],
+      run((S, [A, B, C]) => {
+        poly(S, [A, B, C]);
+        S.circleWithCenter("circumcircle", [A, B, C], "O");
+        const m = S.add("mixtilinear", [A, B, C]);
+        const J = S.point("center", [m]);
+        const K = S.point("foot", [J, A, B]), L = S.point("foot", [J, A, C]);
+        S.seg(K, L, AUX_STYLE);
+        S.point("incenter", [A, B, C], { name: "I" });
+      }),
+      { icon: "\u25D0" }
+    )
+  ];
+  var LIBRARY_BY_ID = Object.fromEntries(LIBRARY.map((t) => [t.id, t]));
+
   // src/ui/tools.js
-  var T = (id, label, group, icon, inputs, hints, make, extra = {}) => ({ id, label, group, icon, inputs, hints, make, ...extra });
+  var T2 = (id, label, group, icon, inputs, hints, make, extra = {}) => ({ id, label, group, icon, inputs, hints, make, ...extra });
   var one = (type, params, name) => (picks) => [{ type, args: picks, params, name }];
   var withCenter = (type, params, centerName) => (picks, app) => {
     const out = [{ type, args: picks, params }];
@@ -1384,59 +2550,38 @@
     if (!c || !app.existingPointAt(c.c, 0.01)) out.push({ type: "center", args: ["$0"], name: centerName });
     return out;
   };
-  var TRI = ["Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 hai", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 ba"];
-  var VTX = ["Ch\u1ECDn \u0111\u1EC9nh A (\u0111\u1EC9nh \u0111\u1ED1i di\u1EC7n c\u1EA1nh c\u1EA7n x\xE9t)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"];
+  var TRI2 = ["Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 hai", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 ba"];
   var TOOLS = [
-    T("move", "Ch\u1ECDn / k\xE9o", "C\u01A1 b\u1EA3n", "\u2196", [], ["K\xE9o \u0111i\u1EC3m ho\u1EB7c nh\xE3n; b\u1EA5m \u0111\u1EC3 ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng; k\xE9o n\u1EC1n \u0111\u1EC3 d\u1EDDi h\xECnh, l\u0103n chu\u1ED9t \u0111\u1EC3 ph\xF3ng to/thu nh\u1ECF"], null),
-    T("point", "\u0110i\u1EC3m", "C\u01A1 b\u1EA3n", "\u2022", ["point"], ["B\u1EA5m v\xE0o ch\u1ED7 tr\u1ED1ng: \u0111i\u1EC3m t\u1EF1 do \xB7 b\u1EA5m l\xEAn \u0111\u01B0\u1EDDng/\u0111\u01B0\u1EDDng tr\xF2n: \u0111i\u1EC3m tr\xEAn \u0111\u1ED1i t\u01B0\u1EE3ng \xB7 b\u1EA5m g\u1EA7n ch\u1ED7 c\u1EAFt nhau: giao \u0111i\u1EC3m"], () => []),
-    T("intersect", "Giao \u0111i\u1EC3m", "C\u01A1 b\u1EA3n", "\u2715", ["curve", "curve"], ["Ch\u1ECDn \u0111\u01B0\u1EDDng th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m ngay ch\u1ED7 hai \u0111\u01B0\u1EDDng c\u1EAFt nhau)", "Ch\u1ECDn \u0111\u01B0\u1EDDng th\u1EE9 hai"], null),
-    T("midpoint", "Trung \u0111i\u1EC3m", "C\u01A1 b\u1EA3n", "\u25E6", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("midpoint"), { segmentShortcut: true }),
-    T("segment", "\u0110o\u1EA1n th\u1EB3ng", "\u0110\u01B0\u1EDDng", "\u2014", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m \u0111\u1EA7u", "Ch\u1ECDn \u0111i\u1EC3m cu\u1ED1i"], one("segment"), { preview: "segment" }),
-    T("line", "\u0110\u01B0\u1EDDng th\u1EB3ng", "\u0110\u01B0\u1EDDng", "\u27F7", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("line"), { preview: "line" }),
-    T("ray", "Tia", "\u0110\u01B0\u1EDDng", "\u2192", ["point", "point"], ["Ch\u1ECDn g\u1ED1c tia", "Ch\u1ECDn \u0111i\u1EC3m thu\u1ED9c tia"], one("ray"), { preview: "ray" }),
-    T("perpendicular", "\u0110\u01B0\u1EDDng vu\xF4ng g\xF3c", "\u0110\u01B0\u1EDDng", "\u22A5", ["point", "line"], ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"], one("perpendicular"), { anyOrder: true }),
-    T("parallel", "\u0110\u01B0\u1EDDng song song", "\u0110\u01B0\u1EDDng", "\u2225", ["point", "line"], ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"], one("parallel"), { anyOrder: true }),
-    T("perp_bisector", "Trung tr\u1EF1c", "\u0110\u01B0\u1EDDng", "\u22A5\u0332", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("perp_bisector"), { segmentShortcut: true }),
-    T("angle_bisector", "Ph\xE2n gi\xE1c trong", "\u0110\u01B0\u1EDDng", "\u2220", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], one("angle_bisector")),
-    T("ext_bisector", "Ph\xE2n gi\xE1c ngo\xE0i", "\u0110\u01B0\u1EDDng", "\u2220\u2091", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], one("angle_bisector", { external: true })),
-    T("circle", "T\xE2m + \u0111i\u1EC3m", "\u0110\u01B0\u1EDDng tr\xF2n", "\u25EF", ["point", "point"], ["Ch\u1ECDn t\xE2m", "Ch\u1ECDn m\u1ED9t \u0111i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n"], one("circle"), { preview: "circle" }),
-    T("circle_3pts", "Qua 3 \u0111i\u1EC3m", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2299", ["point", "point", "point"], TRI, withCenter("circle_3pts")),
-    T("circle_radius", "Compa (t\xE2m, b\xE1n k\xEDnh AB)", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2300", ["point", "point", "point"], ["Ch\u1ECDn t\xE2m", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t c\u1EE7a b\xE1n k\xEDnh", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"], one("circle_radius")),
-    T("reflect", "\u0110\u1ED1i x\u1EE9ng", "Bi\u1EBFn h\xECnh", "\u21CB", ["obj", "pl"], ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n l\u1EA5y \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn t\xE2m \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m) ho\u1EB7c tr\u1EE5c \u0111\u1ED1i x\u1EE9ng (\u0111\u01B0\u1EDDng th\u1EB3ng)"], one("reflect")),
-    T("projection", "H\xECnh chi\u1EBFu", "Bi\u1EBFn h\xECnh", "\u22BE", ["point", "line"], ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"], (p) => [{ type: "projection", args: p }], { anyOrder: true }),
-    T("triangle", "Tam gi\xE1c", "Tam gi\xE1c", "\u25B3", ["point", "point", "point"], TRI, ([A, B, C]) => [
-      { type: "segment", args: [A, B] },
-      { type: "segment", args: [B, C] },
-      { type: "segment", args: [C, A] }
-    ], { preview: "polygon" }),
-    T("circumcenter", "T\xE2m ngo\u1EA1i ti\u1EBFp O", "Tam gi\xE1c", "O", ["point", "point", "point"], TRI, one("circumcenter", void 0, "O")),
-    T("circumcircle", "\u0110\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", "Tam gi\xE1c", "(O)", ["point", "point", "point"], TRI, withCenter("circumcircle", void 0, "O")),
-    T("orthocenter", "Tr\u1EF1c t\xE2m H", "Tam gi\xE1c", "H", ["point", "point", "point"], TRI, one("orthocenter", void 0, "H")),
-    T("incenter", "T\xE2m n\u1ED9i ti\u1EBFp I", "Tam gi\xE1c", "I", ["point", "point", "point"], TRI, one("incenter", void 0, "I")),
-    T("incircle", "\u0110\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp", "Tam gi\xE1c", "(I)", ["point", "point", "point"], TRI, withCenter("incircle", void 0, "I")),
-    T("centroid", "Tr\u1ECDng t\xE2m G", "Tam gi\xE1c", "G", ["point", "point", "point"], TRI, one("centroid", void 0, "G")),
-    T("nine_point_center", "T\xE2m Euler N", "Tam gi\xE1c", "N", ["point", "point", "point"], TRI, one("nine_point_center", void 0, "N")),
-    T("nine_point_circle", "\u0110\u01B0\u1EDDng tr\xF2n Euler", "Tam gi\xE1c", "(N)", ["point", "point", "point"], TRI, withCenter("nine_point_circle", void 0, "N")),
-    T("altitude_foot", "Ch\xE2n \u0111\u01B0\u1EDDng cao", "Tam gi\xE1c", "h", ["point", "point", "point"], VTX, ([A, B, C]) => [
-      { type: "altitude_foot", args: [A, B, C] },
-      { type: "segment", args: [A, "$0"], style: { dash: true } }
-    ]),
-    T("incircle_touch", "Ti\u1EBFp \u0111i\u1EC3m n\u1ED9i ti\u1EBFp", "Tam gi\xE1c", "T", ["point", "point", "point"], VTX, one("incircle_touch")),
-    T("arc_mid_no", "\u0110i\u1EC3m gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A", "Tam gi\xE1c", "\u2312", ["point", "point", "point"], VTX, one("arc_midpoint", { contains: false })),
-    T("arc_mid_yes", "\u0110i\u1EC3m gi\u1EEFa cung BC ch\u1EE9a A", "Tam gi\xE1c", "\u2312A", ["point", "point", "point"], VTX, one("arc_midpoint", { contains: true })),
-    T("angle_mark", "\u0110\xE1nh d\u1EA5u g\xF3c", "\u0110\xE1nh d\u1EA5u", "\u2221", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], (p, app) => [{ type: "angle_mark", args: p, style: { ...app.markStyle("angle") } }]),
-    T("segment_mark", "\u0110\xE1nh d\u1EA5u \u0111o\u1EA1n", "\u0110\xE1nh d\u1EA5u", "\u2AFD", ["point", "point"], ["Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"], (p, app) => [{ type: "segment_mark", args: p, style: { ...app.markStyle("segment") } }], { segmentShortcut: true }),
-    T("polygon", "T\xF4 mi\u1EC1n \u0111a gi\xE1c", "\u0110\xE1nh d\u1EA5u", "\u25B1", ["...point"], ["Ch\u1ECDn l\u1EA7n l\u01B0\u1EE3t c\xE1c \u0111\u1EC9nh; b\u1EA5m l\u1EA1i \u0111\u1EC9nh \u0111\u1EA7u (ho\u1EB7c Enter) \u0111\u1EC3 k\u1EBFt th\xFAc"], (p, app) => [{ type: "polygon", args: p, style: { ...app.markStyle("polygon") } }], { preview: "polygon" })
+    T2("move", "Ch\u1ECDn / k\xE9o", "C\u01A1 b\u1EA3n", "\u2196", [], ["K\xE9o \u0111i\u1EC3m ho\u1EB7c nh\xE3n; b\u1EA5m \u0111\u1EC3 ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng; k\xE9o n\u1EC1n \u0111\u1EC3 d\u1EDDi h\xECnh, l\u0103n chu\u1ED9t \u0111\u1EC3 ph\xF3ng to/thu nh\u1ECF"], null),
+    T2("point", "\u0110i\u1EC3m", "C\u01A1 b\u1EA3n", "\u2022", ["point"], ["B\u1EA5m v\xE0o ch\u1ED7 tr\u1ED1ng: \u0111i\u1EC3m t\u1EF1 do \xB7 b\u1EA5m l\xEAn \u0111\u01B0\u1EDDng/\u0111\u01B0\u1EDDng tr\xF2n: \u0111i\u1EC3m tr\xEAn \u0111\u1ED1i t\u01B0\u1EE3ng \xB7 b\u1EA5m g\u1EA7n ch\u1ED7 c\u1EAFt nhau: giao \u0111i\u1EC3m"], () => []),
+    T2("intersect", "Giao \u0111i\u1EC3m", "C\u01A1 b\u1EA3n", "\u2715", ["curve", "curve"], ["Ch\u1ECDn \u0111\u01B0\u1EDDng th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m ngay ch\u1ED7 hai \u0111\u01B0\u1EDDng c\u1EAFt nhau)", "Ch\u1ECDn \u0111\u01B0\u1EDDng th\u1EE9 hai"], null),
+    T2("midpoint", "Trung \u0111i\u1EC3m", "C\u01A1 b\u1EA3n", "\u25E6", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("midpoint"), { segmentShortcut: true }),
+    T2("segment", "\u0110o\u1EA1n th\u1EB3ng", "\u0110\u01B0\u1EDDng", "\u2014", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m \u0111\u1EA7u", "Ch\u1ECDn \u0111i\u1EC3m cu\u1ED1i"], one("segment"), { preview: "segment" }),
+    T2("line", "\u0110\u01B0\u1EDDng th\u1EB3ng", "\u0110\u01B0\u1EDDng", "\u27F7", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("line"), { preview: "line" }),
+    T2("ray", "Tia", "\u0110\u01B0\u1EDDng", "\u2192", ["point", "point"], ["Ch\u1ECDn g\u1ED1c tia", "Ch\u1ECDn \u0111i\u1EC3m thu\u1ED9c tia"], one("ray"), { preview: "ray" }),
+    T2("perpendicular", "\u0110\u01B0\u1EDDng vu\xF4ng g\xF3c", "\u0110\u01B0\u1EDDng", "\u22A5", ["point", "line"], ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"], one("perpendicular"), { anyOrder: true }),
+    T2("parallel", "\u0110\u01B0\u1EDDng song song", "\u0110\u01B0\u1EDDng", "\u2225", ["point", "line"], ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"], one("parallel"), { anyOrder: true }),
+    T2("perp_bisector", "Trung tr\u1EF1c", "\u0110\u01B0\u1EDDng", "\u22A5\u0332", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("perp_bisector"), { segmentShortcut: true }),
+    T2("angle_bisector", "Ph\xE2n gi\xE1c trong", "\u0110\u01B0\u1EDDng", "\u2220", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], one("angle_bisector")),
+    T2("ext_bisector", "Ph\xE2n gi\xE1c ngo\xE0i", "\u0110\u01B0\u1EDDng", "\u2220\u2091", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], one("angle_bisector", { external: true })),
+    T2("circle", "T\xE2m + \u0111i\u1EC3m", "\u0110\u01B0\u1EDDng tr\xF2n", "\u25EF", ["point", "point"], ["Ch\u1ECDn t\xE2m", "Ch\u1ECDn m\u1ED9t \u0111i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n"], one("circle"), { preview: "circle" }),
+    T2("circle_3pts", "Qua 3 \u0111i\u1EC3m", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2299", ["point", "point", "point"], TRI2, withCenter("circle_3pts")),
+    T2("circle_radius", "Compa (t\xE2m, b\xE1n k\xEDnh AB)", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2300", ["point", "point", "point"], ["Ch\u1ECDn t\xE2m", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t c\u1EE7a b\xE1n k\xEDnh", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"], one("circle_radius")),
+    T2("reflect", "\u0110\u1ED1i x\u1EE9ng", "Bi\u1EBFn h\xECnh", "\u21CB", ["obj", "pl"], ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n l\u1EA5y \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn t\xE2m \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m) ho\u1EB7c tr\u1EE5c \u0111\u1ED1i x\u1EE9ng (\u0111\u01B0\u1EDDng th\u1EB3ng)"], one("reflect")),
+    T2("projection", "H\xECnh chi\u1EBFu", "Bi\u1EBFn h\xECnh", "\u22BE", ["point", "line"], ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"], (p) => [{ type: "projection", args: p }], { anyOrder: true }),
+    T2("angle_mark", "\u0110\xE1nh d\u1EA5u g\xF3c", "\u0110\xE1nh d\u1EA5u", "\u2221", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], (p, app) => [{ type: "angle_mark", args: p, style: { ...app.markStyle("angle") } }]),
+    T2("segment_mark", "\u0110\xE1nh d\u1EA5u \u0111o\u1EA1n", "\u0110\xE1nh d\u1EA5u", "\u2AFD", ["point", "point"], ["Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"], (p, app) => [{ type: "segment_mark", args: p, style: { ...app.markStyle("segment") } }], { segmentShortcut: true }),
+    T2("polygon", "T\xF4 mi\u1EC1n \u0111a gi\xE1c", "\u0110\xE1nh d\u1EA5u", "\u25B1", ["...point"], ["Ch\u1ECDn l\u1EA7n l\u01B0\u1EE3t c\xE1c \u0111\u1EC9nh; b\u1EA5m l\u1EA1i \u0111\u1EC9nh \u0111\u1EA7u (ho\u1EB7c Enter) \u0111\u1EC3 k\u1EBFt th\xFAc"], (p, app) => [{ type: "polygon", args: p, style: { ...app.markStyle("polygon") } }], { preview: "polygon" })
   ];
-  var TOOL_BY_ID = Object.fromEntries(TOOLS.map((t) => [t.id, t]));
+  var TOOL_BY_ID = Object.fromEntries([...TOOLS, ...LIBRARY].map((t) => [t.id, t]));
   var TOOLBAR = [
     { id: "move", label: "Ch\u1ECDn / k\xE9o", icon: "move", tools: ["move"] },
     { id: "point", label: "\u0110i\u1EC3m", icon: "point", tools: ["point", "intersect", "midpoint"] },
     { id: "circle", label: "\u0110\u01B0\u1EDDng tr\xF2n", icon: "circle", tools: ["circle", "circle_3pts", "circle_radius"] },
     { id: "line", label: "\u0110o\u1EA1n, tia, \u0111\u01B0\u1EDDng th\u1EB3ng", icon: "line", tools: ["segment", "ray", "line"] },
     { id: "construct", label: "D\u1EF1ng", icon: "construct", tools: ["perpendicular", "parallel", "perp_bisector", "angle_bisector", "ext_bisector", "projection", "reflect"] },
-    { id: "triangle", label: "Tam gi\xE1c", icon: "triangle", tools: ["triangle", "circumcenter", "circumcircle", "orthocenter", "incenter", "incircle", "centroid", "nine_point_center", "nine_point_circle", "altitude_foot", "incircle_touch", "arc_mid_no", "arc_mid_yes"] },
-    { id: "mark", label: "\u0110\xE1nh d\u1EA5u", icon: "mark", tools: ["angle_mark", "segment_mark", "polygon"] }
+    { id: "mark", label: "\u0110\xE1nh d\u1EA5u", icon: "mark", tools: ["angle_mark", "segment_mark", "polygon"] },
+    { id: "library", label: "C\xF4ng c\u1EE5", icon: "tools", tools: LIBRARY.map((t) => t.id), submenus: MENUS }
   ];
 
   // src/ui/icons.js
@@ -1458,6 +2603,97 @@
     present: svg('<path d="M7 5l12 7-12 7z"/>'),
     projector: svg('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>')
   };
+
+  // src/core/macro.js
+  var USER_MENU = "7. C\xF4ng c\u1EE5 c\u1EE7a t\xF4i";
+  function ancestors(doc, ids) {
+    const out = /* @__PURE__ */ new Set();
+    const stack = [...ids];
+    while (stack.length) {
+      const s = stepById(doc, stack.pop());
+      if (!s) continue;
+      for (const a of s.args) if (!out.has(a)) {
+        out.add(a);
+        stack.push(a);
+      }
+    }
+    return out;
+  }
+  var isRoot = (s) => !s.args.length || s.type === "point_on";
+  function createMacro(doc, selectedIds, label) {
+    const k = kinds(doc);
+    const sel = selectedIds.filter((id) => stepById(doc, id));
+    if (!sel.length) return { ok: false, error: "H\xE3y ch\u1ECDn c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng k\u1EBFt qu\u1EA3 (gi\u1EEF Shift \u0111\u1EC3 ch\u1ECDn nhi\u1EC1u), c\xF3 th\u1EC3 ch\u1ECDn th\xEAm c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng ban \u0111\u1EA7u." };
+    const selSet = new Set(sel);
+    let results = sel.filter((id) => [...ancestors(doc, [id])].some((a) => selSet.has(a)));
+    let givens = sel.filter((id) => !results.includes(id));
+    if (!results.length) {
+      results = sel;
+      givens = [];
+    }
+    const givenSet = new Set(givens);
+    const need = /* @__PURE__ */ new Set();
+    const stack = [...results];
+    while (stack.length) {
+      const id = stack.pop();
+      if (need.has(id) || givenSet.has(id)) continue;
+      const s = stepById(doc, id);
+      if (isRoot(s) && !results.includes(id)) {
+        givenSet.add(id);
+        givens.push(id);
+        continue;
+      }
+      need.add(id);
+      for (const a of s.args) stack.push(a);
+    }
+    if (results.some((id) => isRoot(stepById(doc, id)) && !stepById(doc, id).args.length))
+      return { ok: false, error: "K\u1EBFt qu\u1EA3 kh\xF4ng \u0111\u01B0\u1EE3c l\xE0 \u0111i\u1EC3m t\u1EF1 do (\u0111i\u1EC3m t\u1EF1 do ch\u1EC9 c\xF3 th\u1EC3 l\xE0 \u0111\u1EA7u v\xE0o)." };
+    const order = new Map(doc.steps.map((s, i) => [s.id, i]));
+    givens = [...givenSet].sort((a, b) => order.get(a) - order.get(b));
+    const body = [...need].sort((a, b) => order.get(a) - order.get(b));
+    if (!body.length) return { ok: false, error: "Kh\xF4ng c\xF3 b\u01B0\u1EDBc d\u1EF1ng n\xE0o gi\u1EEFa \u0111\u1EA7u v\xE0o v\xE0 k\u1EBFt qu\u1EA3." };
+    const ref = (id) => givenSet.has(id) ? "in:" + givens.indexOf(id) : "st:" + body.indexOf(id);
+    const steps = body.map((id) => {
+      const s = stepById(doc, id);
+      const out = { type: s.type, args: s.args.map(ref) };
+      if (s.params) out.params = { ...s.params };
+      if (s.style) out.style = { ...s.style };
+      if (results.includes(id)) {
+        out.result = true;
+        if (s.name) out.name = s.name;
+      }
+      return out;
+    });
+    const inputs = givens.map((id) => k.get(id) === "point" ? "point" : k.get(id));
+    const hints = givens.map((id, i) => `Ch\u1ECDn ${inputs[i] === "point" ? "\u0111i\u1EC3m" : inputs[i] === "line" ? "\u0111\u01B0\u1EDDng th\u1EB3ng" : "\u0111\u01B0\u1EDDng tr\xF2n"} \u1EE9ng v\u1EDBi ${describe(doc, id)} (${i + 1}/${givens.length})`);
+    return { ok: true, tool: { id: "user_" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), label: label || "C\xF4ng c\u1EE5 m\u1EDBi", inputs, hints, steps } };
+  }
+  function macroTool(data) {
+    return {
+      id: data.id,
+      label: data.label,
+      menu: USER_MENU,
+      icon: "\u2605",
+      user: true,
+      inputs: data.inputs,
+      hints: data.hints,
+      data,
+      make(picks) {
+        const map = (a) => a.startsWith("in:") ? picks[+a.slice(3)] : "$" + a.slice(3);
+        return data.steps.map((s) => ({
+          type: s.type,
+          args: s.args.map(map),
+          params: s.params,
+          style: s.style,
+          name: s.result ? s.name : void 0,
+          hidden: !s.result
+        }));
+      }
+    };
+  }
+  function validMacro(d) {
+    return d && typeof d.id === "string" && typeof d.label === "string" && Array.isArray(d.inputs) && Array.isArray(d.steps) && d.steps.every((s) => STEP_TYPES[s.type] && Array.isArray(s.args) && s.args.every((a) => /^(in|st):\d+$/.test(a)));
+  }
 
   // src/ui/dialog.js
   function modal(build) {
@@ -1698,10 +2934,22 @@
     q("#p-del").onclick = () => app.deleteSteps(ids);
   }
   function renderToolOptions(app) {
+    var _a;
     const host = document.getElementById("tool-options");
     if (!host) return;
     const t = app.toolId;
     const m = app.markDefaults;
+    const tool = TOOL_BY_ID[t];
+    if (tool && tool.options && app.mode === "edit") {
+      const vals = (_a = app.toolParams || (app.toolParams = {}))[t] || (_a[t] = {});
+      host.classList.add("show");
+      host.innerHTML = `<div class="tool-group-name">${tool.label}</div>` + tool.options.map((o) => `<label class="row">${o.label} <input type="number" step="any" data-opt="${o.key}" value="${vals[o.key] ?? o.def}" style="width:80px"></label>`).join("");
+      host.querySelectorAll("[data-opt]").forEach((inp) => inp.onchange = () => {
+        const v = parseFloat(inp.value);
+        if (Number.isFinite(v)) vals[inp.dataset.opt] = v;
+      });
+      return;
+    }
     const show = ["angle_mark", "segment_mark", "polygon"].includes(t) && app.mode === "edit";
     host.classList.toggle("show", show);
     if (!show) {
@@ -1833,23 +3081,16 @@
      * Các bước sau bước đầu được gộp chung khung trình bày. Trả về danh sách id.
      */
     addSteps(specs, { join = true } = {}) {
-      const ids = [];
-      const k = kinds(this.doc);
-      specs.forEach((sp, i) => {
-        const def = STEP_TYPES[sp.type];
-        const id = newId(this.doc);
-        const args = sp.args.map((a) => typeof a === "string" && a.startsWith("$") ? ids[+a.slice(1)] : a);
-        const kind = def.kind === "same" ? k.get(args[0]) : def.kind;
-        const step = { id, type: sp.type, args };
-        if (sp.params && Object.keys(sp.params).length) step.params = { ...sp.params };
-        if (kind !== "mark") step.name = sp.name && !this.nameUsed(sp.name) ? sp.name : nextName(this.doc, kind, sp.name);
-        if (sp.style && Object.keys(sp.style).length) step.style = { ...sp.style };
-        if (i > 0 && join) step.joinPrev = true;
-        this.doc.steps.push(step);
-        k.set(id, kind);
-        ids.push(id);
-      });
-      return ids;
+      return addSpecs(this.doc, specs, { join });
+    }
+    /** Tên hiển thị của một đối tượng (dùng khi công cụ đặt tên kết quả, vd I_A). */
+    name(id) {
+      return stepById(this.doc, id)?.name || "";
+    }
+    /** Tham số số của công cụ đang dùng (góc quay, tỉ số vị tự…), chỉnh ở thẻ tuỳ chọn. */
+    opt(key, def) {
+      const p = this.toolParams && this.toolParams[this.toolId] || {};
+      return key in p ? p[key] : def;
     }
     nameUsed(name, exceptId) {
       return this.doc.steps.some((s) => s.name === name && s.id !== exceptId);
@@ -2543,26 +3784,126 @@
         if (!document.fullscreenElement && this.projector) this.setProjector(false);
       });
     }
+    /** Nạp công cụ tự tạo (lưu trong trình duyệt) và gắn vào menu "Công cụ › 7. Công cụ của tôi". */
+    loadUserTools() {
+      let list = [];
+      try {
+        list = JSON.parse(loadPref("tools", "[]"));
+      } catch {
+        list = [];
+      }
+      this.userTools = Array.isArray(list) ? list.filter(validMacro) : [];
+      for (const id of Object.keys(TOOL_BY_ID)) if (TOOL_BY_ID[id].user) delete TOOL_BY_ID[id];
+      for (const d of this.userTools) TOOL_BY_ID[d.id] = macroTool(d);
+      const userIds = this.userTools.map((d) => d.id);
+      this.toolbarGroups = TOOLBAR.map((g) => g.id === "library" ? { ...g, tools: [...g.tools, ...userIds], submenus: [...g.submenus, USER_MENU] } : g);
+    }
+    saveUserTools() {
+      savePref("tools", JSON.stringify(this.userTools));
+      this.loadUserTools();
+      this.buildToolbar();
+      this.markActiveTool(this.toolId);
+    }
+    async userToolAction(action, arg) {
+      if (action === "create") {
+        const r0 = createMacro(this.doc, [...this.selection], "x");
+        if (!r0.ok) return toast(r0.error, 5e3);
+        const name = await promptDialog("T\u1EA1o c\xF4ng c\u1EE5 m\u1EDBi", "", `\u0110\u1EA7u v\xE0o: ${r0.tool.inputs.length} (${r0.tool.inputs.map((t) => ({ point: "\u0111i\u1EC3m", line: "\u0111\u01B0\u1EDDng th\u1EB3ng", circle: "\u0111\u01B0\u1EDDng tr\xF2n" })[t]).join(", ")}); ${r0.tool.steps.length} b\u01B0\u1EDBc d\u1EF1ng. \u0110\u1EB7t t\xEAn cho c\xF4ng c\u1EE5:`);
+        if (!name || !name.trim()) return;
+        r0.tool.label = name.trim();
+        this.userTools.push(r0.tool);
+        this.saveUserTools();
+        toast(`\u0110\xE3 t\u1EA1o c\xF4ng c\u1EE5 "${r0.tool.label}" (C\xF4ng c\u1EE5 \u203A ${USER_MENU})`, 4e3);
+      } else if (action === "delete") {
+        const d = this.userTools.find((x) => x.id === arg);
+        if (!d || !await confirmDialog("Xo\xE1 c\xF4ng c\u1EE5", `Xo\xE1 c\xF4ng c\u1EE5 <b>${escapeHTML(d.label)}</b>?`, "Xo\xE1")) return;
+        this.userTools = this.userTools.filter((x) => x.id !== arg);
+        if (this.toolId === arg) this.setTool("move");
+        this.saveUserTools();
+      } else if (action === "export") {
+        if (!this.userTools.length) return toast("Ch\u01B0a c\xF3 c\xF4ng c\u1EE5 t\u1EF1 t\u1EA1o n\xE0o");
+        const blob = new Blob([JSON.stringify({ format: "hinh-hoc-dong-cong-cu", version: 1, tools: this.userTools }, null, 1)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "cong-cu-cua-toi.json";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 1e3);
+      } else if (action === "import") {
+        const inp = document.createElement("input");
+        inp.type = "file";
+        inp.accept = ".json,application/json";
+        inp.onchange = async () => {
+          try {
+            const data = JSON.parse(await inp.files[0].text());
+            const list = (Array.isArray(data) ? data : data.tools || []).filter(validMacro);
+            if (!list.length) throw new Error("T\u1EC7p kh\xF4ng ch\u1EE9a c\xF4ng c\u1EE5 h\u1EE3p l\u1EC7");
+            for (const d of list) {
+              this.userTools = this.userTools.filter((x) => x.id !== d.id);
+              this.userTools.push(d);
+            }
+            this.saveUserTools();
+            toast(`\u0110\xE3 nh\u1EADp ${list.length} c\xF4ng c\u1EE5`);
+          } catch (e) {
+            toast("Kh\xF4ng nh\u1EADp \u0111\u01B0\u1EE3c: " + e.message, 5e3);
+          }
+        };
+        inp.click();
+      }
+    }
     buildToolbar() {
       const host = document.getElementById("tools");
-      const groups = this.toolbarGroups || TOOLBAR;
+      if (!this.toolbarGroups) this.loadUserTools();
+      const groups = this.toolbarGroups;
       this.groupCurrent = this.groupCurrent || {};
       for (const g of groups) if (!this.groupCurrent[g.id]) this.groupCurrent[g.id] = g.tools[0];
       host.innerHTML = groups.map((g) => {
         const many = g.tools.length > 1 || g.menu;
-        const items = g.menu ? "" : g.tools.map((id) => {
+        const btn = (id) => {
           const t = TOOL_BY_ID[id];
           return `<button class="tool" data-tool="${id}" title="${escapeHTML(t.label)}"><span class="ti">${t.icon}</span><span class="tl">${escapeHTML(t.label)}</span></button>`;
-        }).join("");
+        };
+        const items = g.submenus ? g.submenus.map((m) => {
+          const ids = g.tools.filter((id) => TOOL_BY_ID[id].menu === m);
+          let list = ids.map(btn).join("");
+          if (m === USER_MENU) {
+            list = ids.map((id) => `<div class="user-tool">${btn(id)}<button class="tool-del" data-del="${id}" title="Xo\xE1 c\xF4ng c\u1EE5 n\xE0y">\u2715</button></div>`).join("") + (ids.length ? '<div class="menu-sep"></div>' : '<div class="note" style="padding:4px 8px">Ch\u01B0a c\xF3 c\xF4ng c\u1EE5 n\xE0o. Ch\u1ECDn c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng k\u1EBFt qu\u1EA3 tr\xEAn h\xECnh (Shift \u0111\u1EC3 ch\u1ECDn nhi\u1EC1u, c\xF3 th\u1EC3 ch\u1ECDn c\u1EA3 \u0111\u1ED1i t\u01B0\u1EE3ng ban \u0111\u1EA7u) r\u1ED3i b\u1EA5m "T\u1EA1o c\xF4ng c\u1EE5".</div>') + '<button class="tool-action" data-action="create">\uFF0B T\u1EA1o c\xF4ng c\u1EE5 t\u1EEB c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng \u0111ang ch\u1ECDn\u2026</button><button class="tool-action" data-action="export">Xu\u1EA5t c\xE1c c\xF4ng c\u1EE5 ra t\u1EC7p\u2026</button><button class="tool-action" data-action="import">Nh\u1EADp c\xF4ng c\u1EE5 t\u1EEB t\u1EC7p\u2026</button>';
+          }
+          return `<div class="sub"><button class="sub-title">${escapeHTML(m)}<span class="caret">\u203A</span></button><div class="sub-pop">${list}</div></div>`;
+        }).join("") + (g.extraHTML ? g.extraHTML(this) : "") : g.tools.map(btn).join("");
         return `<div class="tb-group" data-group="${g.id}">
           <button class="tb-btn" data-group="${g.id}" title="${escapeHTML(g.label)}">${ICONS[g.icon] || ""}${many ? '<span class="tb-more"></span>' : ""}</button>
           ${many ? `<div class="flyout"><div class="flyout-title">${escapeHTML(g.label)}</div>${items}</div>` : ""}
         </div>`;
       }).join("");
-      const closeAll = () => host.querySelectorAll(".tb-group.open").forEach((x) => x.classList.remove("open"));
+      const closeAll = () => host.querySelectorAll(".tb-group.open, .sub.open").forEach((x) => x.classList.remove("open"));
+      if (this.toolbarBound) return;
+      this.toolbarBound = true;
+      host.addEventListener("mouseover", (e) => {
+        const st = e.target.closest(".sub-title");
+        if (!st || st.parentElement.classList.contains("open")) return;
+        st.parentElement.parentElement.querySelectorAll(".sub.open").forEach((x) => x.classList.remove("open"));
+        st.parentElement.classList.add("open");
+      });
       host.onclick = (e) => {
+        const act = e.target.closest("[data-action], [data-del]");
+        if (act) {
+          closeAll();
+          this.userToolAction(act.dataset.action || "delete", act.dataset.del);
+          return;
+        }
         const tb = e.target.closest(".tb-btn");
         const tl = e.target.closest(".tool");
+        const st = e.target.closest(".sub-title");
+        if (st) {
+          const subEl = st.parentElement;
+          subEl.parentElement.querySelectorAll(".sub.open").forEach((x) => x !== subEl && x.classList.remove("open"));
+          subEl.classList.add("open");
+          return;
+        }
         if (tl) {
           const g2 = tl.closest(".tb-group").dataset.group;
           this.groupCurrent[g2] = tl.dataset.tool;
@@ -2572,7 +3913,7 @@
         }
         if (!tb) return;
         const gEl = tb.closest(".tb-group");
-        const g = groups.find((x) => x.id === tb.dataset.group);
+        const g = this.toolbarGroups.find((x) => x.id === tb.dataset.group);
         const wasOpen = gEl.classList.contains("open");
         closeAll();
         if (g.menu) {
@@ -2582,7 +3923,7 @@
           }
           return;
         }
-        this.setTool(this.groupCurrent[g.id]);
+        if (!g.submenus) this.setTool(this.groupCurrent[g.id]);
         if (g.tools.length > 1 && !wasOpen) gEl.classList.add("open");
       };
       document.addEventListener("pointerdown", (e) => {
@@ -2600,6 +3941,7 @@
     /** Đánh dấu công cụ đang dùng trên thanh công cụ. */
     markActiveTool(id) {
       const groups = this.toolbarGroups || TOOLBAR;
+      this.groupCurrent || (this.groupCurrent = {});
       document.querySelectorAll("#tools .tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === id));
       for (const g of groups) {
         const on = g.tools.includes(id) || !!(g.isActive && g.isActive(id));
@@ -2765,13 +4107,13 @@
         b.add("segment", [A, D], {}, void 0, { style: { dash: true } });
         b.add("segment", [B, E], {}, void 0, { style: { dash: true } });
         b.add("segment", [C, F], {}, void 0, { style: { dash: true } });
-        const M1 = b.add("midpoint", [B, C], {}, "M");
-        const M2 = b.add("midpoint", [C, A], {}, "K");
-        const M3 = b.add("midpoint", [A, B], {}, "L");
+        const M12 = b.add("midpoint", [B, C], {}, "M");
+        const M22 = b.add("midpoint", [C, A], {}, "K");
+        const M32 = b.add("midpoint", [A, B], {}, "L");
         b.add("midpoint", [A, H], {}, "X");
         b.add("midpoint", [B, H], {}, "Y");
         b.add("midpoint", [C, H], {}, "Z");
-        b.add("circle_3pts", [M1, M2, M3], {}, "\u03C9", { style: { color: "#7e22ce" } });
+        b.add("circle_3pts", [M12, M22, M32], {}, "\u03C9", { style: { color: "#7e22ce" } });
         return b.doc;
       }
     },
@@ -3408,7 +4750,27 @@
     const s = Math.hypot(x2 - x1, y2 - y1);
     return Number.isFinite(s) && s > 1e-12 ? s : 1;
   }
-  var TRIANGLE_TYPES = /* @__PURE__ */ new Set(["circumcenter", "orthocenter", "incenter", "centroid", "nine_point_center", "altitude_foot", "incircle_touch", "arc_midpoint", "circle_3pts", "circumcircle", "incircle", "nine_point_circle", "angle_bisector"]);
+  var TRIANGLE_TYPES = /* @__PURE__ */ new Set([
+    "circumcenter",
+    "orthocenter",
+    "incenter",
+    "centroid",
+    "nine_point_center",
+    "altitude_foot",
+    "incircle_touch",
+    "arc_midpoint",
+    "circle_3pts",
+    "circumcircle",
+    "incircle",
+    "nine_point_circle",
+    "angle_bisector",
+    "excenter",
+    "excircle",
+    "lemoine",
+    "kosnita",
+    "symmedian_foot",
+    "mixtilinear"
+  ]);
   function findTriangles(doc, kindOf, { strict = false } = {}) {
     const tri2 = /* @__PURE__ */ new Map();
     const addTri = (ids) => {
@@ -3482,14 +4844,14 @@
     }
     return null;
   }
-  var T2 = {
+  var T3 = {
     coincide: (P2, Q, e) => dist(P2, Q) < e,
     onLine: (P2, l, e) => distPointLine(P2, l) < e,
     onCircle: (P2, c, e) => Math.abs(dist(P2, c.c) - c.r) < e,
     collinear: (P2, Q, R, e) => distPointLine(R, lineThrough(P2, Q)) < e,
     parallel: (l1, l2, e, s) => Math.abs(cross(unit(l1.d), unit(l2.d))) < e / s,
     perpendicular: (l1, l2, e, s) => Math.abs(dot(unit(l1.d), unit(l2.d))) < e / s,
-    sameLine: (l1, l2, e, s) => T2.parallel(l1, l2, e, s) && distPointLine(l2.p, l1) < e,
+    sameLine: (l1, l2, e, s) => T3.parallel(l1, l2, e, s) && distPointLine(l2.p, l1) < e,
     sameCircle: (c1, c2, e) => dist(c1.c, c2.c) < e && Math.abs(c1.r - c2.r) < e,
     tangentLC: (l, c, e) => Math.abs(distPointLine(c.c, l) - c.r) < e,
     tangentCC: (c1, c2, e) => {
@@ -3545,7 +4907,7 @@
       const cls = [id];
       for (const j of pointIds) {
         if (j === id || repOf.get(j) !== j || !sameClassPairs.has(id + "|" + j)) continue;
-        if (all((v, e) => T2.coincide(v.get(id), v.get(j), e))) {
+        if (all((v, e) => T3.coincide(v.get(id), v.get(j), e))) {
           cls.push(j);
           repOf.set(j, id);
         }
@@ -3568,7 +4930,7 @@
       for (let j = i + 1; j < lineIds.length; j++) {
         const b = lineIds[j];
         if (lineRep.get(b) !== b) continue;
-        if (all((v, e, s) => T2.sameLine(v.get(a), v.get(b), e, s))) {
+        if (all((v, e, s) => T3.sameLine(v.get(a), v.get(b), e, s))) {
           lineRep.set(b, a);
           if (!know.sameLine(a, b)) rel.push({ type: "same_line", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
         }
@@ -3581,7 +4943,7 @@
       for (let j = i + 1; j < circleIds.length; j++) {
         const b = circleIds[j];
         if (circRep.get(b) !== b) continue;
-        if (all((v, e) => T2.sameCircle(v.get(a), v.get(b), e))) {
+        if (all((v, e) => T3.sameCircle(v.get(a), v.get(b), e))) {
           circRep.set(b, a);
           if (!know.sameCircle(a, b)) rel.push({ type: "same_circle", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
         }
@@ -3592,14 +4954,14 @@
     const v0 = base, e0 = opts.tol * scale0;
     const onLineSets = /* @__PURE__ */ new Map();
     for (const l of lines) {
-      const on = reps.filter((P2) => T2.onLine(v0.get(P2), v0.get(l), e0) && all((v, e) => T2.onLine(v.get(P2), v.get(l), e)));
+      const on = reps.filter((P2) => T3.onLine(v0.get(P2), v0.get(l), e0) && all((v, e) => T3.onLine(v.get(P2), v.get(l), e)));
       onLineSets.set(l, on);
       const fresh = on.filter((P2) => !lineIdsSameAs(l, lineIds, lineRep).some((ll) => know.pointOnLineObj(P2, ll)));
       if (fresh.length) rel.push({ type: "on_line", ids: [l, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(l)}` });
     }
     const onCircleSets = /* @__PURE__ */ new Map();
     for (const c of circles) {
-      const on = reps.filter((P2) => T2.onCircle(v0.get(P2), v0.get(c), e0) && all((v, e) => T2.onCircle(v.get(P2), v.get(c), e)));
+      const on = reps.filter((P2) => T3.onCircle(v0.get(P2), v0.get(c), e0) && all((v, e) => T3.onCircle(v.get(P2), v.get(c), e)));
       onCircleSets.set(c, on);
       const fresh = on.filter((P2) => !lineIdsSameAs(c, circleIds, circRep).some((cc) => know.pointOnCircleObj(P2, cc)));
       if (fresh.length) rel.push({ type: "on_circle", ids: [c, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(c)}` });
@@ -3612,10 +4974,10 @@
         const set = [A, B];
         for (let k = 0; k < reps.length; k++) {
           if (k === i || k === j) continue;
-          if (T2.collinear(pa, pb, v0.get(reps[k]), e0)) set.push(reps[k]);
+          if (T3.collinear(pa, pb, v0.get(reps[k]), e0)) set.push(reps[k]);
         }
         if (set.length < 3) continue;
-        const verified = [A, B, ...set.slice(2).filter((C) => all((v, e) => T2.collinear(v.get(A), v.get(B), v.get(C), e)))];
+        const verified = [A, B, ...set.slice(2).filter((C) => all((v, e) => T3.collinear(v.get(A), v.get(B), v.get(C), e)))];
         if (verified.length < 3) continue;
         const key = [...verified].sort().join(",");
         if (seenCol.has(key)) continue;
@@ -3633,14 +4995,14 @@
           const circ = circleThrough(v0.get(A), v0.get(B), v0.get(C));
           if (!circ || circ.r > opts.maxRadius * scale0) continue;
           const set = [A, B, C];
-          for (let m = k + 1; m < nR; m++) if (T2.onCircle(v0.get(reps[m]), circ, e0)) set.push(reps[m]);
+          for (let m = k + 1; m < nR; m++) if (T3.onCircle(v0.get(reps[m]), circ, e0)) set.push(reps[m]);
           if (set.length < 4) continue;
           const key0 = set.join(",");
           if (seenCyc.has("raw:" + key0)) continue;
-          const full = reps.filter((P2) => T2.onCircle(v0.get(P2), circ, e0));
+          const full = reps.filter((P2) => T3.onCircle(v0.get(P2), circ, e0));
           const ok = full.filter((P2, idx) => idx < 3 || all((v, e) => {
             const c = circleThrough(v.get(full[0]), v.get(full[1]), v.get(full[2]));
-            return c && T2.onCircle(v.get(P2), c, e);
+            return c && T3.onCircle(v.get(P2), c, e);
           }));
           const key = [...ok].sort().join(",");
           seenCyc.add("raw:" + key0);
@@ -3654,19 +5016,19 @@
     for (let i = 0; i < lines.length; i++)
       for (let j = i + 1; j < lines.length; j++) {
         const a = lines[i], b = lines[j];
-        if (T2.parallel(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T2.parallel(v.get(a), v.get(b), e, s)) && !know.parallel(a, b))
+        if (T3.parallel(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T3.parallel(v.get(a), v.get(b), e, s)) && !know.parallel(a, b))
           rel.push({ type: "parallel", ids: [a, b], text: `${desc(a)} \u2225 ${desc(b)}` });
-        if (T2.perpendicular(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T2.perpendicular(v.get(a), v.get(b), e, s)) && !know.perpendicular(a, b))
+        if (T3.perpendicular(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T3.perpendicular(v.get(a), v.get(b), e, s)) && !know.perpendicular(a, b))
           rel.push({ type: "perpendicular", ids: [a, b], text: `${desc(a)} \u22A5 ${desc(b)}` });
       }
     for (const l of lines)
       for (const c of circles)
-        if (T2.tangentLC(v0.get(l), v0.get(c), e0) && all((v, e) => T2.tangentLC(v.get(l), v.get(c), e)) && !know.tangent(l, c))
+        if (T3.tangentLC(v0.get(l), v0.get(c), e0) && all((v, e) => T3.tangentLC(v.get(l), v.get(c), e)) && !know.tangent(l, c))
           rel.push({ type: "tangent", ids: [l, c], text: `${desc(l)} ti\u1EBFp x\xFAc ${desc(c)}` });
     for (let i = 0; i < circles.length; i++)
       for (let j = i + 1; j < circles.length; j++) {
         const a = circles[i], b = circles[j];
-        if (T2.tangentCC(v0.get(a), v0.get(b), e0) && all((v, e) => T2.tangentCC(v.get(a), v.get(b), e)) && !know.tangent(a, b))
+        if (T3.tangentCC(v0.get(a), v0.get(b), e0) && all((v, e) => T3.tangentCC(v.get(a), v.get(b), e)) && !know.tangent(a, b))
           rel.push({ type: "tangent", ids: [a, b], text: `${desc(a)} ti\u1EBFp x\xFAc ${desc(b)}` });
       }
     const curves = [...lines, ...circles];
@@ -3714,7 +5076,7 @@
     return ids.filter((x) => repMap.get(x) === id);
   }
   function onCurve(P2, c, e) {
-    return c.kind === "line" ? T2.onLine(P2, c, e) : T2.onCircle(P2, c, e);
+    return c.kind === "line" ? T3.onLine(P2, c, e) : T3.onCircle(P2, c, e);
   }
   function minDistToPoints(X, vals, ids) {
     let m = Infinity;
@@ -3778,7 +5140,7 @@
           if (samples.every(({ vals, scale }) => {
             const X = f(...at(vals));
             const Y = vals.get(c);
-            return X && Y && T2.sameCircle(X, Y, opts.tol * scale);
+            return X && Y && T3.sameCircle(X, Y, opts.tol * scale);
           }))
             out.set(c, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
         }
@@ -3822,10 +5184,10 @@
         </div>`).join("") + "</div>";
       }
       pane.innerHTML = html;
-      pane.querySelector("#btn-run-explore").onclick = run;
+      pane.querySelector("#btn-run-explore").onclick = run2;
       pane.querySelectorAll(".rel").forEach((el) => el.onclick = () => select(+el.dataset.i));
     };
-    const run = () => {
+    const run2 = () => {
       const btn = pane.querySelector("#btn-run-explore");
       if (btn) {
         btn.disabled = true;
@@ -3864,7 +5226,7 @@
       }
     });
     const top = document.getElementById("btn-explore");
-    if (top) top.onclick = run;
+    if (top) top.onclick = run2;
     render();
   }
   function drawRelationOverlay(app) {
@@ -4017,13 +5379,13 @@
           out.labels.push(`\\node[above right, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
         }
       } else if (kind === "line") {
-        const sub2 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
+        const sub3 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
         const desc = s.type === "line" || s.type === "segment" || s.type === "ray" ? s.args.map((a) => stepById(doc, a)?.name).join("") : s.name;
-        if (sub2 === "segment" && s.type === "segment") out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
-        else if (sub2 === "segment") out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(add(v.p, v.d))};`);
+        if (sub3 === "segment" && s.type === "segment") out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
+        else if (sub3 === "segment") out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(add(v.p, v.d))};`);
         else {
-          const seg = clipLine(v, box, sub2 === "ray" ? 0 : -Infinity);
-          if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub2 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub2 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${desc}`);
+          const seg = clipLine(v, box, sub3 === "ray" ? 0 : -Infinity);
+          if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub3 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub3 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${desc}`);
           if (seg && st.showLabel && s.name) {
             const P2 = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
             out.labels.push(`\\node[above, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);

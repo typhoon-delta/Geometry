@@ -249,3 +249,189 @@ export function reflectObject(X, M) {
   if (X.kind === 'circle') return circle(f(X.c), X.r);
   return null;
 }
+
+// ======================= Phép biến hình =======================
+export function rotatePoint(P, O, deg) {
+  const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+  const x = P.x - O.x, y = P.y - O.y;
+  return pt(O.x + c * x - s * y, O.y + s * x + c * y);
+}
+
+export const homothetyPoint = (P, O, k) => pt(O.x + k * (P.x - O.x), O.y + k * (P.y - O.y));
+export const translatePoint = (P, A, B) => pt(P.x + B.x - A.x, P.y + B.y - A.y);
+
+/** Nghịch đảo điểm P qua đường tròn (tâm O, bán kính r): OP·OP' = r². */
+export function invertPoint(P, c) {
+  const dx = P.x - c.c.x, dy = P.y - c.c.y, d2 = dx * dx + dy * dy;
+  if (d2 < EPS * EPS) return null;
+  const k = (c.r * c.r) / d2;
+  return pt(c.c.x + k * dx, c.c.y + k * dy);
+}
+
+/** Áp một phép biến đổi điểm f cho điểm / đường thẳng / đường tròn (phép đồng dạng). */
+export function mapObject(X, f) {
+  if (!X) return null;
+  if (X.kind === 'point') return f(X);
+  if (X.kind === 'line') {
+    const a = f(X.p), b = f(add(X.p, X.d));
+    return a && b ? line(a, sub(b, a), X.sub) : null;
+  }
+  if (X.kind === 'circle') {
+    const c = f(X.c), q = f(add(X.c, { x: X.r, y: 0 }));
+    return c && q ? circle(c, dist(c, q)) : null;
+  }
+  return null;
+}
+
+// ======================= Tiếp tuyến, đẳng phương, vị tự =======================
+/** Tiếp tuyến của đường tròn tại P (đường qua P vuông góc với bán kính). */
+export function tangentAt(c, P) {
+  const r = sub(P, c.c);
+  if (norm(r) < EPS) return null;
+  return line(P, perp(r));
+}
+
+/** Hai tiếp điểm của tiếp tuyến kẻ từ P (thứ tự chuẩn như intersectCC → liên tục khi kéo). */
+export function tangentPoints(c, P) {
+  const M = mid(c.c, P);
+  return intersectCC(c, { kind: 'circle', c: M, r: dist(M, P) });
+}
+
+/**
+ * Tiếp tuyến chung của hai đường tròn. internal = false: tiếp tuyến chung ngoài, true: chung trong.
+ * which = 0/1 chọn một trong hai (theo phía của pháp tuyến so với hướng tâm₁→tâm₂ – liên tục khi kéo).
+ * Đường trả về đi từ tiếp điểm trên c1 tới tiếp điểm trên c2.
+ */
+export function commonTangent(c1, c2, internal, which) {
+  const D = sub(c2.c, c1.c);
+  const d2 = dot(D, D);
+  const k = (internal ? -c2.r : c2.r) - c1.r; // n·D = s2 r2 − s1 r1 với s1 = 1
+  const h2 = d2 - k * k;
+  if (d2 < EPS || h2 < -1e-12 * d2) return null;
+  const h = Math.sqrt(Math.max(0, h2));
+  const sg = which ? 1 : -1;
+  const n = { x: (k * D.x + sg * h * -D.y) / d2, y: (k * D.y + sg * h * D.x) / d2 };
+  const T1 = { x: c1.c.x - c1.r * n.x, y: c1.c.y - c1.r * n.y };
+  const s2 = internal ? -1 : 1;
+  const T2 = { x: c2.c.x - s2 * c2.r * n.x, y: c2.c.y - s2 * c2.r * n.y };
+  const dir = dist(T1, T2) > EPS ? sub(T2, T1) : perp(n);
+  return line(T1, dir);
+}
+
+/** Trục đẳng phương của hai đường tròn (không đồng tâm). */
+export function radicalAxis(c1, c2) {
+  const D = sub(c2.c, c1.c);
+  const d = norm(D);
+  if (d < EPS) return null;
+  const t = (d * d + c1.r * c1.r - c2.r * c2.r) / (2 * d);
+  const u = { x: D.x / d, y: D.y / d };
+  return line(pt(c1.c.x + t * u.x, c1.c.y + t * u.y), perp(D));
+}
+
+export function radicalCenter(c1, c2, c3) {
+  const a = radicalAxis(c1, c2), b = radicalAxis(c1, c3);
+  return a && b ? intersectLL(a, b) : null;
+}
+
+/** Tâm vị tự của hai đường tròn: ngoài (tỉ số +r2/r1) hoặc trong (tỉ số −r2/r1). */
+export function homothetyCenter(c1, c2, internal) {
+  if (internal) {
+    const s = c1.r + c2.r;
+    return pt((c2.r * c1.c.x + c1.r * c2.c.x) / s, (c2.r * c1.c.y + c1.r * c2.c.y) / s);
+  }
+  const s = c2.r - c1.r;
+  if (Math.abs(s) < 1e-12 * Math.max(c1.r, c2.r)) return null; // hai bán kính bằng nhau: tâm vị tự ngoài ở vô cực
+  return pt((c2.r * c1.c.x - c1.r * c2.c.x) / s, (c2.r * c1.c.y - c1.r * c2.c.y) / s);
+}
+
+// ======================= Tam giác: toạ độ tỉ cự =======================
+const area2 = (P, Q, R) => cross(sub(Q, P), sub(R, P));
+
+/** Toạ độ tỉ cự (có dấu) của P đối với tam giác ABC. */
+export function barycentric(P, A, B, C) {
+  return [area2(P, B, C), area2(P, C, A), area2(P, A, B)];
+}
+
+export function fromBarycentric(u, v, w, A, B, C) {
+  const s = u + v + w;
+  const m = Math.max(Math.abs(u), Math.abs(v), Math.abs(w));
+  if (!(m > 0) || Math.abs(s) < 1e-12 * m) return null;
+  return pt((u * A.x + v * B.x + w * C.x) / s, (u * A.y + v * B.y + w * C.y) / s);
+}
+
+const sides2 = (A, B, C) => [dist(B, C) ** 2, dist(C, A) ** 2, dist(A, B) ** 2];
+
+/** Tâm bàng tiếp đối diện đỉnh A. */
+export function excenter(A, B, C) {
+  if (!triangleOK(A, B, C)) return null;
+  const a = dist(B, C), b = dist(C, A), c = dist(A, B);
+  return fromBarycentric(-a, b, c, A, B, C);
+}
+
+/** Liên hợp đẳng giác của P: (u:v:w) ↦ (a²/u : b²/v : c²/w). */
+export function isogonalConjugate(P, A, B, C) {
+  if (!triangleOK(A, B, C)) return null;
+  const [u, v, w] = barycentric(P, A, B, C);
+  const sc = Math.abs(area2(A, B, C));
+  if ([u, v, w].some((x) => Math.abs(x) < 1e-12 * sc)) return null; // P nằm trên đường thẳng chứa cạnh
+  const [a2, b2, c2] = sides2(A, B, C);
+  return fromBarycentric(a2 / u, b2 / v, c2 / w, A, B, C);
+}
+
+/** Điểm Lemoine (giao ba đường đối trung): (a² : b² : c²). */
+export function lemoine(A, B, C) {
+  if (!triangleOK(A, B, C)) return null;
+  const [a2, b2, c2] = sides2(A, B, C);
+  return fromBarycentric(a2, b2, c2, A, B, C);
+}
+
+/** Chân đường đối trung từ A trên BC: BL/LC = AB²/AC². */
+export function symmedianFoot(A, B, C) {
+  if (!triangleOK(A, B, C)) return null;
+  const b2 = dist(C, A) ** 2, c2 = dist(A, B) ** 2;
+  return pt((b2 * B.x + c2 * C.x) / (b2 + c2), (b2 * B.y + c2 * C.y) / (b2 + c2));
+}
+
+/** Điểm Kosnita = liên hợp đẳng giác của tâm đường tròn Euler. */
+export function kosnita(A, B, C) {
+  const N = ninePointCenter(A, B, C);
+  return N ? isogonalConjugate(N, A, B, C) : null;
+}
+
+/** Đường đẳng giác của AP đối với góc BAC (đối xứng của AP qua phân giác góc A). */
+export function isogonalLine(B, A, C, P) {
+  const u = unit(sub(B, A)), v = unit(sub(C, A)), p = sub(P, A);
+  if (!u || !v || norm(p) < EPS) return null;
+  let w = add(u, v);
+  w = norm(w) < 1e-9 ? perp(u) : unit(w);
+  const k = 2 * dot(p, w);
+  return line(A, { x: k * w.x - p.x, y: k * w.y - p.y });
+}
+
+/** Đường tròn tiếp xúc với đường thẳng AB tại A và đi qua C. */
+export function circleTangentAt(A, B, C) {
+  const l1 = line(A, perp(sub(B, A)));
+  const l2 = dist(A, C) < EPS ? null : line(mid(A, C), perp(sub(C, A)));
+  if (!l1 || !l2) return null;
+  const O = intersectLL(l1, l2);
+  return O ? circle(O, dist(O, A)) : null;
+}
+
+/**
+ * Đường tròn mixtilinear ứng với đỉnh A: tiếp xúc hai đường thẳng AB, AC và tiếp xúc trong (external = false)
+ * hoặc tiếp xúc ngoài (external = true) với đường tròn ngoại tiếp. Tâm X = A + t·u (u: phân giác trong),
+ * bán kính t·sin(A/2); điều kiện |XO| = R ∓ bán kính cho phương trình bậc nhất theo t.
+ */
+export function mixtilinear(A, B, C, external = false) {
+  const circ = circleThrough(A, B, C);
+  if (!circ) return null;
+  const u0 = unit(sub(B, A)), v0 = unit(sub(C, A));
+  const u = unit(add(u0, v0));
+  if (!u) return null;
+  const s = Math.abs(cross(u, u0)); // sin(A/2)
+  const c2 = 1 - s * s; // cos²(A/2)
+  const AO = sub(A, circ.c);
+  const t = (-2 * (dot(u, AO) + (external ? -1 : 1) * circ.r * s)) / c2;
+  if (!(t > 0)) return null;
+  return circle(pt(A.x + t * u.x, A.y + t * u.y), t * s);
+}
