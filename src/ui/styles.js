@@ -23,7 +23,7 @@ const DEFAULT_BY_TYPE = {
 };
 
 const DEFAULT_BY_KIND = {
-  point: { color: '#111827', size: 3, showLabel: true, labelOffset: [8, 10] },
+  point: { color: '#111827', size: 3, showLabel: true },
   line: { color: '#111827', width: 1.6, dash: false, showLabel: false },
   circle: { color: '#111827', width: 1.6, dash: false, fill: 0, showLabel: false },
   mark: { color: '#dc2626', width: 1.6 },

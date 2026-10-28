@@ -3,6 +3,9 @@
 
 import { kinds } from '../core/model.js';
 import { styleOf } from './styles.js';
+import { autoLabelDirs } from '../core/labels.js';
+
+export const LABEL_DIST = 13; // px từ tâm điểm tới tâm nhãn
 
 /* global JXG */
 
@@ -50,6 +53,8 @@ export class Renderer {
     const visible = opts.visible || null;
     const selected = opts.selected || new Set();
     const highlight = opts.highlight || new Set();
+    this.autoDirs = autoLabelDirs(doc, values, (s) => !s.hidden && (!visible || visible.has(s.id)));
+    this.labelOffsets = new Map();
     // Thứ tự vẽ: miền tô → đường tròn → đường → đánh dấu → điểm (điểm luôn ở trên)
     const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
     const steps = doc.steps
@@ -119,6 +124,9 @@ export class Renderer {
           ...common, size: size + 6 * sc, strokeColor: HALO, fillColor: HALO, fillOpacity: 0.35, strokeOpacity: 0.6,
         }));
       }
+      const dir = this.autoDirs?.get(id) || { x: 0.7, y: 0.7 };
+      const off = st.labelOffset || [Math.round(dir.x * LABEL_DIST), Math.round(dir.y * LABEL_DIST)];
+      this.labelOffsets.set(id, off);
       const p = b.create('point', [this.fx(() => V()?.x), this.fx(() => V()?.y)], {
         ...common,
         name: st.showLabel ? labelHTML(s.name) : '',
@@ -129,7 +137,9 @@ export class Renderer {
         strokeWidth: 1 * sc,
         fillColor: hl ? RELATION : st.fillColor || st.color,
         label: {
-          offset: (st.labelOffset || [8, 10]).map((v) => v * sc),
+          offset: off.map((v) => v * sc),
+          anchorX: 'middle',
+          anchorY: 'middle',
           fontSize: Math.round(16 * sc),
           strokeColor: hl ? '#b45309' : st.labelColor || '#111827',
           cssClass: 'pt-label', highlightCssClass: 'pt-label', highlight: false,

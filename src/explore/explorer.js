@@ -45,6 +45,30 @@ function figureScale(vals, pointIds) {
 
 const TRIANGLE_TYPES = new Set(['circumcenter', 'orthocenter', 'incenter', 'centroid', 'nine_point_center', 'altitude_foot', 'incircle_touch', 'arc_midpoint', 'circle_3pts', 'circumcircle', 'incircle', 'nine_point_circle', 'angle_bisector']);
 
+/**
+ * Các tam giác trong hình: bộ 3 điểm dùng trong bước kiểu tam giác, hoặc 3 điểm đôi một nối bằng
+ * đoạn/đường thẳng/tia. Dùng để loại cấu hình có tam giác dẹt và để nhận diện O, H, I, đường tròn Euler...
+ */
+export function findTriangles(doc, kindOf) {
+  const tri = new Map();
+  const addTri = (ids) => {
+    if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === 'point')) return;
+    const key = [...ids].sort().join(',');
+    if (!tri.has(key)) tri.set(key, ids);
+  };
+  for (const s of doc.steps) if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3) addTri(s.args);
+  const adj = new Map();
+  const link = (a, b) => {
+    if (!adj.has(a)) adj.set(a, new Set());
+    if (!adj.has(b)) adj.set(b, new Set());
+    adj.get(a).add(b);
+    adj.get(b).add(a);
+  };
+  for (const s of doc.steps) if (['line', 'segment', 'ray'].includes(s.type)) link(s.args[0], s.args[1]);
+  for (const [a, nb] of adj) for (const b of nb) for (const c of nb) if (a < b && b < c && adj.get(b).has(c)) addTri([a, b, c]);
+  return [...tri.values()];
+}
+
 /** Sinh một cấu hình ngẫu nhiên: trả về Map id → params thay thế. */
 function randomOverrides(doc, base, scale, rand, perturb) {
   const ov = new Map();
@@ -69,7 +93,7 @@ function randomOverrides(doc, base, scale, rand, perturb) {
 
 /** Cấu hình có gần suy biến không? */
 function degenerate(doc, vals, ctx) {
-  const { pointIds, curveIds, sameClassPairs, opts, kindOf } = ctx;
+  const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist } = ctx;
   const scale = figureScale(vals, pointIds);
   for (const id of [...pointIds, ...curveIds]) if (!vals.get(id)) return 'không xác định';
   // điểm gần trùng nhau
@@ -78,17 +102,20 @@ function degenerate(doc, vals, ctx) {
     const a = vals.get(pointIds[i]);
     for (let j = i + 1; j < pointIds.length; j++) {
       if (sameClassPairs.has(pointIds[i] + '|' + pointIds[j])) continue;
-      if (G.dist(a, vals.get(pointIds[j])) < sep) return 'điểm gần trùng';
+      const d = G.dist(a, vals.get(pointIds[j]));
+      // gần trùng: vừa nhỏ so với kích thước hình, vừa co lại nhiều so với cấu hình gốc
+      // (hai điểm vốn ở gần nhau trong hình gốc thì không bị coi là suy biến)
+      if (d < sep && (!baseDist || d < 0.3 * baseDist[i][j])) return 'điểm gần trùng';
     }
   }
   // tam giác dẹt, đường tròn quá lớn, giao điểm gần tiếp xúc
   const sinMin = Math.sin((opts.minAngle * Math.PI) / 180);
+  const ang = (P, Q, R) => Math.abs(G.cross(G.sub(Q, P), G.sub(R, P))) / (G.dist(P, Q) * G.dist(P, R) + 1e-300);
+  for (const t of triangles) {
+    const [A, B, C] = t.map((a) => vals.get(a));
+    if (Math.min(ang(A, B, C), ang(B, C, A), ang(C, A, B)) < sinMin) return 'tam giác dẹt';
+  }
   for (const s of doc.steps) {
-    if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && s.args.every((a) => kindOf.get(a) === 'point')) {
-      const [A, B, C] = s.args.map((a) => vals.get(a));
-      const ang = (P, Q, R) => Math.abs(G.cross(G.sub(Q, P), G.sub(R, P))) / (G.dist(P, Q) * G.dist(P, R) + 1e-300);
-      if (Math.min(ang(A, B, C), ang(B, C, A), ang(C, A, B)) < sinMin) return 'tam giác dẹt';
-    }
     const v = vals.get(s.id);
     if (v && v.kind === 'circle' && v.r > opts.maxRadius * scale) return 'đường tròn quá lớn';
     if (s.type === 'intersection' || s.type === 'intersection_other') {
@@ -149,11 +176,13 @@ export function explore(doc, options = {}) {
 
   // ---- lấy mẫu ----
   const rand = rng(opts.seed);
-  const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf };
+  const triangles = findTriangles(doc, kindOf);
+  const baseDist = pointIds.map((a) => pointIds.map((b) => G.dist(base.get(a), base.get(b))));
+  const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist };
   const samples = [{ vals: base, scale: scale0 }];
   let attempts = 0;
   const rejected = {};
-  const baseDegenerate = degenerate(doc, base, ctx);
+  const baseDegenerate = degenerate(doc, base, { ...ctx, baseDist: null });
   while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
     attempts++;
     const ov = randomOverrides(doc, base, scale0, rand, opts.perturb);
@@ -180,7 +209,7 @@ export function explore(doc, options = {}) {
   const reps = pointIds.filter((id) => rep(id) === id);
   const know = new Knowledge(doc, rep);
 
-  const special = recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts);
+  const special = recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts, triangles);
   const rel = [];
   const name = (id) => stepById(doc, id)?.name || id;
   const desc = (id) => describe(doc, id);
@@ -335,7 +364,7 @@ export function explore(doc, options = {}) {
     rel.some((o) => o !== r && o.type === r.type && o.ids.length > r.ids.length && r.ids.every((x) => o.ids.includes(x)))));
   for (const r of final) {
     r.score = scoreOf(r, doc, kindOf, special);
-    const notes = [...new Set(r.ids.filter((id) => special.has(id)).map((id) => `${describe(doc, id)} là ${special.get(id).label}`))];
+    const notes = [...new Set(r.ids.filter((id) => special.has(id) && !STEP_TYPES[stepById(doc, id)?.type]?.tag).map((id) => `${describe(doc, id)} là ${special.get(id).label}`))];
     if (notes.length) r.note = notes.join('; ');
   }
   final.sort((a, b) => b.score - a.score || a.ids.length - b.ids.length);
@@ -401,22 +430,11 @@ function scoreOf(r, doc, kindOf, recognized) {
 // Tam giác = bộ 3 điểm dùng trong các bước kiểu tam giác, hoặc 3 điểm đôi một nối bởi đoạn/đường thẳng.
 // Đối tượng (dựng theo cách bất kỳ) trùng với O, H, I, G, N hay đường tròn ngoại tiếp/nội tiếp/Euler
 // của một tam giác như vậy trên mọi mẫu sẽ được ưu tiên khi xếp hạng.
-function recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts) {
-  const tri = new Map();
-  const addTri = (ids) => {
-    if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === 'point')) return;
-    const key = [...ids].sort().join(',');
-    if (!tri.has(key)) tri.set(key, ids);
-  };
-  for (const s of doc.steps) if (TRIANGLE_TYPES.has(s.type) && s.type !== 'angle_bisector' && s.args.length === 3) addTri(s.args);
-  const adj = new Map();
-  const link = (a, b) => { (adj.get(a) || adj.set(a, new Set()).get(a)).add(b); (adj.get(b) || adj.set(b, new Set()).get(b)).add(a); };
-  for (const s of doc.steps) if (['line', 'segment', 'ray'].includes(s.type)) link(s.args[0], s.args[1]);
-  for (const [a, nb] of adj) for (const b of nb) for (const c of nb) if (a < b && b < c && adj.get(b)?.has(c)) addTri([a, b, c]);
+function recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts, tri) {
   const out = new Map();
   const name = (id) => stepById(doc, id)?.name || id;
   let count = 0;
-  for (const [A, B, C] of tri.values()) {
+  for (const [A, B, C] of tri) {
     if (++count > 12) break;
     const triName = name(A) + name(B) + name(C);
     const at = (v) => [v.get(A), v.get(B), v.get(C)];

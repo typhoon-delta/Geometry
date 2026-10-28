@@ -121,8 +121,10 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   await page.click(`.rel[data-i="${iCyc}"]`);
   ok(await page.evaluate(() => __app.renderer.extra.some((e) => e.elType === 'circumcircle')), 'quan hệ đồng viên vẽ đường tròn phụ đứt nét');
   await shot('m4-kham-pha-dong-vien');
+  await page.evaluate(() => __app.commit((d) => { d.steps[0].params.x += 0.1; }));
+  ok(await page.locator('.stale').count() === 1, 'sửa hình → báo kết quả cũ');
   await page.selectOption('#sel-example', 'simson');
-  ok(await page.locator('.stale').count() === 1, 'đổi hình → báo kết quả cũ');
+  ok(await page.locator('.rel').count() === 0, 'mở hình khác → xoá kết quả cũ');
   await page.click('#btn-run-explore');
   await page.waitForFunction(() => !document.querySelector('.stale') && document.querySelector('.rel'));
   await page.click('.rel[data-i="0"]');
@@ -138,6 +140,39 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   ok(/\\begin\{tikzpicture\}/.test(tex) && /\\coordinate \(P\)/.test(tex) && !/NaN|undefined/.test(tex), 'xuất TikZ từ giao diện');
   await shot('m5-tikz');
   await page.click('.modal .primary');
+
+  // ---------- Bổ sung: điểm trên đường tròn, vuông góc, đối xứng ----------
+  console.log('Bổ sung: điểm trên đối tượng, vuông góc (chọn tuỳ thứ tự), đối xứng');
+  await page.evaluate(() => __app.loadDoc(GeoCore.emptyDoc()));
+  await tool('circle');
+  await clickAt(0, 0); await clickAt(3, 0);
+  await tool('point');
+  await clickAt(0, 3.0);
+  let s3 = await state();
+  const pon = s3.steps[s3.n - 1];
+  ok(pon.type === 'point_on', 'bấm lên đường tròn bằng công cụ Điểm tạo điểm trên đường tròn');
+  await tool('move');
+  const pp = await page.evaluate((id) => { const v = __app.values.get(id); return __app.toScreen(v); }, pon.id);
+  const bb = await page.locator('#board').boundingBox();
+  await page.mouse.move(bb.x + pp.x, bb.y + pp.y);
+  await page.mouse.down();
+  await page.mouse.move(bb.x + pp.x + 120, bb.y + pp.y + 200, { steps: 6 });
+  await page.mouse.up();
+  const r = await page.evaluate((id) => { const v = __app.values.get(id); return Math.hypot(v.x, v.y); }, pon.id);
+  ok(Math.abs(r - 3) < 1e-9, `kéo điểm trên đường tròn vẫn nằm trên đường tròn (r = ${r.toFixed(6)})`);
+  await tool('line');
+  await clickAt(-4, -4); await clickAt(4, -3);
+  await tool('perpendicular');
+  await clickAt(0, -3.5); // bấm đường thẳng trước
+  await clickAt(0, 0); // rồi tâm
+  s3 = await state();
+  ok(s3.steps[s3.n - 1].type === 'perpendicular' && s3.steps[s3.n - 1].args[0] === s3.steps[0].id, 'đường vuông góc: chọn đường trước, điểm sau vẫn đúng thứ tự đối số');
+  await tool('reflect');
+  await clickAt(1.5, 1.5); // một điểm tự do mới
+  await clickAt(0, -3.5); // trục là đường thẳng
+  s3 = await state();
+  ok(s3.steps[s3.n - 1].type === 'reflect', 'đối xứng qua đường thẳng');
+  await shot('bo-sung');
 
   if (globalThis.__smokeMore) await globalThis.__smokeMore({ page, ok, shot, state, tool, clickAt });
 }

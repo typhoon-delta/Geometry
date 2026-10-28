@@ -8,6 +8,7 @@
 
 import { evaluate, kinds, stepById } from '../core/model.js';
 import * as G from '../core/geom.js';
+import { autoLabelDirs } from '../core/labels.js';
 
 const NAMED_COLORS = {
   '#111827': 'black', '#1d4ed8': 'xanhduong', '#dc2626': 'do', '#15803d': 'xanhla', '#ea580c': 'cam',
@@ -117,6 +118,7 @@ export function toTikZ(doc, opts = {}) {
   }
   const ref = (id) => `(${cname.get(id)})`;
 
+  const autoDirs = autoLabelDirs(doc, vals);
   const out = { coords: [], fills: [], circles: [], lines: [], marks: [], points: [], labels: [] };
   for (const [id, n] of cname) out.coords.push(`\\coordinate (${n}) at ${xy(vals.get(id))};${stepById(doc, id)?.hidden ? ' % điểm ẩn' : ''}`);
 
@@ -158,7 +160,8 @@ export function toTikZ(doc, opts = {}) {
       const r = ((st.size || 3) * 0.5).toFixed(1);
       const pc = st.color && st.color.toLowerCase() !== '#111827' ? col(s) : 'black';
       out.points.push(`\\fill${opt(pc)} ${ref(s.id)} circle (${r}pt);`);
-      if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(st.labelOffset || [8, 10])}] at ${ref(s.id)} {${texLabel(s.name)}};`);
+      const dir = st.labelOffset || (autoDirs.get(s.id) ? [autoDirs.get(s.id).x, autoDirs.get(s.id).y] : [1, 1]);
+      if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}] at ${ref(s.id)} {${texLabel(s.name)}};`);
     }
   }
 

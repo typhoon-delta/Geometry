@@ -748,7 +748,7 @@
     segment_mark: { color: "#dc2626", ticks: 1 }
   };
   var DEFAULT_BY_KIND = {
-    point: { color: "#111827", size: 3, showLabel: true, labelOffset: [8, 10] },
+    point: { color: "#111827", size: 3, showLabel: true },
     line: { color: "#111827", width: 1.6, dash: false, showLabel: false },
     circle: { color: "#111827", width: 1.6, dash: false, fill: 0, showLabel: false },
     mark: { color: "#dc2626", width: 1.6 }
@@ -758,7 +758,81 @@
   }
   var isDraggableType = (type) => type === "free_point" || type === "point_on";
 
+  // src/core/labels.js
+  var N_DIR = 16;
+  function autoLabelDirs(doc, values, isShown = (s) => !s.hidden) {
+    const k = kinds(doc);
+    const shown = doc.steps.filter((s) => isShown(s) && values.get(s.id));
+    const pts = shown.filter((s) => k.get(s.id) === "point");
+    const curves = shown.filter((s) => k.get(s.id) === "line" || k.get(s.id) === "circle");
+    if (!pts.length) return /* @__PURE__ */ new Map();
+    let cx = 0, cy = 0, x1 = Infinity, x2 = -Infinity, y1 = Infinity, y2 = -Infinity;
+    for (const s of pts) {
+      const v = values.get(s.id);
+      cx += v.x;
+      cy += v.y;
+      x1 = Math.min(x1, v.x);
+      x2 = Math.max(x2, v.x);
+      y1 = Math.min(y1, v.y);
+      y2 = Math.max(y2, v.y);
+    }
+    cx /= pts.length;
+    cy /= pts.length;
+    const scale = Math.max(x2 - x1, y2 - y1, 1e-9);
+    const near = 0.12 * scale;
+    const out = /* @__PURE__ */ new Map();
+    for (const s of pts) {
+      if (s.style && s.style.labelOffset) continue;
+      const P2 = values.get(s.id);
+      const blocked = [];
+      for (const c of curves) {
+        const v = values.get(c.id);
+        if (distToObject(v, P2) > 1e-6 * scale) continue;
+        if (v.kind === "line") {
+          const a = Math.atan2(v.d.y, v.d.x);
+          const t = lineParam(P2, v);
+          const sub2 = c.type === "segment" ? "segment" : c.type === "ray" ? "ray" : v.sub;
+          const fwd = sub2 === "line" || (sub2 === "ray" ? true : t < 1 - 1e-9);
+          const back = sub2 === "line" || t > 1e-9;
+          if (fwd) blocked.push([a, 1]);
+          if (back) blocked.push([a + Math.PI, 1]);
+        } else {
+          const a = Math.atan2(P2.y - v.c.y, P2.x - v.c.x);
+          blocked.push([a + Math.PI / 2, 1], [a - Math.PI / 2, 1], [a + Math.PI, 0.4]);
+        }
+      }
+      for (const o of pts) {
+        if (o === s) continue;
+        const Q = values.get(o.id);
+        const d = dist(P2, Q);
+        if (d > 1e-9 && d < near) blocked.push([Math.atan2(Q.y - P2.y, Q.x - P2.x), 0.8]);
+      }
+      const away = Math.atan2(P2.y - cy, P2.x - cx);
+      const hasAway = Math.hypot(P2.x - cx, P2.y - cy) > 0.02 * scale;
+      let best = Math.PI / 4, bestScore = -Infinity;
+      for (let i = 0; i < N_DIR; i++) {
+        const th = 2 * Math.PI * i / N_DIR;
+        let gap = Math.PI;
+        for (const [a, w] of blocked) gap = Math.min(gap, angDiff(th, a) / w);
+        let score = Math.min(gap, Math.PI / 2) * 2;
+        if (hasAway) score += 0.5 * Math.cos(angDiff(th, away));
+        score += 0.05 * Math.cos(angDiff(th, Math.PI / 4));
+        if (score > bestScore) {
+          bestScore = score;
+          best = th;
+        }
+      }
+      out.set(s.id, { x: Math.cos(best), y: Math.sin(best) });
+    }
+    return out;
+  }
+  function angDiff(a, b) {
+    let d = Math.abs(a - b) % (2 * Math.PI);
+    return d > Math.PI ? 2 * Math.PI - d : d;
+  }
+
   // src/ui/render.js
+  var LABEL_DIST = 13;
   var HALO = "#60a5fa";
   var RELATION = "#f59e0b";
   function labelHTML(name) {
@@ -797,6 +871,8 @@
       const visible = opts.visible || null;
       const selected = opts.selected || /* @__PURE__ */ new Set();
       const highlight = opts.highlight || /* @__PURE__ */ new Set();
+      this.autoDirs = autoLabelDirs(doc, values, (s) => !s.hidden && (!visible || visible.has(s.id)));
+      this.labelOffsets = /* @__PURE__ */ new Map();
       const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
       const steps = doc.steps.filter((s) => !s.hidden && (!visible || visible.has(s.id))).map((s) => ({ s, kind: k.get(s.id) })).sort((a, b2) => (order[a.s.type === "polygon" ? "polygon" : a.kind] ?? 3) - (order[b2.s.type === "polygon" ? "polygon" : b2.kind] ?? 3));
       for (const { s, kind } of steps) {
@@ -861,6 +937,9 @@
             strokeOpacity: 0.6
           }));
         }
+        const dir = this.autoDirs?.get(id) || { x: 0.7, y: 0.7 };
+        const off = st.labelOffset || [Math.round(dir.x * LABEL_DIST), Math.round(dir.y * LABEL_DIST)];
+        this.labelOffsets.set(id, off);
         const p = b.create("point", [this.fx(() => V()?.x), this.fx(() => V()?.y)], {
           ...common,
           name: st.showLabel ? labelHTML(s.name) : "",
@@ -871,7 +950,9 @@
           strokeWidth: 1 * sc,
           fillColor: hl ? RELATION : st.fillColor || st.color,
           label: {
-            offset: (st.labelOffset || [8, 10]).map((v) => v * sc),
+            offset: off.map((v) => v * sc),
+            anchorX: "middle",
+            anchorY: "middle",
             fontSize: Math.round(16 * sc),
             strokeColor: hl ? "#b45309" : st.labelColor || "#111827",
             cssClass: "pt-label",
@@ -1397,6 +1478,7 @@
       this.cancelTool();
       if (doc.view && Array.isArray(doc.view.bbox)) this.board.setBoundingBox(doc.view.bbox, true);
       this.refresh();
+      this.emit("load");
       this.emit("change");
     }
     pushUndo(snapshot) {
@@ -1662,7 +1744,6 @@
     toolClick(sx, sy) {
       const tool = TOOL_BY_ID[this.toolId];
       const hits = this.hitTest(sx, sy).filter((h) => h.kind !== "mark");
-      const k = kinds(this.doc);
       this.beginTx();
       if (tool.id === "point") {
         const id2 = this.resolvePoint(sx, sy, hits);
@@ -1719,7 +1800,6 @@
         }
         if (this.picks.length === tool.inputs.length) return this.completeTool(tool);
       }
-      void k;
       this.selection = new Set(this.picks);
       this.refresh();
       this.startPreview(tool);
@@ -1819,7 +1899,7 @@
         e.stopPropagation();
         e.preventDefault();
         const s = stepById(this.doc, lab);
-        const off = s.style && s.style.labelOffset || [8, 10];
+        const off = s.style && s.style.labelOffset || this.renderer.labelOffsets.get(lab) || [9, 9];
         this.startDrag(e, { kind: "label", id: lab, start: JSON.stringify(this.doc), sx, sy, off: [...off] });
         return;
       }
@@ -2021,8 +2101,12 @@
       if (!pts.length) return this.board.setBoundingBox([-8, 6, 8, -6], true);
       const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
       let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-      const m = Math.max(x2 - x1, y2 - y1, 1) * 0.12;
-      this.board.setBoundingBox([x1 - m, y2 + m, x2 + m, y1 - m], true);
+      const m = Math.max(x2 - x1, y2 - y1, 1) * 0.1;
+      [x1, x2, y1, y2] = [x1 - m, x2 + m, y1 - m, y2 + m];
+      const W = this.board.canvasWidth, H = this.board.canvasHeight;
+      const per = Math.max((x2 - x1) / W, (y2 - y1) / H);
+      const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+      this.board.setBoundingBox([cx - per * W / 2, cy + per * H / 2, cx + per * W / 2, cy - per * H / 2], true);
     }
     // ================= bàn phím & nút =================
     bindKeys() {
@@ -2758,6 +2842,25 @@
     return Number.isFinite(s) && s > 1e-12 ? s : 1;
   }
   var TRIANGLE_TYPES = /* @__PURE__ */ new Set(["circumcenter", "orthocenter", "incenter", "centroid", "nine_point_center", "altitude_foot", "incircle_touch", "arc_midpoint", "circle_3pts", "circumcircle", "incircle", "nine_point_circle", "angle_bisector"]);
+  function findTriangles(doc, kindOf) {
+    const tri2 = /* @__PURE__ */ new Map();
+    const addTri = (ids) => {
+      if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === "point")) return;
+      const key = [...ids].sort().join(",");
+      if (!tri2.has(key)) tri2.set(key, ids);
+    };
+    for (const s of doc.steps) if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3) addTri(s.args);
+    const adj = /* @__PURE__ */ new Map();
+    const link = (a, b) => {
+      if (!adj.has(a)) adj.set(a, /* @__PURE__ */ new Set());
+      if (!adj.has(b)) adj.set(b, /* @__PURE__ */ new Set());
+      adj.get(a).add(b);
+      adj.get(b).add(a);
+    };
+    for (const s of doc.steps) if (["line", "segment", "ray"].includes(s.type)) link(s.args[0], s.args[1]);
+    for (const [a, nb] of adj) for (const b of nb) for (const c of nb) if (a < b && b < c && adj.get(b).has(c)) addTri([a, b, c]);
+    return [...tri2.values()];
+  }
   function randomOverrides(doc, base, scale, rand, perturb) {
     const ov = /* @__PURE__ */ new Map();
     for (const s of doc.steps) {
@@ -2779,7 +2882,7 @@
     return ov;
   }
   function degenerate(doc, vals, ctx) {
-    const { pointIds, curveIds, sameClassPairs, opts, kindOf } = ctx;
+    const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist } = ctx;
     const scale = figureScale(vals, pointIds);
     for (const id of [...pointIds, ...curveIds]) if (!vals.get(id)) return "kh\xF4ng x\xE1c \u0111\u1ECBnh";
     const sep = opts.minSep * scale;
@@ -2787,16 +2890,17 @@
       const a = vals.get(pointIds[i]);
       for (let j = i + 1; j < pointIds.length; j++) {
         if (sameClassPairs.has(pointIds[i] + "|" + pointIds[j])) continue;
-        if (dist(a, vals.get(pointIds[j])) < sep) return "\u0111i\u1EC3m g\u1EA7n tr\xF9ng";
+        const d = dist(a, vals.get(pointIds[j]));
+        if (d < sep && (!baseDist || d < 0.3 * baseDist[i][j])) return "\u0111i\u1EC3m g\u1EA7n tr\xF9ng";
       }
     }
     const sinMin = Math.sin(opts.minAngle * Math.PI / 180);
+    const ang = (P2, Q, R) => Math.abs(cross(sub(Q, P2), sub(R, P2))) / (dist(P2, Q) * dist(P2, R) + 1e-300);
+    for (const t of triangles) {
+      const [A, B, C] = t.map((a) => vals.get(a));
+      if (Math.min(ang(A, B, C), ang(B, C, A), ang(C, A, B)) < sinMin) return "tam gi\xE1c d\u1EB9t";
+    }
     for (const s of doc.steps) {
-      if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && s.args.every((a) => kindOf.get(a) === "point")) {
-        const [A, B, C] = s.args.map((a) => vals.get(a));
-        const ang = (P2, Q, R) => Math.abs(cross(sub(Q, P2), sub(R, P2))) / (dist(P2, Q) * dist(P2, R) + 1e-300);
-        if (Math.min(ang(A, B, C), ang(B, C, A), ang(C, A, B)) < sinMin) return "tam gi\xE1c d\u1EB9t";
-      }
       const v = vals.get(s.id);
       if (v && v.kind === "circle" && v.r > opts.maxRadius * scale) return "\u0111\u01B0\u1EDDng tr\xF2n qu\xE1 l\u1EDBn";
       if (s.type === "intersection" || s.type === "intersection_other") {
@@ -2847,11 +2951,13 @@
       for (let j = i + 1; j < pointIds.length; j++)
         if (dist(base.get(pointIds[i]), base.get(pointIds[j])) < opts.tol * scale0) sameClassPairs.add(pointIds[i] + "|" + pointIds[j]);
     const rand = rng(opts.seed);
-    const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf };
+    const triangles = findTriangles(doc, kindOf);
+    const baseDist = pointIds.map((a) => pointIds.map((b) => dist(base.get(a), base.get(b))));
+    const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist };
     const samples = [{ vals: base, scale: scale0 }];
     let attempts = 0;
     const rejected = {};
-    const baseDegenerate = degenerate(doc, base, ctx);
+    const baseDegenerate = degenerate(doc, base, { ...ctx, baseDist: null });
     while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
       attempts++;
       const ov = randomOverrides(doc, base, scale0, rand, opts.perturb);
@@ -2881,7 +2987,7 @@
     const rep = (id) => repOf.get(id) || id;
     const reps = pointIds.filter((id) => rep(id) === id);
     const know = new Knowledge(doc, rep);
-    const special = recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts);
+    const special = recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts, triangles);
     const rel = [];
     const name = (id) => stepById(doc, id)?.name || id;
     const desc = (id) => describe(doc, id);
@@ -3018,7 +3124,7 @@
     const final = rel.filter((r) => !((r.type === "collinear" || r.type === "concyclic") && rel.some((o) => o !== r && o.type === r.type && o.ids.length > r.ids.length && r.ids.every((x) => o.ids.includes(x)))));
     for (const r of final) {
       r.score = scoreOf(r, doc, kindOf, special);
-      const notes = [...new Set(r.ids.filter((id) => special.has(id)).map((id) => `${describe(doc, id)} l\xE0 ${special.get(id).label}`))];
+      const notes = [...new Set(r.ids.filter((id) => special.has(id) && !STEP_TYPES[stepById(doc, id)?.type]?.tag).map((id) => `${describe(doc, id)} l\xE0 ${special.get(id).label}`))];
       if (notes.length) r.note = notes.join("; ");
     }
     final.sort((a, b) => b.score - a.score || a.ids.length - b.ids.length);
@@ -3069,25 +3175,11 @@
     if (r.ids.some((id) => kindOf.get(id) === "circle")) s += 0.5;
     return Math.round(s * 10) / 10;
   }
-  function recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts) {
-    const tri2 = /* @__PURE__ */ new Map();
-    const addTri = (ids) => {
-      if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === "point")) return;
-      const key = [...ids].sort().join(",");
-      if (!tri2.has(key)) tri2.set(key, ids);
-    };
-    for (const s of doc.steps) if (TRIANGLE_TYPES.has(s.type) && s.type !== "angle_bisector" && s.args.length === 3) addTri(s.args);
-    const adj = /* @__PURE__ */ new Map();
-    const link = (a, b) => {
-      (adj.get(a) || adj.set(a, /* @__PURE__ */ new Set()).get(a)).add(b);
-      (adj.get(b) || adj.set(b, /* @__PURE__ */ new Set()).get(b)).add(a);
-    };
-    for (const s of doc.steps) if (["line", "segment", "ray"].includes(s.type)) link(s.args[0], s.args[1]);
-    for (const [a, nb] of adj) for (const b of nb) for (const c of nb) if (a < b && b < c && adj.get(b)?.has(c)) addTri([a, b, c]);
+  function recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts, tri2) {
     const out = /* @__PURE__ */ new Map();
     const name = (id) => stepById(doc, id)?.name || id;
     let count = 0;
-    for (const [A, B, C] of tri2.values()) {
+    for (const [A, B, C] of tri2) {
       if (++count > 12) break;
       const triName = name(A) + name(B) + name(C);
       const at = (v) => [v.get(A), v.get(B), v.get(C)];
@@ -3191,6 +3283,11 @@
       app.setRelation(active >= 0 ? result.relations[active] : null);
       render();
     };
+    app.on("load", () => {
+      result = null;
+      active = -1;
+      render();
+    });
     app.on("change", () => {
       if (result && !stale) {
         stale = true;
@@ -3339,6 +3436,7 @@
       if (!cname.has(a) && vals.get(a)) cname.set(a, coordName(stepById(doc, a)?.name || a, used));
     }
     const ref = (id) => `(${cname.get(id)})`;
+    const autoDirs = autoLabelDirs(doc, vals);
     const out = { coords: [], fills: [], circles: [], lines: [], marks: [], points: [], labels: [] };
     for (const [id, n] of cname) out.coords.push(`\\coordinate (${n}) at ${xy(vals.get(id))};${stepById(doc, id)?.hidden ? " % \u0111i\u1EC3m \u1EA9n" : ""}`);
     for (const s of visible) {
@@ -3379,7 +3477,8 @@
         const r = ((st.size || 3) * 0.5).toFixed(1);
         const pc = st.color && st.color.toLowerCase() !== "#111827" ? col(s) : "black";
         out.points.push(`\\fill${opt(pc)} ${ref(s.id)} circle (${r}pt);`);
-        if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(st.labelOffset || [8, 10])}] at ${ref(s.id)} {${texLabel(s.name)}};`);
+        const dir = st.labelOffset || (autoDirs.get(s.id) ? [autoDirs.get(s.id).x, autoDirs.get(s.id).y] : [1, 1]);
+        if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}] at ${ref(s.id)} {${texLabel(s.name)}};`);
       }
     }
     const L = [];

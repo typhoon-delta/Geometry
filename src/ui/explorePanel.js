@@ -62,6 +62,11 @@ export function setupExplore(app) {
     render();
   };
 
+  app.on('load', () => {
+    result = null;
+    active = -1;
+    render();
+  });
   app.on('change', () => {
     if (result && !stale) { stale = true; render(); }
   });

@@ -103,3 +103,31 @@ test('tiếp xúc, song song, vuông góc, đồng quy và loại bỏ hiển nh
   assert.ok(!has(res.relations, 'perpendicular', [hA, BC]), s);
   void perpIT;
 });
+
+test('hình lớn (~30 điểm): tìm Feuerbach, đường thẳng Euler; chạy đủ nhanh', () => {
+  const b = new Builder();
+  const A = b.point(-0.6, 3.4, 'A'), B = b.point(-3.4, -1.6, 'B'), C = b.point(3.6, -1.6, 'C');
+  const sAB = b.add('line', [A, B]), sBC = b.add('line', [B, C]), sCA = b.add('line', [C, A]);
+  const O = b.add('circumcenter', [A, B, C], {}, 'O'), H = b.add('orthocenter', [A, B, C], {}, 'H');
+  const I = b.add('incenter', [A, B, C], {}, 'I');
+  const Gc = b.add('centroid', [A, B, C], {}, 'G'), N = b.add('nine_point_center', [A, B, C], {}, 'N');
+  const w = b.add('circumcircle', [A, B, C]);
+  const inc = b.add('incircle', [A, B, C]);
+  const npc = b.add('nine_point_circle', [A, B, C]);
+  for (const [X, Y, Z] of [[A, B, C], [B, C, A], [C, A, B]]) {
+    b.add('altitude_foot', [X, Y, Z]); b.add('incircle_touch', [X, Y, Z]);
+    b.add('arc_midpoint', [X, Y, Z], { contains: false }); b.add('arc_midpoint', [X, Y, Z], { contains: true });
+    b.add('midpoint', [Y, Z]); b.add('midpoint', [X, H]); b.add('line', [X, I]); b.add('line', [X, O]);
+  }
+  const OH = b.add('line', [O, H]);
+  const P = b.add('point_on', [w], { t: 2.1 }, 'P');
+  for (const l of [sAB, sBC, sCA]) b.add('projection', [P, l]);
+  const t0 = Date.now();
+  const res = explore(b.doc);
+  const ms = Date.now() - t0;
+  assert.ok(ms < 3000, `chạy quá lâu: ${ms} ms`);
+  assert.ok(res.stats.samples >= 10, JSON.stringify(res.stats));
+  assert.ok(has(res.relations, 'tangent', [inc, npc]), 'không tìm thấy Feuerbach:\n' + show(res));
+  assert.ok(has(res.relations, 'on_line', [OH, Gc, N]), show(res));
+  assert.equal(res.relations[0].type, 'tangent');
+});

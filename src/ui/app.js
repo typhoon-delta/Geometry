@@ -79,6 +79,7 @@ export class App {
     this.cancelTool();
     if (doc.view && Array.isArray(doc.view.bbox)) this.board.setBoundingBox(doc.view.bbox, true);
     this.refresh();
+    this.emit('load');
     this.emit('change');
   }
 
@@ -357,7 +358,6 @@ export class App {
   toolClick(sx, sy) {
     const tool = TOOL_BY_ID[this.toolId];
     const hits = this.hitTest(sx, sy).filter((h) => h.kind !== 'mark');
-    const k = kinds(this.doc);
     this.beginTx();
 
     if (tool.id === 'point') {
@@ -421,7 +421,6 @@ export class App {
       }
       if (this.picks.length === tool.inputs.length) return this.completeTool(tool);
     }
-    void k;
     this.selection = new Set(this.picks);
     this.refresh();
     this.startPreview(tool);
@@ -532,7 +531,7 @@ export class App {
       e.stopPropagation();
       e.preventDefault();
       const s = stepById(this.doc, lab);
-      const off = (s.style && s.style.labelOffset) || [8, 10];
+      const off = (s.style && s.style.labelOffset) || this.renderer.labelOffsets.get(lab) || [9, 9];
       this.startDrag(e, { kind: 'label', id: lab, start: JSON.stringify(this.doc), sx, sy, off: [...off] });
       return;
     }
@@ -735,8 +734,13 @@ export class App {
     if (!pts.length) return this.board.setBoundingBox([-8, 6, 8, -6], true);
     const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
     let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-    const m = Math.max(x2 - x1, y2 - y1, 1) * 0.12;
-    this.board.setBoundingBox([x1 - m, y2 + m, x2 + m, y1 - m], true);
+    const m = Math.max(x2 - x1, y2 - y1, 1) * 0.1;
+    [x1, x2, y1, y2] = [x1 - m, x2 + m, y1 - m, y2 + m];
+    // giữ tỉ lệ 1:1 theo kích thước khung vẽ
+    const W = this.board.canvasWidth, H = this.board.canvasHeight;
+    const per = Math.max((x2 - x1) / W, (y2 - y1) / H);
+    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+    this.board.setBoundingBox([cx - (per * W) / 2, cy + (per * H) / 2, cx + (per * W) / 2, cy - (per * H) / 2], true);
   }
 
   // ================= bàn phím & nút =================
