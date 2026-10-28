@@ -9,6 +9,7 @@
 import { evaluate, kinds, stepById } from '../core/model.js';
 import * as G from '../core/geom.js';
 import { autoLabelDirs } from '../core/labels.js';
+import { texLabel } from '../core/names.js';
 
 const NAMED_COLORS = {
   '#111827': 'black', '#1d4ed8': 'xanhduong', '#dc2626': 'do', '#15803d': 'xanhla', '#ea580c': 'cam',
@@ -21,13 +22,7 @@ const f3 = (v) => {
 };
 const xy = (P) => `(${f3(P.x)}, ${f3(P.y)})`;
 
-/** Tên toán học cho nhãn: A1 → A_1, A' giữ nguyên, ω → \omega. */
-export function texLabel(name) {
-  const greek = { 'ω': '\\omega', 'Ω': '\\Omega', 'α': '\\alpha', 'β': '\\beta', 'γ': '\\gamma', 'δ': '\\delta', 'Δ': '\\Delta', 'φ': '\\varphi', 'θ': '\\theta' };
-  let s = name.replace(/[ωΩαβγδΔφθ]/g, (c) => greek[c] + ' ');
-  s = s.replace(/^(.*?)(\d+)('*)$/, (_, a, d, p) => (a ? `${a.trim()}_{${d}}${p}` : d + p));
-  return `$${s.trim()}$`;
-}
+export { texLabel };
 
 function coordName(name, used) {
   let base = (name || 'P').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/'/g, 'p').replace(/[^A-Za-z0-9]/g, '');

@@ -37,29 +37,47 @@ export const paramsOf = (step) => ({ ...(STEP_TYPES[step.type]?.params || {}), .
  */
 export function evaluate(doc, overrides = null) {
   const vals = new Map();
-  for (const s of doc.steps) {
-    const def = STEP_TYPES[s.type];
-    let v = null;
-    if (def) {
-      const argVals = s.args.map((a) => vals.get(a));
-      const ok = argVals.every((a, i) => {
-        if (!a) return false;
-        const t = def.args[0] === '...point' ? '...point' : def.args[i];
-        return argAccepts(t, a.kind);
-      });
-      if (ok) {
-        const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
-        try {
-          v = def.compute(argVals, p) || null;
-        } catch {
-          v = null;
-        }
-        if (v && def.kind !== 'mark' && !valueFinite(v)) v = null;
-      }
-    }
-    vals.set(s.id, v);
-  }
+  for (const s of doc.steps) vals.set(s.id, computeStep(s, vals, overrides));
   return vals;
+}
+
+/** Tính giá trị một bước từ giá trị các bước trước (vals). */
+export function computeStep(s, vals, overrides = null) {
+  const def = STEP_TYPES[s.type];
+  if (!def) return null;
+  const variadic = def.args[0] === '...point';
+  const argVals = new Array(s.args.length);
+  for (let i = 0; i < s.args.length; i++) {
+    const a = vals.get(s.args[i]);
+    if (!a || !argAccepts(variadic ? '...point' : def.args[i], a.kind)) return null;
+    argVals[i] = a;
+  }
+  const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
+  let v;
+  try {
+    v = def.compute(argVals, p) || null;
+  } catch {
+    v = null;
+  }
+  if (v && def.kind !== 'mark' && !valueFinite(v)) v = null;
+  return v;
+}
+
+/**
+ * Bộ cập nhật từng phần: khi chỉ các bước trong `changedIds` đổi tham số (vd điểm đang kéo),
+ * chỉ cần tính lại chúng và các bước phụ thuộc. Trả về hàm update(vals) sửa trực tiếp Map giá trị
+ * (theo đúng thứ tự dựng). Dùng khi kéo: lập kế hoạch một lần lúc nhấn chuột, gọi mỗi khung hình.
+ */
+export function makeUpdater(doc, changedIds) {
+  const need = dependents(doc, changedIds);
+  for (const id of changedIds) need.add(id);
+  const plan = doc.steps.filter((s) => need.has(s.id));
+  const update = (vals) => {
+    for (const s of plan) vals.set(s.id, computeStep(s, vals));
+    return vals;
+  };
+  update.size = plan.length;
+  return update;
 }
 
 function valueFinite(v) {

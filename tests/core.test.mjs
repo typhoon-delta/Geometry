@@ -166,3 +166,19 @@ test('suy biến cho kết quả null thay vì NaN', () => {
   assert.equal(v.get(X), null);
   assert.equal(v.get(M), null);
 });
+
+test('cập nhật từng phần khi kéo cho kết quả y hệt tính lại toàn bộ', async () => {
+  const { EXAMPLES } = await import('../src/core/examples.js');
+  const { makeUpdater } = await import('../src/core/model.js');
+  const doc = EXAMPLES.dense.build();
+  const A = doc.steps.find((s) => s.name === 'A');
+  const vals = evaluate(doc);
+  const upd = makeUpdater(doc, [A.id]);
+  assert.ok(upd.size < doc.steps.length, 'không phải mọi bước đều phụ thuộc A');
+  for (let i = 0; i < 20; i++) {
+    A.params = { x: 0.6 + 0.05 * i, y: 3.6 - 0.03 * i };
+    upd(vals);
+    const full = evaluate(doc);
+    for (const s of doc.steps) assert.deepEqual(vals.get(s.id), full.get(s.id), s.id);
+  }
+});

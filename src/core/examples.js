@@ -73,4 +73,51 @@ export const EXAMPLES = {
       return b.doc;
     },
   },
+  dense: {
+    title: 'Hình dày (mô phỏng đề VMO, dùng đo hiệu năng)',
+    build() {
+      // ~30 điểm, ~40 đường, 5–6 đường tròn: tam giác, 3 tâm bàng tiếp, 3 đường tròn bàng tiếp,
+      // đường tròn ngoại tiếp và nhiều đoạn nối – gần với một hình đề thi thực tế.
+      const b = new Builder();
+      const A = b.point(0.6, 3.6, 'A'), B = b.point(-1.4, -0.6, 'B'), C = b.point(2.4, -0.6, 'C');
+      const BC = b.add('line', [B, C]);
+      b.add('segment', [A, B]); b.add('segment', [A, C]);
+      const eA = b.add('angle_bisector', [B, A, C], { external: true }, undefined, { hidden: true });
+      const eB = b.add('angle_bisector', [A, B, C], { external: true }, undefined, { hidden: true });
+      const eC = b.add('angle_bisector', [A, C, B], { external: true }, undefined, { hidden: true });
+      const IA = b.add('intersection', [eB, eC], {}, 'I_A');
+      const IB = b.add('intersection', [eA, eC], {}, 'I_B');
+      const IC = b.add('intersection', [eA, eB], {}, 'I_C');
+      const TA = b.add('projection', [IA, BC], {}, 'T');
+      const Q = b.add('projection', [IB, BC], {}, 'Q');
+      const P = b.add('projection', [IC, BC], {}, 'P');
+      b.add('circle', [IA, TA]); b.add('circle', [IB, Q]); b.add('circle', [IC, P]);
+      const w = b.add('circumcircle', [A, B, C]);
+      const I = b.add('incenter', [A, B, C], {}, 'I', { hidden: true });
+      for (const [X, Y] of [[IC, IB], [IC, B], [IC, C], [IB, B], [IB, C], [IA, B], [IA, C], [A, IA], [IC, P], [IB, Q]]) b.add('segment', [X, Y]);
+      const lBIB = b.add('line', [B, IB], {}, undefined, { hidden: true });
+      const lCIC = b.add('line', [C, IC], {}, undefined, { hidden: true });
+      const U = b.add('intersection_other', [lBIB, w, B], {}, 'U');
+      const V = b.add('intersection_other', [lCIC, w, C], {}, 'V');
+      const XA = b.add('midpoint', [I, IA], {}, 'X_A');
+      const XB = b.add('midpoint', [I, IB], {}, 'X_B');
+      const XC = b.add('midpoint', [I, IC], {}, 'X_C');
+      const sUV = b.add('segment', [U, V]);
+      const PA = b.add('projection', [A, sUV], {}, 'P_A');
+      const PB = b.add('midpoint', [B, U], {}, 'P_B');
+      const PC = b.add('midpoint', [C, V], {}, 'P_C');
+      const Bp = b.add('reflect', [B, lCIC], {}, "B'");
+      const Cp = b.add('reflect', [C, lBIB], {}, "C'");
+      for (const [X, Y] of [[A, U], [A, V], [IC, U], [IB, V], [V, IB], [U, IC], [A, XA], [B, XB], [C, XC], [PB, PC], [PA, XA], [XB, XC],
+        [B, Bp], [C, Cp], [Cp, IA], [Bp, IA], [C, Cp], [B, PC], [C, PB], [V, XB], [U, XC], [IA, U], [IA, V], [PB, XA], [PC, XA]]) b.add('segment', [X, Y]);
+      const sAB = b.doc.steps[4].id, sAC = b.doc.steps[5].id;
+      const tp = [];
+      for (const X of [IA, IB, IC]) for (const l of [sAB, sAC]) tp.push(b.add('projection', [X, l]));
+      const mids = [[B, C], [C, A], [A, B]].map(([X, Y]) => b.add('midpoint', [X, Y]));
+      b.add('segment', [tp[0], tp[1]]); b.add('segment', [mids[0], mids[1]]); b.add('segment', [mids[1], mids[2]]);
+      b.add('nine_point_circle', [IA, IB, IC], {}, undefined, { hidden: true });
+      b.add('circle_3pts', [U, V, I]);
+      return b.doc;
+    },
+  },
 };

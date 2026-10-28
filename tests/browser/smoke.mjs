@@ -120,11 +120,11 @@ ok((await page.evaluate(() => __app.doc.steps[0].name)) === 'A1', 'đổi tên A
 await page.keyboard.press('Control+z');
 
 // kéo nhãn
-const labBox = await page.evaluate(() => {
-  const arr = __app.renderer.els.get(__app.doc.steps[1].id);
-  const r = arr[arr.length - 1].label.rendNode.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-});
+const labBox = await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => {
+  const b = __app.renderer.labelBoxes.get(__app.doc.steps[1].id);
+  const r = __app.view.canvas.getBoundingClientRect();
+  res({ x: r.left + b.x + b.w / 2, y: r.top + b.y + b.h / 2 });
+})));
 await page.mouse.move(labBox.x, labBox.y);
 await page.mouse.down();
 await page.mouse.move(labBox.x - 20, labBox.y + 15, { steps: 4 });

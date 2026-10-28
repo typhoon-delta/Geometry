@@ -1,245 +1,316 @@
-// Vẽ hình bằng JSXGraph. JSXGraph CHỈ dùng làm lớp hiển thị (và pan/zoom): toạ độ mọi đối tượng
-// do lõi (src/core) tính; các phần tử JSXGraph đọc toạ độ qua hàm từ bảng giá trị hiện tại.
+// Vẽ hình lên canvas (thay cho JSXGraph từ phiên bản 1.1 – xem BAO_CAO.md, mục hiệu năng).
+// Toạ độ mọi đối tượng do lõi tính; ở đây chỉ chuyển sang toạ độ màn hình và vẽ.
+// Kiểu (màu, nét, cỡ) được tính sẵn một lần trong setScene(); khi kéo điểm chỉ việc vẽ lại.
 
 import { kinds } from '../core/model.js';
-import { styleOf } from './styles.js';
+import { parseLabel, labelHTML } from '../core/names.js';
 import { autoLabelDirs } from '../core/labels.js';
+import { styleOf } from './styles.js';
 
+export { labelHTML };
 export const LABEL_DIST = 13; // px từ tâm điểm tới tâm nhãn
-
-/* global JXG */
-
-const HALO = '#60a5fa';
+const HALO = 'rgba(96,165,250,0.45)';
 const RELATION = '#f59e0b';
-
-/** Chuỗi HTML cho nhãn: chữ số cuối thành chỉ số dưới (A1 → A₁). */
-export function labelHTML(name) {
-  if (!name) return '';
-  const esc = name.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const m = /^(.*?)(\d+)('*)$/.exec(esc);
-  return m && m[1] ? `${m[1]}<sub>${m[2]}</sub>${m[3]}` : esc;
-}
+const LABEL_FONT = "'Times New Roman', 'Nimbus Roman', 'Liberation Serif', 'TeX Gyre Termes', Times, serif";
 
 export class Renderer {
-  constructor(board) {
-    this.board = board;
+  constructor(view) {
+    this.view = view;
     this.values = new Map();
-    this.els = new Map(); // id → mảng phần tử JSXGraph của đối tượng
-    this.extra = []; // phần tử tạm (xem trước, tô sáng quan hệ)
+    this.items = []; // [{s, kind, st, sel, hl}] theo thứ tự vẽ
+    this.extra = []; // phần tử tạm: xem trước khi dựng, đường phụ của quan hệ đang tô sáng
     this.scale = 1; // hệ số phóng nét/chữ (chế độ trình chiếu)
-  }
-
-  val(id) {
-    return this.values.get(id);
-  }
-
-  clear() {
-    for (const arr of this.els.values()) for (const e of arr.slice().reverse()) this.board.removeObject(e);
-    this.els.clear();
+    this.grid = false;
+    this.labelOffsets = new Map(); // id → [dx, dy] px (y hướng lên), chưa nhân scale
+    this.labelBoxes = new Map(); // id → {x, y, w, h} toạ độ màn hình (để kéo nhãn)
+    this.drawnIds = new Set();
+    view.painter = (ctx, v) => this.draw(ctx, v);
   }
 
   /**
-   * Dựng lại toàn bộ phần tử.
-   * opts.visible: Set id được phép hiện (chế độ trình bày) hoặc null = tất cả
-   * opts.selected: Set id đang chọn; opts.highlight: Set id tô sáng (kết quả khám phá)
+   * Thiết lập cảnh (sau mỗi thay đổi tài liệu, chọn, chế độ…).
+   * opts.visible: Set id được hiện (chế độ trình bày) hoặc null = tất cả
+   * opts.selected, opts.highlight: Set id
    */
-  rebuild(doc, values, opts = {}) {
-    const b = this.board;
-    b.suspendUpdate();
-    this.clear();
-    this.values = values;
+  setScene(doc, values, opts = {}) {
     this.doc = doc;
+    this.values = values;
     const k = kinds(doc);
     const visible = opts.visible || null;
     const selected = opts.selected || new Set();
     const highlight = opts.highlight || new Set();
-    this.autoDirs = autoLabelDirs(doc, values, (s) => !s.hidden && (!visible || visible.has(s.id)));
-    this.labelOffsets = new Map();
-    // Thứ tự vẽ: miền tô → đường tròn → đường → đánh dấu → điểm (điểm luôn ở trên)
     const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
-    const steps = doc.steps
+    const layer = (s, kind) => order[s.type === 'polygon' ? 'polygon' : kind] ?? 3;
+    this.items = doc.steps
       .filter((s) => !s.hidden && (!visible || visible.has(s.id)))
-      .map((s) => ({ s, kind: k.get(s.id) }))
-      .sort((a, b2) => (order[a.s.type === 'polygon' ? 'polygon' : a.kind] ?? 3) - (order[b2.s.type === 'polygon' ? 'polygon' : b2.kind] ?? 3));
-    for (const { s, kind } of steps) {
-      const st = styleOf(s, kind);
-      const sel = selected.has(s.id);
-      const hl = highlight.has(s.id);
-      try {
-        const arr = this.create(s, kind, st, sel, hl);
-        this.els.set(s.id, arr);
-      } catch (e) {
-        console.warn('Không vẽ được', s, e);
-      }
+      .map((s) => {
+        const kind = k.get(s.id);
+        return { s, kind, st: styleOf(s, kind), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
+      })
+      .sort((a, b) => a.layer - b.layer);
+    // hướng nhãn tự động: việc tương đối nặng → chỉ làm ở đây (không làm khi đang kéo)
+    const dirs = autoLabelDirs(doc, values, (s) => !s.hidden && (!visible || visible.has(s.id)));
+    this.labelOffsets = new Map();
+    for (const it of this.items) {
+      if (it.kind !== 'point') continue;
+      const d = dirs.get(it.s.id) || { x: 0.7, y: 0.7 };
+      this.labelOffsets.set(it.s.id, it.st.labelOffset || [Math.round(d.x * LABEL_DIST), Math.round(d.y * LABEL_DIST)]);
     }
-    b.unsuspendUpdate();
-    this.refreshVisibility();
+    this.view.requestDraw();
   }
 
-  /** Cập nhật toạ độ sau khi kéo (không dựng lại phần tử). */
+  /** Toạ độ đã đổi (đang kéo): chỉ cần vẽ lại. */
   update(values) {
     this.values = values;
-    this.refreshVisibility();
-    this.board.update();
+    this.view.requestDraw();
   }
 
-  refreshVisibility() {
-    for (const [id, arr] of this.els) {
-      const ok = !!this.values.get(id);
-      for (const e of arr) {
-        if (e._hideAlways) continue;
-        if (e.visProp.visible !== ok) e.setAttribute({ visible: ok });
-      }
-    }
-  }
-
-  // ---------- tạo phần tử ----------
-  fx(fn) {
-    return () => {
-      const v = fn();
-      return v == null || !Number.isFinite(v) ? NaN : v;
-    };
-  }
-
-  helperPoint(fx, fy) {
-    const p = this.board.create('point', [fx, fy], { visible: false, fixed: true, withLabel: false, name: '' });
-    p._hideAlways = true;
-    return p;
-  }
-
-  create(s, kind, st, sel, hl) {
-    const id = s.id;
-    const b = this.board;
-    const sc = this.scale;
-    const color = hl ? RELATION : st.color;
-    const width = (st.width || 1.6) * sc * (hl ? 1.8 : 1);
-    const common = { fixed: true, highlight: false, withLabel: false, name: '' };
-    const out = [];
-    const V = () => this.values.get(id);
-
-    if (kind === 'point') {
-      const size = (st.size || 3) * sc * (hl ? 1.4 : 1);
-      if (sel) {
-        out.push(b.create('point', [this.fx(() => V()?.x), this.fx(() => V()?.y)], {
-          ...common, size: size + 6 * sc, strokeColor: HALO, fillColor: HALO, fillOpacity: 0.35, strokeOpacity: 0.6,
-        }));
-      }
-      const dir = this.autoDirs?.get(id) || { x: 0.7, y: 0.7 };
-      const off = st.labelOffset || [Math.round(dir.x * LABEL_DIST), Math.round(dir.y * LABEL_DIST)];
-      this.labelOffsets.set(id, off);
-      const p = b.create('point', [this.fx(() => V()?.x), this.fx(() => V()?.y)], {
-        ...common,
-        name: st.showLabel ? labelHTML(s.name) : '',
-        withLabel: !!st.showLabel,
-        size,
-        face: 'o',
-        strokeColor: hl ? RELATION : st.color,
-        strokeWidth: 1 * sc,
-        fillColor: hl ? RELATION : st.fillColor || st.color,
-        label: {
-          offset: off.map((v) => v * sc),
-          anchorX: 'middle',
-          anchorY: 'middle',
-          fontSize: Math.round(16 * sc),
-          strokeColor: hl ? '#b45309' : st.labelColor || '#111827',
-          cssClass: 'pt-label', highlightCssClass: 'pt-label', highlight: false,
-        },
-      });
-      p._stepId = id;
-      out.push(p);
-      return out;
-    }
-
-    if (kind === 'line') {
-      const p1 = this.helperPoint(this.fx(() => V()?.p.x), this.fx(() => V()?.p.y));
-      const p2 = this.helperPoint(this.fx(() => V() && V().p.x + V().d.x), this.fx(() => V() && V().p.y + V().d.y));
-      out.push(p1, p2);
-      const subt = s.type === 'segment' ? 'segment' : s.type === 'ray' ? 'ray' : null;
-      const sub = subt || this.values.get(id)?.sub || 'line';
-      const attrs = {
-        ...common,
-        straightFirst: sub === 'line',
-        straightLast: sub !== 'segment',
-        strokeColor: color,
-        strokeWidth: width,
-        dash: st.dash ? 2 : 0,
-        withLabel: !!st.showLabel,
-        name: st.showLabel ? labelHTML(s.name) : '',
-        label: { fontSize: Math.round(15 * sc), strokeColor: color },
-      };
-      if (sel) out.push(b.create('line', [p1, p2], { ...attrs, strokeColor: HALO, strokeWidth: width + 7 * sc, strokeOpacity: 0.45, dash: 0, withLabel: false, name: '' }));
-      out.push(b.create('line', [p1, p2], attrs));
-      return out;
-    }
-
-    if (kind === 'circle') {
-      const c = this.helperPoint(this.fx(() => V()?.c.x), this.fx(() => V()?.c.y));
-      out.push(c);
-      const r = () => V()?.r ?? NaN;
-      const attrs = {
-        ...common,
-        strokeColor: color,
-        strokeWidth: width,
-        dash: st.dash ? 2 : 0,
-        fillColor: st.fillColor || st.color,
-        fillOpacity: st.fill || 0,
-        withLabel: !!st.showLabel,
-        name: st.showLabel ? labelHTML(s.name) : '',
-        label: { fontSize: Math.round(15 * sc), strokeColor: color },
-      };
-      if (sel) out.push(b.create('circle', [c, r], { ...attrs, strokeColor: HALO, strokeWidth: width + 7 * sc, strokeOpacity: 0.45, fillOpacity: 0, dash: 0, withLabel: false, name: '' }));
-      out.push(b.create('circle', [c, r], attrs));
-      return out;
-    }
-
-    // ---- đánh dấu ----
-    if (s.type === 'polygon') {
-      const pts = s.args.map((_, i) => this.helperPoint(this.fx(() => V()?.pts[i].x), this.fx(() => V()?.pts[i].y)));
-      out.push(...pts);
-      const poly = b.create('polygon', pts, {
-        ...common,
-        fillColor: st.fillColor || color,
-        fillOpacity: sel ? Math.min(1, (st.fill ?? 0.12) + 0.15) : st.fill ?? 0.12,
-        borders: { visible: !!st.border, strokeColor: color, strokeWidth: width, highlight: false, fixed: true },
-        vertices: { visible: false },
-        hasInnerPoints: false,
-      });
-      out.push(poly);
-      return out;
-    }
-
-    if (s.type === 'angle_mark' || s.type === 'segment_mark') {
-      const curve = b.create('curve', [[0], [0]], {
-        ...common, strokeColor: sel ? HALO : color, strokeWidth: width * (sel ? 1.8 : 1),
-      });
-      const self = this;
-      curve.updateDataArray = function () {
-        const v = V();
-        const pathOut = v ? (s.type === 'angle_mark' ? angleMarkPath(v, st, self.pxToUser(), sc) : segMarkPath(v, st, self.pxToUser(), sc)) : [[], []];
-        this.dataX = pathOut[0];
-        this.dataY = pathOut[1];
-      };
-      out.push(curve);
-      return out;
-    }
-    return out;
-  }
-
-  /** Số đơn vị người dùng ứng với 1 pixel. */
-  pxToUser() {
-    return 1 / this.board.unitX;
-  }
-
-  // ---------- phần tử tạm ----------
   clearExtra() {
-    for (const e of this.extra.slice().reverse()) this.board.removeObject(e);
     this.extra = [];
+    this.view.requestDraw();
   }
 
-  addExtra(type, parents, attrs) {
-    const e = this.board.create(type, parents, { fixed: true, highlight: false, withLabel: false, name: '', ...attrs });
-    this.extra.push(e);
-    return e;
+  /** spec: {type:'segment'|'line'|'ray'|'circle'|'circle3'|'point', pts:[() => {x,y}], style} */
+  addExtra(spec) {
+    this.extra.push(spec);
+    this.view.requestDraw();
+    return spec;
+  }
+
+  setLabelOffset(id, off) {
+    this.labelOffsets.set(id, off);
+    this.view.requestDraw();
+  }
+
+  // ================= vẽ =================
+  draw(ctx, view) {
+    const sc = this.scale;
+    const V = this.values;
+    this.drawnIds = new Set();
+    this.labelBoxes = new Map();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (this.grid) drawGrid(ctx, view);
+    const labels = [];
+    for (const it of this.items) {
+      const v = V.get(it.s.id);
+      if (!v) continue;
+      this.drawnIds.add(it.s.id);
+      const { s, kind, st, sel, hl } = it;
+      const color = hl ? RELATION : st.color;
+      const width = (st.width || 1.6) * sc * (hl ? 1.8 : 1);
+      if (kind === 'line') {
+        const sub = s.type === 'segment' ? 'segment' : s.type === 'ray' ? 'ray' : v.sub;
+        if (sel) strokeLine(ctx, view, v, sub, HALO, width + 7 * sc, false);
+        strokeLine(ctx, view, v, sub, color, width, st.dash);
+        if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: lineLabelPos(view, v, sub), color, off: [0, 10] });
+      } else if (kind === 'circle') {
+        const c = view.toScreen(v.c), r = v.r * view.scale;
+        if (st.fill) fillCircle(ctx, c, r, st.fillColor || st.color, st.fill);
+        if (sel) strokeCircle(ctx, c, r, HALO, width + 7 * sc, false);
+        strokeCircle(ctx, c, r, color, width, st.dash);
+        if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: { x: c.x + r * 0.707, y: c.y - r * 0.707 }, color, off: [8, 8] });
+      } else if (s.type === 'polygon') {
+        const pts = v.pts.map((p) => view.toScreen(p));
+        ctx.beginPath();
+        pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        ctx.closePath();
+        ctx.globalAlpha = sel ? Math.min(1, (st.fill ?? 0.12) + 0.15) : st.fill ?? 0.12;
+        ctx.fillStyle = st.fillColor || color;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        if (st.border) { ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash([]); ctx.stroke(); }
+      } else if (s.type === 'angle_mark' || s.type === 'segment_mark') {
+        const px = 1 / view.scale;
+        const [X, Y] = s.type === 'angle_mark' ? angleMarkPath(v, st, px, sc) : segMarkPath(v, st, px, sc);
+        strokePath(ctx, view, X, Y, sel ? '#60a5fa' : color, width * (sel ? 1.8 : 1));
+      } else if (kind === 'point') {
+        const p = view.toScreen(v);
+        const size = (st.size || 3) * sc * (hl ? 1.4 : 1);
+        if (sel) { ctx.beginPath(); ctx.arc(p.x, p.y, size + 6 * sc, 0, 2 * Math.PI); ctx.fillStyle = HALO; ctx.fill(); }
+        drawPoint(ctx, p, size, hl ? RELATION : st.color, hl ? RELATION : st.fillColor || st.color, sc, st.hollow);
+        if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: p, color: hl ? '#b45309' : st.labelColor || '#111827', off: this.labelOffsets.get(s.id) || [9, 9], point: true });
+      }
+    }
+    for (const e of this.extra) drawExtra(ctx, view, e, sc);
+    const fontPx = 16 * sc;
+    for (const L of labels) {
+      const box = drawLabel(ctx, L.name, L.at.x + L.off[0] * sc, L.at.y - L.off[1] * sc, fontPx, L.color);
+      if (L.point) this.labelBoxes.set(L.id, box);
+    }
+  }
+}
+
+// ================= các hàm vẽ =================
+function setStroke(ctx, color, width, dash) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.setLineDash(dash ? [6, 4] : []);
+}
+
+/** Cắt đường p + t·d theo hình chữ nhật (toạ độ màn hình). tMin = 0 cho tia. */
+function clip(p, d, x1, y1, x2, y2, tMin = -Infinity, tMax = Infinity) {
+  let t0 = tMin, t1 = tMax;
+  for (const [pp, dd, lo, hi] of [[p.x, d.x, x1, x2], [p.y, d.y, y1, y2]]) {
+    if (Math.abs(dd) < 1e-12) { if (pp < lo || pp > hi) return null; continue; }
+    let a = (lo - pp) / dd, b = (hi - pp) / dd;
+    if (a > b) [a, b] = [b, a];
+    t0 = Math.max(t0, a);
+    t1 = Math.min(t1, b);
+  }
+  return t0 < t1 ? [t0, t1] : null;
+}
+
+function screenLine(view, v, sub) {
+  const p = view.toScreen(v.p);
+  const q = view.toScreen({ x: v.p.x + v.d.x, y: v.p.y + v.d.y });
+  const d = { x: q.x - p.x, y: q.y - p.y };
+  const m = 20;
+  const r = clip(p, d, -m, -m, view.W + m, view.H + m, sub === 'line' ? -Infinity : 0, sub === 'segment' ? 1 : Infinity);
+  if (!r) return null;
+  return [{ x: p.x + r[0] * d.x, y: p.y + r[0] * d.y }, { x: p.x + r[1] * d.x, y: p.y + r[1] * d.y }];
+}
+
+function strokeLine(ctx, view, v, sub, color, width, dash) {
+  const seg = screenLine(view, v, sub);
+  if (!seg) return;
+  setStroke(ctx, color, width, dash);
+  ctx.beginPath();
+  ctx.moveTo(seg[0].x, seg[0].y);
+  ctx.lineTo(seg[1].x, seg[1].y);
+  ctx.stroke();
+}
+
+function lineLabelPos(view, v, sub) {
+  const seg = screenLine(view, v, sub);
+  if (!seg) return { x: -1e4, y: -1e4 };
+  const t = sub === 'segment' ? 0.5 : 0.85;
+  return { x: seg[0].x + t * (seg[1].x - seg[0].x), y: seg[0].y + t * (seg[1].y - seg[0].y) };
+}
+
+function strokeCircle(ctx, c, r, color, width, dash) {
+  if (!(r > 0) || r > 1e7) return;
+  setStroke(ctx, color, width, dash);
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+  ctx.stroke();
+}
+
+function fillCircle(ctx, c, r, color, alpha) {
+  if (!(r > 0) || r > 1e7) return;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawPoint(ctx, p, size, stroke, fill, sc, hollow) {
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, size, 0, 2 * Math.PI);
+  ctx.fillStyle = hollow ? '#ffffff' : fill;
+  ctx.fill();
+  ctx.setLineDash([]);
+  ctx.lineWidth = Math.max(1, 1 * sc);
+  ctx.strokeStyle = stroke;
+  ctx.stroke();
+}
+
+/** Đường gấp khúc trong toạ độ hình, ngắt tại NaN. */
+function strokePath(ctx, view, X, Y, color, width) {
+  setStroke(ctx, color, width, false);
+  ctx.beginPath();
+  let pen = false;
+  for (let i = 0; i < X.length; i++) {
+    if (!Number.isFinite(X[i])) { pen = false; continue; }
+    const p = view.toScreen({ x: X[i], y: Y[i] });
+    if (pen) ctx.lineTo(p.x, p.y);
+    else { ctx.moveTo(p.x, p.y); pen = true; }
+  }
+  ctx.stroke();
+}
+
+function drawGrid(ctx, view) {
+  if (view.scale < 6) return;
+  const [x1, y1, x2, y2] = view.getBoundingBox();
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  for (let x = Math.ceil(x1); x <= x2; x++) { const s = view.toScreen({ x, y: 0 }).x; ctx.moveTo(s, 0); ctx.lineTo(s, view.H); }
+  for (let y = Math.ceil(y2); y <= y1; y++) { const s = view.toScreen({ x: 0, y }).y; ctx.moveTo(0, s); ctx.lineTo(view.W, s); }
+  ctx.stroke();
+}
+
+/**
+ * Vẽ nhãn kiểu công thức (serif nghiêng, chỉ số dưới, dấu phẩy) căn giữa tại (cx, cy).
+ * Trả về khung bao {x, y, w, h} để bắt chuột.
+ */
+const labelCache = new Map(); // tên|cỡ chữ → kích thước đã đo (measureText tốn thời gian, chỉ đo một lần)
+
+function measureLabel(ctx, name, fontPx) {
+  const key = name + '|' + fontPx;
+  let m = labelCache.get(key);
+  if (m) return m;
+  const { base, sub, primes } = parseLabel(name);
+  const subPx = Math.round(fontPx * 0.68);
+  m = { base, sub, pr: '′'.repeat(primes), fBase: `italic ${fontPx}px ${LABEL_FONT}`, fPr: `${fontPx}px ${LABEL_FONT}`, fSub: `italic ${subPx}px ${LABEL_FONT}` };
+  ctx.font = m.fBase;
+  m.wBase = ctx.measureText(base).width;
+  ctx.font = m.fPr;
+  m.wPr = m.pr ? ctx.measureText(m.pr).width : 0;
+  ctx.font = m.fSub;
+  m.wSub = sub ? ctx.measureText(sub).width + 1 : 0;
+  m.w = m.wBase + m.wPr + m.wSub;
+  if (labelCache.size > 2000) labelCache.clear();
+  labelCache.set(key, m);
+  return m;
+}
+
+/**
+ * Vẽ nhãn kiểu công thức (serif nghiêng, chỉ số dưới, dấu phẩy) căn giữa tại (cx, cy).
+ * Trả về khung bao {x, y, w, h} để bắt chuột.
+ */
+export function drawLabel(ctx, name, cx, cy, fontPx, color) {
+  const m = measureLabel(ctx, name, fontPx);
+  const x0 = cx - m.w / 2;
+  const baseline = cy + fontPx * 0.33;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.font = m.fBase;
+  ctx.fillText(m.base, x0, baseline);
+  if (m.pr) { ctx.font = m.fPr; ctx.fillText(m.pr, x0 + m.wBase, baseline); }
+  if (m.sub) { ctx.font = m.fSub; ctx.fillText(m.sub, x0 + m.wBase + m.wPr + 0.5, baseline + fontPx * 0.22); }
+  return { x: x0 - 2, y: cy - fontPx * 0.6, w: m.w + 4, h: fontPx * 1.25 };
+}
+
+function drawExtra(ctx, view, e, sc) {
+  const P = e.pts.map((f) => f());
+  if (P.some((p) => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return;
+  const st = { color: '#9ca3af', width: 1.5, dash: true, ...(e.style || {}) };
+  const w = st.width * sc;
+  if (e.type === 'segment' || e.type === 'line' || e.type === 'ray') {
+    const d = { x: P[1].x - P[0].x, y: P[1].y - P[0].y };
+    if (Math.hypot(d.x, d.y) < 1e-12) return;
+    strokeLine(ctx, view, { p: P[0], d }, e.type, st.color, w, st.dash);
+  } else if (e.type === 'circle') {
+    strokeCircle(ctx, view.toScreen(P[0]), Math.hypot(P[1].x - P[0].x, P[1].y - P[0].y) * view.scale, st.color, w, st.dash);
+  } else if (e.type === 'circle3') {
+    const [A, B, C] = P;
+    const d = 2 * (A.x * (B.y - C.y) + B.x * (C.y - A.y) + C.x * (A.y - B.y));
+    if (Math.abs(d) < 1e-12) return;
+    const a2 = A.x * A.x + A.y * A.y, b2 = B.x * B.x + B.y * B.y, c2 = C.x * C.x + C.y * C.y;
+    const O = { x: (a2 * (B.y - C.y) + b2 * (C.y - A.y) + c2 * (A.y - B.y)) / d, y: (a2 * (C.x - B.x) + b2 * (A.x - C.x) + c2 * (B.x - A.x)) / d };
+    strokeCircle(ctx, view.toScreen(O), Math.hypot(A.x - O.x, A.y - O.y) * view.scale, st.color, w, st.dash);
+  } else if (e.type === 'polyline') {
+    setStroke(ctx, st.color, w, st.dash);
+    ctx.beginPath();
+    P.forEach((p, i) => { const q = view.toScreen(p); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+    ctx.stroke();
+  } else if (e.type === 'point') {
+    drawPoint(ctx, view.toScreen(P[0]), (st.size || 7) * sc, st.color, st.fill || '#fde68a', sc);
   }
 }
 

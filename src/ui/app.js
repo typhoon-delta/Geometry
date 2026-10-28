@@ -1,11 +1,11 @@
 // Ứng dụng: giữ tài liệu (danh sách bước dựng), lịch sử hoàn tác, công cụ, chế độ trình bày/trình chiếu.
 // Mọi thay đổi hình đi qua commit() → lõi tính lại toạ độ → vẽ lại.
 
-/* global JXG */
-import { evaluate, kinds, removeSteps, dependents, newId, nextName, stepById, clone, frames, emptyDoc, describe } from '../core/model.js';
+import { evaluate, makeUpdater, kinds, removeSteps, dependents, newId, nextName, stepById, clone, frames, emptyDoc, describe } from '../core/model.js';
 import { STEP_TYPES, argAccepts } from '../core/steps.js';
 import * as G from '../core/geom.js';
 import { Renderer } from './render.js';
+import { CanvasView } from './view.js';
 import { TOOLS, TOOL_BY_ID } from './tools.js';
 import { isDraggableType, PALETTE } from './styles.js';
 import { confirmDialog, promptDialog, toast } from './dialog.js';
@@ -35,21 +35,9 @@ export class App {
 
   // ================= khởi tạo =================
   mount() {
-    JXG.Options.text.useMathJax = false;
-    JXG.Options.text.display = 'html';
-    this.board = JXG.JSXGraph.initBoard('board', {
-      boundingbox: [-8, 6, 8, -6],
-      keepAspectRatio: true,
-      axis: false,
-      grid: false,
-      showCopyright: false,
-      showNavigation: false,
-      showInfobox: false,
-      pan: { enabled: true, needShift: false, needTwoFingers: false },
-      zoom: { wheel: true, needShift: false, min: 0.02, max: 100, factorX: 1.15, factorY: 1.15 },
-      resize: { enabled: true },
-    });
-    this.renderer = new Renderer(this.board);
+    this.view = new CanvasView(document.getElementById('board'));
+    this.view.setBoundingBox([-8, 6, 8, -6]);
+    this.renderer = new Renderer(this.view);
     this.stage = document.getElementById('stage');
     this.buildToolbar();
     this.bindPointer();
@@ -77,7 +65,7 @@ export class App {
     this.highlight.clear();
     this.relation = null;
     this.cancelTool();
-    if (doc.view && Array.isArray(doc.view.bbox)) this.board.setBoundingBox(doc.view.bbox, true);
+    if (doc.view && Array.isArray(doc.view.bbox)) this.view.setBoundingBox(doc.view.bbox);
     this.refresh();
     this.emit('load');
     this.emit('change');
@@ -171,7 +159,8 @@ export class App {
   refresh() {
     this.values = evaluate(this.doc);
     this.renderer.scale = this.projector ? 1.9 : 1;
-    this.renderer.rebuild(this.doc, this.values, {
+    this.renderer.grid = this.grid;
+    this.renderer.setScene(this.doc, this.values, {
       visible: this.visibleSet(),
       selected: this.mode === 'present' ? new Set() : this.selection,
       highlight: this.highlight,
@@ -181,11 +170,11 @@ export class App {
     this.renderPanels();
   }
 
-  /** Cập nhật nhanh khi kéo (không dựng lại phần tử). */
+  /** Cập nhật nhanh khi kéo: chỉ tính lại các bước phụ thuộc (nếu có bộ cập nhật), rồi vẽ lại. */
   quickUpdate() {
-    this.values = evaluate(this.doc);
+    if (this.dragUpdater) this.dragUpdater(this.values);
+    else this.values = evaluate(this.doc);
     this.renderer.update(this.values);
-    this.updateCoordsReadout?.();
   }
 
   renderPanels() {
@@ -199,17 +188,15 @@ export class App {
 
   // ================= toạ độ & chọn đối tượng =================
   toScreen(P) {
-    const b = this.board;
-    return { x: b.origin.scrCoords[1] + P.x * b.unitX, y: b.origin.scrCoords[2] - P.y * b.unitY };
+    return this.view.toScreen(P);
   }
 
   toUser(sx, sy) {
-    const b = this.board;
-    return { x: (sx - b.origin.scrCoords[1]) / b.unitX, y: (b.origin.scrCoords[2] - sy) / b.unitY };
+    return this.view.toUser(sx, sy);
   }
 
   eventPos(e) {
-    const r = this.board.containerObj.getBoundingClientRect();
+    const r = this.boardRect || (this.boardRect = this.view.canvas.getBoundingClientRect());
     return { sx: e.clientX - r.left, sy: e.clientY - r.top };
   }
 
@@ -218,7 +205,7 @@ export class App {
     const vis = this.visibleSet();
     const k = kinds(this.doc);
     const P = this.toUser(sx, sy);
-    const px = 1 / this.board.unitX;
+    const px = 1 / this.view.scale;
     const f = this.projector ? 1.6 : 1;
     const out = [];
     for (const s of this.doc.steps) {
@@ -252,7 +239,7 @@ export class App {
   /** Điểm đã có trùng (về số) với P. */
   existingPointAt(P, tolPx = 0.5) {
     const k = kinds(this.doc);
-    const tol = Math.max(1e-9 * this.figureScale(), tolPx / this.board.unitX);
+    const tol = Math.max(1e-9 * this.figureScale(), tolPx / this.view.scale);
     for (const s of this.doc.steps) {
       if (k.get(s.id) !== 'point') continue;
       const v = this.values.get(s.id);
@@ -290,7 +277,7 @@ export class App {
     if (pHit) return pHit.id;
     const P = this.toUser(sx, sy);
     const curves = hits.filter((h) => h.kind === 'line' || h.kind === 'circle').slice(0, 4);
-    const px = 1 / this.board.unitX;
+    const px = 1 / this.view.scale;
     let best = null;
     for (let i = 0; i < curves.length; i++)
       for (let j = i + 1; j < curves.length; j++)
@@ -319,7 +306,6 @@ export class App {
     this.toolId = id;
     document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
     this.stage.classList.toggle('tool-active', id !== 'move');
-    this.board.attr.pan.enabled = id === 'move';
     this.showHint();
     renderToolOptions(this);
   }
@@ -454,42 +440,56 @@ export class App {
     this.renderer.clearExtra();
     if (!tool.preview || !this.picks.length) return;
     const r = this.renderer;
-    const ptOf = (id) => r.addExtra('point', [() => this.values.get(id)?.x ?? NaN, () => this.values.get(id)?.y ?? NaN], { visible: false });
-    const mouse = r.addExtra('point', [() => this.mouse.x, () => this.mouse.y], { visible: false });
-    const st = { strokeColor: '#9ca3af', strokeWidth: 1.5, dash: 2 };
-    const pts = this.picks.map(ptOf);
-    if (tool.preview === 'segment') r.addExtra('segment', [pts[0], mouse], st);
-    else if (tool.preview === 'line') r.addExtra('line', [pts[0], mouse], st);
-    else if (tool.preview === 'ray') r.addExtra('line', [pts[0], mouse], { ...st, straightFirst: false });
-    else if (tool.preview === 'circle') r.addExtra('circle', [pts[0], mouse], st);
-    else if (tool.preview === 'polygon') {
-      for (let i = 0; i + 1 < pts.length; i++) r.addExtra('segment', [pts[i], pts[i + 1]], st);
-      r.addExtra('segment', [pts[pts.length - 1], mouse], st);
-    }
+    const pts = this.picks.map((id) => () => this.values.get(id));
+    const mouse = () => this.mouse;
+    if (['segment', 'line', 'ray', 'circle'].includes(tool.preview)) r.addExtra({ type: tool.preview, pts: [pts[0], mouse] });
+    else if (tool.preview === 'polygon') r.addExtra({ type: 'polyline', pts: [...pts, mouse] });
   }
 
   // ================= chuột / cảm ứng =================
   bindPointer() {
-    const box = this.board.containerObj;
+    const canvas = this.view.canvas;
     const wrap = this.stage;
+    const resetRect = () => { this.boardRect = null; };
+    window.addEventListener('resize', resetRect);
+    window.addEventListener('scroll', resetRect, true);
+    this.view.onViewChange(resetRect);
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resetRect).observe(canvas);
     wrap.addEventListener('pointerdown', (e) => this.onPointerDown(e), true);
+    // Di chuột (không kéo): chỉ ghi nhận vị trí; cập nhật con trỏ và hình xem trước một lần mỗi khung
+    let hoverPending = false;
+    let lastEvent = null;
     wrap.addEventListener('pointermove', (e) => {
-      const { sx, sy } = this.eventPos(e);
-      this.mouse = this.toUser(sx, sy);
-      if (this.picks.length && this.renderer.extra.length) this.board.update();
-      if (!this.drag) {
+      if (this.drag) return;
+      lastEvent = e;
+      if (hoverPending) return;
+      hoverPending = true;
+      requestAnimationFrame(() => {
+        hoverPending = false;
+        if (this.drag || !lastEvent) return;
+        const ev = lastEvent;
+        const { sx, sy } = this.eventPos(ev);
+        this.mouse = this.toUser(sx, sy);
+        if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
         const hits = this.hitTest(sx, sy);
         let cursor = '';
-        if (this.toolId === 'move' && this.mode !== 'edit-disabled') {
+        if (this.toolId === 'move' || this.mode === 'present') {
           const h = hits[0];
           if (h && h.kind === 'point' && isDraggableType(stepById(this.doc, h.id).type)) cursor = 'grab';
-          else if (h) cursor = 'pointer';
-          else if (this.labelAt(e)) cursor = 'move';
-        } else if (this.toolId !== 'move') cursor = hits.length ? 'pointer' : 'crosshair';
-        box.style.cursor = cursor;
-      }
+          else if (h && this.mode === 'edit') cursor = 'pointer';
+          else if (this.mode === 'edit' && this.labelAt(ev)) cursor = 'move';
+        } else cursor = hits.length ? 'pointer' : 'crosshair';
+        canvas.style.cursor = cursor;
+      });
     });
-    box.addEventListener('dblclick', (e) => {
+    // Lăn chuột: phóng to/thu nhỏ quanh con trỏ
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const { sx, sy } = this.eventPos(e);
+      const dy = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
+      this.view.zoomAt(sx, sy, Math.exp(-dy * 0.0015));
+    }, { passive: false });
+    canvas.addEventListener('dblclick', (e) => {
       if (this.mode === 'present') return;
       const { sx, sy } = this.eventPos(e);
       const h = this.hitTest(sx, sy)[0];
@@ -499,21 +499,51 @@ export class App {
 
   /** Nhãn điểm tại vị trí chuột (để kéo nhãn). */
   labelAt(e) {
-    for (const [id, arr] of this.renderer.els) {
-      const p = arr[arr.length - 1];
-      if (!p || p.elType !== 'point' || !p.label || !p.label.rendNode || !p.visProp.visible || !p.visProp.withlabel) continue;
-      const r = p.label.rendNode.getBoundingClientRect();
-      if (r.width && e.clientX >= r.left - 2 && e.clientX <= r.right + 2 && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2) return id;
+    const { sx, sy } = this.eventPos(e);
+    for (const [id, b] of this.renderer.labelBoxes) {
+      if (sx >= b.x - 2 && sx <= b.x + b.w + 2 && sy >= b.y - 2 && sy <= b.y + b.h + 2) return id;
     }
     return null;
+  }
+
+  /** Dời hình bằng cách kéo nền (một ngón/chuột) hoặc chụm hai ngón để phóng (màn hình cảm ứng). */
+  startPan(e) {
+    const pointers = this.panPointers || (this.panPointers = new Map());
+    pointers.set(e.pointerId, this.eventPos(e));
+    if (this.panning) return;
+    this.panning = true;
+    const move = (ev) => {
+      if (!pointers.has(ev.pointerId)) return;
+      const prev = [...pointers.values()];
+      const before = pointers.get(ev.pointerId);
+      const now = this.eventPos(ev);
+      pointers.set(ev.pointerId, now);
+      if (pointers.size >= 2) {
+        const [a0, b0] = prev, [a1, b1] = [...pointers.values()];
+        const d0 = Math.hypot(a0.sx - b0.sx, a0.sy - b0.sy), d1 = Math.hypot(a1.sx - b1.sx, a1.sy - b1.sy);
+        if (d0 > 5) this.view.zoomAt((a1.sx + b1.sx) / 2, (a1.sy + b1.sy) / 2, d1 / d0);
+      } else this.view.panBy(now.sx - before.sx, now.sy - before.sy);
+    };
+    const up = (ev) => {
+      pointers.delete(ev.pointerId);
+      if (pointers.size) return;
+      this.panning = false;
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
   }
 
   onPointerDown(e) {
     if (e.button !== undefined && e.button !== 0) return;
     if (document.querySelector('.modal-back')) return;
+    this.boardRect = null;
     const { sx, sy } = this.eventPos(e);
-    const r = this.board.containerObj.getBoundingClientRect();
-    if (sx < 0 || sy < 0 || sx > r.width || sy > r.height) return;
+    if (sx < 0 || sy < 0 || sx > this.view.W || sy > this.view.H) return;
+    if (this.panning) { this.startPan(e); return; } // ngón thứ hai: chụm để phóng
     this.mouse = this.toUser(sx, sy);
 
     if (this.toolId !== 'move' && this.mode === 'edit') {
@@ -550,28 +580,37 @@ export class App {
       if (this.mode === 'edit') this.select(h.id, e.shiftKey);
       return;
     }
-    // chỗ trống: bỏ chọn, để JSXGraph dời hình
-    if (this.mode === 'edit' && (this.selection.size || this.highlight.size) && !e.shiftKey) {
+    // chỗ trống: bỏ chọn, dời hình
+    e.preventDefault();
+    if (this.mode === 'edit' && this.selection.size && !e.shiftKey) {
       this.selection.clear();
       this.refresh();
     }
+    this.startPan(e);
   }
 
+  /**
+   * Kéo điểm hoặc nhãn. Sự kiện chuột chỉ ghi lại vị trí mới nhất; việc tính lại và vẽ được gom
+   * vào requestAnimationFrame (≤ 1 lần mỗi khung hình) và chỉ tính lại các bước phụ thuộc vào điểm
+   * đang kéo. Ghi lịch sử hoàn tác, đặt lại nhãn tự động, lưu nháp… chỉ làm một lần khi thả chuột.
+   */
   startDrag(e, info) {
     this.drag = info;
     const step = stepById(this.doc, info.id);
     const P0 = this.values.get(info.id);
     if (info.kind === 'point' && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
-    const move = (ev) => {
-      const { sx, sy } = this.eventPos(ev);
+    if (info.kind === 'point') this.dragUpdater = makeUpdater(this.doc, [info.id]);
+    let pending = null;
+    const apply = () => {
+      if (!pending) return;
+      const { sx, sy } = pending;
+      pending = null;
       this.mouse = this.toUser(sx, sy);
       if (info.kind === 'label') {
         const sc = this.projector ? 1.9 : 1;
         const off = [round1(info.off[0] + (sx - info.sx) / sc), round1(info.off[1] - (sy - info.sy) / sc)];
         step.style = { ...(step.style || {}), labelOffset: off };
-        const arr = this.renderer.els.get(info.id);
-        const p = arr && arr[arr.length - 1];
-        if (p && p.label) { p.label.setAttribute({ offset: off.map((v) => v * sc) }); this.board.update(); }
+        this.renderer.setLabelOffset(info.id, off);
         return;
       }
       const target = { x: this.mouse.x + info.grab.x, y: this.mouse.y + info.grab.y };
@@ -584,11 +623,19 @@ export class App {
       }
       this.quickUpdate();
     };
+    this.view.frameHooks.push(apply);
+    const move = (ev) => {
+      pending = this.eventPos(ev);
+      this.view.requestDraw();
+    };
     const up = () => {
       window.removeEventListener('pointermove', move, true);
       window.removeEventListener('pointerup', up, true);
       window.removeEventListener('pointercancel', up, true);
+      apply();
+      this.view.frameHooks = this.view.frameHooks.filter((f) => f !== apply);
       this.drag = null;
+      this.dragUpdater = null;
       if (JSON.stringify(this.doc) !== info.start) {
         this.pushUndo(info.start);
         this.afterChange();
@@ -682,7 +729,6 @@ export class App {
     if (mode === 'present') {
       this.frameIdx = 0;
       this.selection.clear();
-      this.board.attr.pan.enabled = true;
     } else this.setTool(this.toolId);
     this.refresh();
     this.showHint();
@@ -710,15 +756,14 @@ export class App {
       if (on && !document.fullscreenElement) await document.documentElement.requestFullscreen();
       if (!on && document.fullscreenElement) await document.exitFullscreen();
     } catch { /* trình duyệt có thể chặn toàn màn hình – vẫn dùng được kiểu trình chiếu */ }
-    setTimeout(() => { this.board.resizeContainer(this.stage.clientWidth, this.stage.clientHeight, true, true); this.refresh(); }, 60);
+    setTimeout(() => { this.view.resize(); this.boardRect = null; this.refresh(); }, 80);
   }
 
   toggleGrid() {
     this.grid = !this.grid;
-    if (this.gridEl) { this.board.removeObject(this.gridEl); this.gridEl = null; }
-    if (this.grid) this.gridEl = this.board.create('grid', [], { majorStep: [1, 1], minorElements: 0, strokeColor: '#cbd5e1', strokeOpacity: 0.7 });
+    this.renderer.grid = this.grid;
     document.getElementById('btn-grid').classList.toggle('on', this.grid);
-    this.board.update();
+    this.view.requestDraw();
   }
 
   zoomFit() {
@@ -731,16 +776,16 @@ export class App {
       if (v.kind === 'point') pts.push(v);
       if (v.kind === 'circle') pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
     }
-    if (!pts.length) return this.board.setBoundingBox([-8, 6, 8, -6], true);
+    if (!pts.length) return this.view.setBoundingBox([-8, 6, 8, -6]);
     const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
     let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
     const m = Math.max(x2 - x1, y2 - y1, 1) * 0.1;
     [x1, x2, y1, y2] = [x1 - m, x2 + m, y1 - m, y2 + m];
     // giữ tỉ lệ 1:1 theo kích thước khung vẽ
-    const W = this.board.canvasWidth, H = this.board.canvasHeight;
+    const W = this.view.W, H = this.view.H;
     const per = Math.max((x2 - x1) / W, (y2 - y1) / H);
     const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
-    this.board.setBoundingBox([cx - (per * W) / 2, cy + (per * H) / 2, cx + (per * W) / 2, cy - (per * H) / 2], true);
+    this.view.setBoundingBox([cx - (per * W) / 2, cy + (per * H) / 2, cx + (per * W) / 2, cy - (per * H) / 2]);
   }
 
   // ================= bàn phím & nút =================
@@ -810,7 +855,7 @@ export class App {
     on('btn-new', async () => {
       if (this.doc.steps.length && !(await confirmDialog('Hình mới', 'Xoá hình hiện tại để bắt đầu hình mới? (Có thể hoàn tác bằng Ctrl+Z.)', 'Hình mới'))) return;
       this.commit((doc) => { doc.steps = []; doc.title = ''; });
-      this.board.setBoundingBox([-8, 6, 8, -6], true);
+      this.view.setBoundingBox([-8, 6, 8, -6]);
     });
   }
 }

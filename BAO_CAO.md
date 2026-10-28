@@ -137,3 +137,56 @@ workflow GitHub Actions chạy test.
    biết, phép vị tự/quay, điểm đẳng giác, ô chữ ghi chú, đo góc/độ dài.
 5. Trình bày: cho phép xếp lại thứ tự khung độc lập với thứ tự dựng; hiệu ứng làm nổi đối tượng mới xuất hiện.
 6. Thử trên máy chiếu/máy tính bảng thật và tinh chỉnh cỡ nét/chữ theo phản hồi.
+
+---
+
+# Bản 1.1 – Hiệu năng, phong cách, thư viện công cụ
+
+## A. Hiệu năng kéo điểm
+
+**Hình đo** (`Ví dụ → Hình dày`, mô phỏng hình đề VMO): 28 điểm, 42 đường thẳng/đoạn, 5 đường tròn
+(+ 6 đối tượng ẩn). Đo bằng `npm run test:perf` (`tests/browser/perf.mjs`): Chromium headless, khung
+1366×768, nhấn chuột vào A rồi kéo 120 lần theo một vòng, sau mỗi lần chờ trình duyệt vẽ xong. Thời gian
+luồng chính lấy từ Chrome DevTools Protocol (`Performance.getMetrics`). "CPU ×4" là chế độ giả lập CPU chậm
+hơn 4 lần, gần với laptop phổ thông/cũ.
+
+**Đo trước khi sửa (profiling)** – thủ phạm:
+
+| | CPU ×1 | CPU ×4 |
+|---|---|---|
+| Luồng chính / khung | 15,3 ms | **75,0 ms** (≈ 13 khung/giây) |
+| trong đó script | 4,6 ms | 27,5 ms |
+| style + layout | 4,9 ms | 21,9 ms |
+| p95 khoảng cách giữa hai khung | 16,8 ms | 83,3 ms |
+
+CPU profile (×4, self time): `updateClipPath` của JSXGraph chiếm 22% toàn bộ thời gian (gần 2/3 thời gian
+script), tiếp theo là `evalVisProp`, `setAttributeNS`, `updateText` – tức là việc cập nhật **cây SVG + nhãn
+HTML của JSXGraph** ở mỗi khung (mỗi đường thẳng là 3 phần tử, nhãn là thẻ HTML gây tính lại style/layout).
+Phần tính toán hình học của lõi gần như không đáng kể.
+
+**Đã sửa:**
+1. Thay JSXGraph bằng **bộ vẽ canvas tự viết** (`src/ui/view.js`, `src/ui/render.js`): một canvas, độ phân
+   giải theo `devicePixelRatio`, tự dời/phóng (kéo nền, lăn chuột, chụm hai ngón). Lõi hình học không đổi.
+   Bỏ `vendor/jsxgraph` (trang nhẹ hơn ~1 MB).
+2. **Chỉ tính lại các bước phụ thuộc** vào điểm đang kéo (`makeUpdater` trong `src/core/model.js`, lập kế
+   hoạch một lần khi nhấn chuột; test đối chiếu với tính lại toàn bộ).
+3. **Gom cập nhật theo `requestAnimationFrame`**: sự kiện chuột chỉ ghi vị trí; tính lại + vẽ tối đa một lần
+   mỗi khung. Di chuột (không kéo) cũng được gom theo khung.
+4. Việc nặng chỉ làm khi thả chuột: ghi lịch sử hoàn tác, tính hướng nhãn tự động, vẽ lại danh sách bước,
+   lưu nháp (có debounce), báo kết quả khám phá cũ. Đo chữ nhãn (`measureText`) được lưu đệm.
+
+**Sau khi sửa:**
+
+| | CPU ×1 | CPU ×4 |
+|---|---|---|
+| Luồng chính / khung | **4,3 ms** | **16–18 ms** |
+| trong đó script (tính lại + vẽ) | 0,5 ms | 2,1 ms |
+| style + layout | 0 | 0 |
+| một lần vẽ toàn bộ hình (JS) | 0,2 ms | 0,5 ms |
+| p95 khoảng cách giữa hai khung | 16,7 ms | **16,7 ms** (đủ 60 khung/giây) |
+
+Thí nghiệm tách chi phí: tắt hẳn việc vẽ thì vòng đo vẫn tốn ~7,8 ms/khung ở ×4 – đó là chi phí Playwright bơm
+sự kiện chuột qua DevTools, không có khi dùng chuột thật. Phần còn lại chủ yếu là rasterize canvas bằng phần
+mềm (headless không có GPU); trên laptop thật canvas được GPU tăng tốc. Ngưỡng tự kiểm trong
+`npm run test:perf`: p95 khoảng cách khung ≤ 25 ms ở ×4, JS mỗi khung < 6 ms ở ×4, một lần vẽ < 3 ms ở ×4,
+luồng chính < 8 ms ở ×1.

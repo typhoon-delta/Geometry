@@ -17,9 +17,13 @@ function decorated(doc) {
 }
 
 test('nhãn LaTeX', () => {
-  assert.equal(texLabel('A1'), '$A_{1}$');
+  assert.equal(texLabel('A1'), '$A_1$');
+  assert.equal(texLabel('I_A'), '$I_A$');
+  assert.equal(texLabel('X_{AB}'), '$X_{AB}$');
+  assert.equal(texLabel("B'"), "$B'$");
+  assert.equal(texLabel("A'_1"), "$A'_1$");
   assert.equal(texLabel("A'"), "$A'$");
-  assert.equal(texLabel('ω2'), '$\\omega_{2}$');
+  assert.equal(texLabel('ω2'), '$\\omega_2$');
 });
 
 test('mã TikZ giữ màu, đánh dấu, nét đứt; đường thẳng bị cắt theo khung', () => {

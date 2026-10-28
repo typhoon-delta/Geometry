@@ -36,11 +36,11 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   // tua bước
   await page.click('#btn-present');
   const nFrames = await page.evaluate(() => GeoCore.frames(__app.doc).length);
-  let visible = await page.evaluate(() => __app.renderer.els.size);
+  let visible = await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(__app.renderer.drawnIds.size)))));
   ok(visible === 1, `khung 1 chỉ hiện 1 đối tượng (${visible})`);
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
-  visible = await page.evaluate(() => __app.renderer.els.size);
+  visible = await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(__app.renderer.drawnIds.size)))));
   ok(visible === 3, `sau 2 lần "Sau" hiện 3 đối tượng (${visible})`);
   await page.click('#btn-next');
   await page.click('#btn-next');
@@ -119,7 +119,7 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   await shot('m4-kham-pha-9-diem');
   const iCyc = rels.findIndex((t) => /đồng viên/.test(t));
   await page.click(`.rel[data-i="${iCyc}"]`);
-  ok(await page.evaluate(() => __app.renderer.extra.some((e) => e.elType === 'circumcircle')), 'quan hệ đồng viên vẽ đường tròn phụ đứt nét');
+  ok(await page.evaluate(() => __app.renderer.extra.some((e) => e.type === 'circle3')), 'quan hệ đồng viên vẽ đường tròn phụ đứt nét');
   await shot('m4-kham-pha-dong-vien');
   await page.evaluate(() => __app.commit((d) => { d.steps[0].params.x += 0.1; }));
   ok(await page.locator('.stale').count() === 1, 'sửa hình → báo kết quả cũ');

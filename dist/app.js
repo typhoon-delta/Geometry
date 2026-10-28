@@ -567,29 +567,39 @@
   var paramsOf = (step) => ({ ...STEP_TYPES[step.type]?.params || {}, ...step.params || {} });
   function evaluate(doc, overrides = null) {
     const vals = /* @__PURE__ */ new Map();
-    for (const s of doc.steps) {
-      const def = STEP_TYPES[s.type];
-      let v = null;
-      if (def) {
-        const argVals = s.args.map((a) => vals.get(a));
-        const ok = argVals.every((a, i) => {
-          if (!a) return false;
-          const t = def.args[0] === "...point" ? "...point" : def.args[i];
-          return argAccepts(t, a.kind);
-        });
-        if (ok) {
-          const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
-          try {
-            v = def.compute(argVals, p) || null;
-          } catch {
-            v = null;
-          }
-          if (v && def.kind !== "mark" && !valueFinite(v)) v = null;
-        }
-      }
-      vals.set(s.id, v);
-    }
+    for (const s of doc.steps) vals.set(s.id, computeStep(s, vals, overrides));
     return vals;
+  }
+  function computeStep(s, vals, overrides = null) {
+    const def = STEP_TYPES[s.type];
+    if (!def) return null;
+    const variadic = def.args[0] === "...point";
+    const argVals = new Array(s.args.length);
+    for (let i = 0; i < s.args.length; i++) {
+      const a = vals.get(s.args[i]);
+      if (!a || !argAccepts(variadic ? "...point" : def.args[i], a.kind)) return null;
+      argVals[i] = a;
+    }
+    const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
+    let v;
+    try {
+      v = def.compute(argVals, p) || null;
+    } catch {
+      v = null;
+    }
+    if (v && def.kind !== "mark" && !valueFinite(v)) v = null;
+    return v;
+  }
+  function makeUpdater(doc, changedIds) {
+    const need = dependents(doc, changedIds);
+    for (const id of changedIds) need.add(id);
+    const plan = doc.steps.filter((s) => need.has(s.id));
+    const update = (vals) => {
+      for (const s of plan) vals.set(s.id, computeStep(s, vals));
+      return vals;
+    };
+    update.size = plan.length;
+    return update;
   }
   function valueFinite(v) {
     if (v.kind === "point") return Number.isFinite(v.x) && Number.isFinite(v.y);
@@ -726,37 +736,33 @@
     }
   }
 
-  // src/ui/styles.js
-  var PALETTE = [
-    { name: "\u0110en", hex: "#111827" },
-    { name: "Xanh d\u01B0\u01A1ng", hex: "#1d4ed8" },
-    { name: "\u0110\u1ECF", hex: "#dc2626" },
-    { name: "Xanh l\xE1", hex: "#15803d" },
-    { name: "Cam", hex: "#ea580c" },
-    { name: "T\xEDm", hex: "#7e22ce" },
-    { name: "Xanh ng\u1ECDc", hex: "#0e7490" },
-    { name: "X\xE1m", hex: "#6b7280" }
-  ];
-  var DEFAULT_BY_TYPE = {
-    free_point: { color: "#111827", fillColor: "#dc2626" },
-    point_on: { color: "#111827", fillColor: "#ea580c" },
-    circumcircle: { color: "#1d4ed8" },
-    incircle: { color: "#15803d" },
-    nine_point_circle: { color: "#7e22ce" },
-    polygon: { color: "#1d4ed8", fill: 0.12 },
-    angle_mark: { color: "#dc2626", arcs: 1 },
-    segment_mark: { color: "#dc2626", ticks: 1 }
-  };
-  var DEFAULT_BY_KIND = {
-    point: { color: "#111827", size: 3, showLabel: true },
-    line: { color: "#111827", width: 1.6, dash: false, showLabel: false },
-    circle: { color: "#111827", width: 1.6, dash: false, fill: 0, showLabel: false },
-    mark: { color: "#dc2626", width: 1.6 }
-  };
-  function styleOf(step, kind) {
-    return { ...DEFAULT_BY_KIND[kind || "mark"], ...DEFAULT_BY_TYPE[step.type] || {}, ...step.style || {} };
+  // src/core/names.js
+  function parseLabel(name) {
+    const s = String(name ?? "");
+    let m = /^(.+?)('*)_\{([^}]*)\}('*)$/.exec(s) || /^(.+?)('*)_([^_{}']+)('*)$/.exec(s);
+    if (m) return { base: m[1], sub: m[3], primes: (m[2] + m[4]).length };
+    m = /^(.*?[^\d'])('*)(\d+)('*)$/.exec(s);
+    if (m) return { base: m[1], sub: m[3], primes: (m[2] + m[4]).length };
+    m = /^(.*?)('+)$/.exec(s);
+    if (m && m[1]) return { base: m[1], sub: "", primes: m[2].length };
+    return { base: s, sub: "", primes: 0 };
   }
-  var isDraggableType = (type) => type === "free_point" || type === "point_on";
+  var escHTML = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  function labelHTML(name) {
+    if (!name) return "";
+    const { base, sub: sub2, primes } = parseLabel(name);
+    return `<i class="lb">${escHTML(base)}${"\u2032".repeat(primes)}${sub2 ? `<sub>${escHTML(sub2)}</sub>` : ""}</i>`;
+  }
+  var GREEK = { "\u03B1": "\\alpha", "\u03B2": "\\beta", "\u03B3": "\\gamma", "\u03B4": "\\delta", "\u0394": "\\Delta", "\u03B5": "\\varepsilon", "\u03B8": "\\theta", "\u03BB": "\\lambda", "\u03BC": "\\mu", "\u03C0": "\\pi", "\u03C1": "\\rho", "\u03C3": "\\sigma", "\u03C6": "\\varphi", "\u03C9": "\\omega", "\u03A9": "\\Omega", "\u0393": "\\Gamma" };
+  var texText = (s) => s.replace(/[αβγδΔεθλμπρσφωΩΓ]/g, (c) => GREEK[c] + " ").replace(/[#$%&{}]/g, (c) => "\\" + c).trim();
+  function texLabel(name) {
+    const { base, sub: sub2, primes } = parseLabel(name);
+    const b = texText(base);
+    const p = "'".repeat(primes);
+    if (!sub2) return `$${b}${p}$`;
+    const sb = texText(sub2);
+    return sb.length === 1 ? `$${b}${p}_${sb}$` : `$${b}${p}_{${sb}}$`;
+  }
 
   // src/core/labels.js
   var N_DIR = 16;
@@ -831,226 +837,345 @@
     return d > Math.PI ? 2 * Math.PI - d : d;
   }
 
+  // src/ui/styles.js
+  var PALETTE = [
+    { name: "\u0110en", hex: "#111827" },
+    { name: "Xanh d\u01B0\u01A1ng", hex: "#1d4ed8" },
+    { name: "\u0110\u1ECF", hex: "#dc2626" },
+    { name: "Xanh l\xE1", hex: "#15803d" },
+    { name: "Cam", hex: "#ea580c" },
+    { name: "T\xEDm", hex: "#7e22ce" },
+    { name: "Xanh ng\u1ECDc", hex: "#0e7490" },
+    { name: "X\xE1m", hex: "#6b7280" }
+  ];
+  var DEFAULT_BY_TYPE = {
+    free_point: { color: "#111827", fillColor: "#dc2626" },
+    point_on: { color: "#111827", fillColor: "#ea580c" },
+    circumcircle: { color: "#1d4ed8" },
+    incircle: { color: "#15803d" },
+    nine_point_circle: { color: "#7e22ce" },
+    polygon: { color: "#1d4ed8", fill: 0.12 },
+    angle_mark: { color: "#dc2626", arcs: 1 },
+    segment_mark: { color: "#dc2626", ticks: 1 }
+  };
+  var DEFAULT_BY_KIND = {
+    point: { color: "#111827", size: 3, showLabel: true },
+    line: { color: "#111827", width: 1.6, dash: false, showLabel: false },
+    circle: { color: "#111827", width: 1.6, dash: false, fill: 0, showLabel: false },
+    mark: { color: "#dc2626", width: 1.6 }
+  };
+  function styleOf(step, kind) {
+    return { ...DEFAULT_BY_KIND[kind || "mark"], ...DEFAULT_BY_TYPE[step.type] || {}, ...step.style || {} };
+  }
+  var isDraggableType = (type) => type === "free_point" || type === "point_on";
+
   // src/ui/render.js
   var LABEL_DIST = 13;
-  var HALO = "#60a5fa";
+  var HALO = "rgba(96,165,250,0.45)";
   var RELATION = "#f59e0b";
-  function labelHTML(name) {
-    if (!name) return "";
-    const esc4 = name.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    const m = /^(.*?)(\d+)('*)$/.exec(esc4);
-    return m && m[1] ? `${m[1]}<sub>${m[2]}</sub>${m[3]}` : esc4;
-  }
+  var LABEL_FONT = "'Times New Roman', 'Nimbus Roman', 'Liberation Serif', 'TeX Gyre Termes', Times, serif";
   var Renderer = class {
-    constructor(board) {
-      this.board = board;
+    constructor(view) {
+      this.view = view;
       this.values = /* @__PURE__ */ new Map();
-      this.els = /* @__PURE__ */ new Map();
+      this.items = [];
       this.extra = [];
       this.scale = 1;
-    }
-    val(id) {
-      return this.values.get(id);
-    }
-    clear() {
-      for (const arr of this.els.values()) for (const e of arr.slice().reverse()) this.board.removeObject(e);
-      this.els.clear();
+      this.grid = false;
+      this.labelOffsets = /* @__PURE__ */ new Map();
+      this.labelBoxes = /* @__PURE__ */ new Map();
+      this.drawnIds = /* @__PURE__ */ new Set();
+      view.painter = (ctx, v) => this.draw(ctx, v);
     }
     /**
-     * Dựng lại toàn bộ phần tử.
-     * opts.visible: Set id được phép hiện (chế độ trình bày) hoặc null = tất cả
-     * opts.selected: Set id đang chọn; opts.highlight: Set id tô sáng (kết quả khám phá)
+     * Thiết lập cảnh (sau mỗi thay đổi tài liệu, chọn, chế độ…).
+     * opts.visible: Set id được hiện (chế độ trình bày) hoặc null = tất cả
+     * opts.selected, opts.highlight: Set id
      */
-    rebuild(doc, values, opts = {}) {
-      const b = this.board;
-      b.suspendUpdate();
-      this.clear();
-      this.values = values;
+    setScene(doc, values, opts = {}) {
       this.doc = doc;
+      this.values = values;
       const k = kinds(doc);
       const visible = opts.visible || null;
       const selected = opts.selected || /* @__PURE__ */ new Set();
       const highlight = opts.highlight || /* @__PURE__ */ new Set();
-      this.autoDirs = autoLabelDirs(doc, values, (s) => !s.hidden && (!visible || visible.has(s.id)));
-      this.labelOffsets = /* @__PURE__ */ new Map();
       const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
-      const steps = doc.steps.filter((s) => !s.hidden && (!visible || visible.has(s.id))).map((s) => ({ s, kind: k.get(s.id) })).sort((a, b2) => (order[a.s.type === "polygon" ? "polygon" : a.kind] ?? 3) - (order[b2.s.type === "polygon" ? "polygon" : b2.kind] ?? 3));
-      for (const { s, kind } of steps) {
-        const st = styleOf(s, kind);
-        const sel = selected.has(s.id);
-        const hl = highlight.has(s.id);
-        try {
-          const arr = this.create(s, kind, st, sel, hl);
-          this.els.set(s.id, arr);
-        } catch (e) {
-          console.warn("Kh\xF4ng v\u1EBD \u0111\u01B0\u1EE3c", s, e);
-        }
+      const layer = (s, kind) => order[s.type === "polygon" ? "polygon" : kind] ?? 3;
+      this.items = doc.steps.filter((s) => !s.hidden && (!visible || visible.has(s.id))).map((s) => {
+        const kind = k.get(s.id);
+        return { s, kind, st: styleOf(s, kind), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
+      }).sort((a, b) => a.layer - b.layer);
+      const dirs = autoLabelDirs(doc, values, (s) => !s.hidden && (!visible || visible.has(s.id)));
+      this.labelOffsets = /* @__PURE__ */ new Map();
+      for (const it of this.items) {
+        if (it.kind !== "point") continue;
+        const d = dirs.get(it.s.id) || { x: 0.7, y: 0.7 };
+        this.labelOffsets.set(it.s.id, it.st.labelOffset || [Math.round(d.x * LABEL_DIST), Math.round(d.y * LABEL_DIST)]);
       }
-      b.unsuspendUpdate();
-      this.refreshVisibility();
+      this.view.requestDraw();
     }
-    /** Cập nhật toạ độ sau khi kéo (không dựng lại phần tử). */
+    /** Toạ độ đã đổi (đang kéo): chỉ cần vẽ lại. */
     update(values) {
       this.values = values;
-      this.refreshVisibility();
-      this.board.update();
+      this.view.requestDraw();
     }
-    refreshVisibility() {
-      for (const [id, arr] of this.els) {
-        const ok = !!this.values.get(id);
-        for (const e of arr) {
-          if (e._hideAlways) continue;
-          if (e.visProp.visible !== ok) e.setAttribute({ visible: ok });
-        }
-      }
-    }
-    // ---------- tạo phần tử ----------
-    fx(fn) {
-      return () => {
-        const v = fn();
-        return v == null || !Number.isFinite(v) ? NaN : v;
-      };
-    }
-    helperPoint(fx, fy) {
-      const p = this.board.create("point", [fx, fy], { visible: false, fixed: true, withLabel: false, name: "" });
-      p._hideAlways = true;
-      return p;
-    }
-    create(s, kind, st, sel, hl) {
-      const id = s.id;
-      const b = this.board;
-      const sc = this.scale;
-      const color = hl ? RELATION : st.color;
-      const width = (st.width || 1.6) * sc * (hl ? 1.8 : 1);
-      const common = { fixed: true, highlight: false, withLabel: false, name: "" };
-      const out = [];
-      const V = () => this.values.get(id);
-      if (kind === "point") {
-        const size = (st.size || 3) * sc * (hl ? 1.4 : 1);
-        if (sel) {
-          out.push(b.create("point", [this.fx(() => V()?.x), this.fx(() => V()?.y)], {
-            ...common,
-            size: size + 6 * sc,
-            strokeColor: HALO,
-            fillColor: HALO,
-            fillOpacity: 0.35,
-            strokeOpacity: 0.6
-          }));
-        }
-        const dir = this.autoDirs?.get(id) || { x: 0.7, y: 0.7 };
-        const off = st.labelOffset || [Math.round(dir.x * LABEL_DIST), Math.round(dir.y * LABEL_DIST)];
-        this.labelOffsets.set(id, off);
-        const p = b.create("point", [this.fx(() => V()?.x), this.fx(() => V()?.y)], {
-          ...common,
-          name: st.showLabel ? labelHTML(s.name) : "",
-          withLabel: !!st.showLabel,
-          size,
-          face: "o",
-          strokeColor: hl ? RELATION : st.color,
-          strokeWidth: 1 * sc,
-          fillColor: hl ? RELATION : st.fillColor || st.color,
-          label: {
-            offset: off.map((v) => v * sc),
-            anchorX: "middle",
-            anchorY: "middle",
-            fontSize: Math.round(16 * sc),
-            strokeColor: hl ? "#b45309" : st.labelColor || "#111827",
-            cssClass: "pt-label",
-            highlightCssClass: "pt-label",
-            highlight: false
-          }
-        });
-        p._stepId = id;
-        out.push(p);
-        return out;
-      }
-      if (kind === "line") {
-        const p1 = this.helperPoint(this.fx(() => V()?.p.x), this.fx(() => V()?.p.y));
-        const p2 = this.helperPoint(this.fx(() => V() && V().p.x + V().d.x), this.fx(() => V() && V().p.y + V().d.y));
-        out.push(p1, p2);
-        const subt = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : null;
-        const sub2 = subt || this.values.get(id)?.sub || "line";
-        const attrs = {
-          ...common,
-          straightFirst: sub2 === "line",
-          straightLast: sub2 !== "segment",
-          strokeColor: color,
-          strokeWidth: width,
-          dash: st.dash ? 2 : 0,
-          withLabel: !!st.showLabel,
-          name: st.showLabel ? labelHTML(s.name) : "",
-          label: { fontSize: Math.round(15 * sc), strokeColor: color }
-        };
-        if (sel) out.push(b.create("line", [p1, p2], { ...attrs, strokeColor: HALO, strokeWidth: width + 7 * sc, strokeOpacity: 0.45, dash: 0, withLabel: false, name: "" }));
-        out.push(b.create("line", [p1, p2], attrs));
-        return out;
-      }
-      if (kind === "circle") {
-        const c = this.helperPoint(this.fx(() => V()?.c.x), this.fx(() => V()?.c.y));
-        out.push(c);
-        const r = () => V()?.r ?? NaN;
-        const attrs = {
-          ...common,
-          strokeColor: color,
-          strokeWidth: width,
-          dash: st.dash ? 2 : 0,
-          fillColor: st.fillColor || st.color,
-          fillOpacity: st.fill || 0,
-          withLabel: !!st.showLabel,
-          name: st.showLabel ? labelHTML(s.name) : "",
-          label: { fontSize: Math.round(15 * sc), strokeColor: color }
-        };
-        if (sel) out.push(b.create("circle", [c, r], { ...attrs, strokeColor: HALO, strokeWidth: width + 7 * sc, strokeOpacity: 0.45, fillOpacity: 0, dash: 0, withLabel: false, name: "" }));
-        out.push(b.create("circle", [c, r], attrs));
-        return out;
-      }
-      if (s.type === "polygon") {
-        const pts = s.args.map((_, i) => this.helperPoint(this.fx(() => V()?.pts[i].x), this.fx(() => V()?.pts[i].y)));
-        out.push(...pts);
-        const poly = b.create("polygon", pts, {
-          ...common,
-          fillColor: st.fillColor || color,
-          fillOpacity: sel ? Math.min(1, (st.fill ?? 0.12) + 0.15) : st.fill ?? 0.12,
-          borders: { visible: !!st.border, strokeColor: color, strokeWidth: width, highlight: false, fixed: true },
-          vertices: { visible: false },
-          hasInnerPoints: false
-        });
-        out.push(poly);
-        return out;
-      }
-      if (s.type === "angle_mark" || s.type === "segment_mark") {
-        const curve = b.create("curve", [[0], [0]], {
-          ...common,
-          strokeColor: sel ? HALO : color,
-          strokeWidth: width * (sel ? 1.8 : 1)
-        });
-        const self = this;
-        curve.updateDataArray = function() {
-          const v = V();
-          const pathOut = v ? s.type === "angle_mark" ? angleMarkPath(v, st, self.pxToUser(), sc) : segMarkPath(v, st, self.pxToUser(), sc) : [[], []];
-          this.dataX = pathOut[0];
-          this.dataY = pathOut[1];
-        };
-        out.push(curve);
-        return out;
-      }
-      return out;
-    }
-    /** Số đơn vị người dùng ứng với 1 pixel. */
-    pxToUser() {
-      return 1 / this.board.unitX;
-    }
-    // ---------- phần tử tạm ----------
     clearExtra() {
-      for (const e of this.extra.slice().reverse()) this.board.removeObject(e);
       this.extra = [];
+      this.view.requestDraw();
     }
-    addExtra(type, parents, attrs) {
-      const e = this.board.create(type, parents, { fixed: true, highlight: false, withLabel: false, name: "", ...attrs });
-      this.extra.push(e);
-      return e;
+    /** spec: {type:'segment'|'line'|'ray'|'circle'|'circle3'|'point', pts:[() => {x,y}], style} */
+    addExtra(spec) {
+      this.extra.push(spec);
+      this.view.requestDraw();
+      return spec;
+    }
+    setLabelOffset(id, off) {
+      this.labelOffsets.set(id, off);
+      this.view.requestDraw();
+    }
+    // ================= vẽ =================
+    draw(ctx, view) {
+      const sc = this.scale;
+      const V = this.values;
+      this.drawnIds = /* @__PURE__ */ new Set();
+      this.labelBoxes = /* @__PURE__ */ new Map();
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      if (this.grid) drawGrid(ctx, view);
+      const labels = [];
+      for (const it of this.items) {
+        const v = V.get(it.s.id);
+        if (!v) continue;
+        this.drawnIds.add(it.s.id);
+        const { s, kind, st, sel, hl } = it;
+        const color = hl ? RELATION : st.color;
+        const width = (st.width || 1.6) * sc * (hl ? 1.8 : 1);
+        if (kind === "line") {
+          const sub2 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
+          if (sel) strokeLine(ctx, view, v, sub2, HALO, width + 7 * sc, false);
+          strokeLine(ctx, view, v, sub2, color, width, st.dash);
+          if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: lineLabelPos(view, v, sub2), color, off: [0, 10] });
+        } else if (kind === "circle") {
+          const c = view.toScreen(v.c), r = v.r * view.scale;
+          if (st.fill) fillCircle(ctx, c, r, st.fillColor || st.color, st.fill);
+          if (sel) strokeCircle(ctx, c, r, HALO, width + 7 * sc, false);
+          strokeCircle(ctx, c, r, color, width, st.dash);
+          if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: { x: c.x + r * 0.707, y: c.y - r * 0.707 }, color, off: [8, 8] });
+        } else if (s.type === "polygon") {
+          const pts = v.pts.map((p) => view.toScreen(p));
+          ctx.beginPath();
+          pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+          ctx.closePath();
+          ctx.globalAlpha = sel ? Math.min(1, (st.fill ?? 0.12) + 0.15) : st.fill ?? 0.12;
+          ctx.fillStyle = st.fillColor || color;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          if (st.border) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.setLineDash([]);
+            ctx.stroke();
+          }
+        } else if (s.type === "angle_mark" || s.type === "segment_mark") {
+          const px = 1 / view.scale;
+          const [X, Y] = s.type === "angle_mark" ? angleMarkPath(v, st, px, sc) : segMarkPath(v, st, px, sc);
+          strokePath(ctx, view, X, Y, sel ? "#60a5fa" : color, width * (sel ? 1.8 : 1));
+        } else if (kind === "point") {
+          const p = view.toScreen(v);
+          const size = (st.size || 3) * sc * (hl ? 1.4 : 1);
+          if (sel) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, size + 6 * sc, 0, 2 * Math.PI);
+            ctx.fillStyle = HALO;
+            ctx.fill();
+          }
+          drawPoint(ctx, p, size, hl ? RELATION : st.color, hl ? RELATION : st.fillColor || st.color, sc, st.hollow);
+          if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: p, color: hl ? "#b45309" : st.labelColor || "#111827", off: this.labelOffsets.get(s.id) || [9, 9], point: true });
+        }
+      }
+      for (const e of this.extra) drawExtra(ctx, view, e, sc);
+      const fontPx = 16 * sc;
+      for (const L of labels) {
+        const box = drawLabel(ctx, L.name, L.at.x + L.off[0] * sc, L.at.y - L.off[1] * sc, fontPx, L.color);
+        if (L.point) this.labelBoxes.set(L.id, box);
+      }
     }
   };
+  function setStroke(ctx, color, width, dash) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.setLineDash(dash ? [6, 4] : []);
+  }
+  function clip(p, d, x1, y1, x2, y2, tMin = -Infinity, tMax = Infinity) {
+    let t0 = tMin, t1 = tMax;
+    for (const [pp, dd, lo, hi] of [[p.x, d.x, x1, x2], [p.y, d.y, y1, y2]]) {
+      if (Math.abs(dd) < 1e-12) {
+        if (pp < lo || pp > hi) return null;
+        continue;
+      }
+      let a = (lo - pp) / dd, b = (hi - pp) / dd;
+      if (a > b) [a, b] = [b, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, b);
+    }
+    return t0 < t1 ? [t0, t1] : null;
+  }
+  function screenLine(view, v, sub2) {
+    const p = view.toScreen(v.p);
+    const q = view.toScreen({ x: v.p.x + v.d.x, y: v.p.y + v.d.y });
+    const d = { x: q.x - p.x, y: q.y - p.y };
+    const m = 20;
+    const r = clip(p, d, -m, -m, view.W + m, view.H + m, sub2 === "line" ? -Infinity : 0, sub2 === "segment" ? 1 : Infinity);
+    if (!r) return null;
+    return [{ x: p.x + r[0] * d.x, y: p.y + r[0] * d.y }, { x: p.x + r[1] * d.x, y: p.y + r[1] * d.y }];
+  }
+  function strokeLine(ctx, view, v, sub2, color, width, dash) {
+    const seg = screenLine(view, v, sub2);
+    if (!seg) return;
+    setStroke(ctx, color, width, dash);
+    ctx.beginPath();
+    ctx.moveTo(seg[0].x, seg[0].y);
+    ctx.lineTo(seg[1].x, seg[1].y);
+    ctx.stroke();
+  }
+  function lineLabelPos(view, v, sub2) {
+    const seg = screenLine(view, v, sub2);
+    if (!seg) return { x: -1e4, y: -1e4 };
+    const t = sub2 === "segment" ? 0.5 : 0.85;
+    return { x: seg[0].x + t * (seg[1].x - seg[0].x), y: seg[0].y + t * (seg[1].y - seg[0].y) };
+  }
+  function strokeCircle(ctx, c, r, color, width, dash) {
+    if (!(r > 0) || r > 1e7) return;
+    setStroke(ctx, color, width, dash);
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+  function fillCircle(ctx, c, r, color, alpha) {
+    if (!(r > 0) || r > 1e7) return;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  function drawPoint(ctx, p, size, stroke, fill, sc, hollow) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, size, 0, 2 * Math.PI);
+    ctx.fillStyle = hollow ? "#ffffff" : fill;
+    ctx.fill();
+    ctx.setLineDash([]);
+    ctx.lineWidth = Math.max(1, 1 * sc);
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
+  }
+  function strokePath(ctx, view, X, Y, color, width) {
+    setStroke(ctx, color, width, false);
+    ctx.beginPath();
+    let pen = false;
+    for (let i = 0; i < X.length; i++) {
+      if (!Number.isFinite(X[i])) {
+        pen = false;
+        continue;
+      }
+      const p = view.toScreen({ x: X[i], y: Y[i] });
+      if (pen) ctx.lineTo(p.x, p.y);
+      else {
+        ctx.moveTo(p.x, p.y);
+        pen = true;
+      }
+    }
+    ctx.stroke();
+  }
+  function drawGrid(ctx, view) {
+    if (view.scale < 6) return;
+    const [x1, y1, x2, y2] = view.getBoundingBox();
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    for (let x = Math.ceil(x1); x <= x2; x++) {
+      const s = view.toScreen({ x, y: 0 }).x;
+      ctx.moveTo(s, 0);
+      ctx.lineTo(s, view.H);
+    }
+    for (let y = Math.ceil(y2); y <= y1; y++) {
+      const s = view.toScreen({ x: 0, y }).y;
+      ctx.moveTo(0, s);
+      ctx.lineTo(view.W, s);
+    }
+    ctx.stroke();
+  }
+  var labelCache = /* @__PURE__ */ new Map();
+  function measureLabel(ctx, name, fontPx) {
+    const key = name + "|" + fontPx;
+    let m = labelCache.get(key);
+    if (m) return m;
+    const { base, sub: sub2, primes } = parseLabel(name);
+    const subPx = Math.round(fontPx * 0.68);
+    m = { base, sub: sub2, pr: "\u2032".repeat(primes), fBase: `italic ${fontPx}px ${LABEL_FONT}`, fPr: `${fontPx}px ${LABEL_FONT}`, fSub: `italic ${subPx}px ${LABEL_FONT}` };
+    ctx.font = m.fBase;
+    m.wBase = ctx.measureText(base).width;
+    ctx.font = m.fPr;
+    m.wPr = m.pr ? ctx.measureText(m.pr).width : 0;
+    ctx.font = m.fSub;
+    m.wSub = sub2 ? ctx.measureText(sub2).width + 1 : 0;
+    m.w = m.wBase + m.wPr + m.wSub;
+    if (labelCache.size > 2e3) labelCache.clear();
+    labelCache.set(key, m);
+    return m;
+  }
+  function drawLabel(ctx, name, cx, cy, fontPx, color) {
+    const m = measureLabel(ctx, name, fontPx);
+    const x0 = cx - m.w / 2;
+    const baseline = cy + fontPx * 0.33;
+    ctx.fillStyle = color;
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "left";
+    ctx.font = m.fBase;
+    ctx.fillText(m.base, x0, baseline);
+    if (m.pr) {
+      ctx.font = m.fPr;
+      ctx.fillText(m.pr, x0 + m.wBase, baseline);
+    }
+    if (m.sub) {
+      ctx.font = m.fSub;
+      ctx.fillText(m.sub, x0 + m.wBase + m.wPr + 0.5, baseline + fontPx * 0.22);
+    }
+    return { x: x0 - 2, y: cy - fontPx * 0.6, w: m.w + 4, h: fontPx * 1.25 };
+  }
+  function drawExtra(ctx, view, e, sc) {
+    const P2 = e.pts.map((f) => f());
+    if (P2.some((p) => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return;
+    const st = { color: "#9ca3af", width: 1.5, dash: true, ...e.style || {} };
+    const w = st.width * sc;
+    if (e.type === "segment" || e.type === "line" || e.type === "ray") {
+      const d = { x: P2[1].x - P2[0].x, y: P2[1].y - P2[0].y };
+      if (Math.hypot(d.x, d.y) < 1e-12) return;
+      strokeLine(ctx, view, { p: P2[0], d }, e.type, st.color, w, st.dash);
+    } else if (e.type === "circle") {
+      strokeCircle(ctx, view.toScreen(P2[0]), Math.hypot(P2[1].x - P2[0].x, P2[1].y - P2[0].y) * view.scale, st.color, w, st.dash);
+    } else if (e.type === "circle3") {
+      const [A, B, C] = P2;
+      const d = 2 * (A.x * (B.y - C.y) + B.x * (C.y - A.y) + C.x * (A.y - B.y));
+      if (Math.abs(d) < 1e-12) return;
+      const a2 = A.x * A.x + A.y * A.y, b2 = B.x * B.x + B.y * B.y, c2 = C.x * C.x + C.y * C.y;
+      const O = { x: (a2 * (B.y - C.y) + b2 * (C.y - A.y) + c2 * (A.y - B.y)) / d, y: (a2 * (C.x - B.x) + b2 * (A.x - C.x) + c2 * (B.x - A.x)) / d };
+      strokeCircle(ctx, view.toScreen(O), Math.hypot(A.x - O.x, A.y - O.y) * view.scale, st.color, w, st.dash);
+    } else if (e.type === "polyline") {
+      setStroke(ctx, st.color, w, st.dash);
+      ctx.beginPath();
+      P2.forEach((p, i) => {
+        const q = view.toScreen(p);
+        if (i) ctx.lineTo(q.x, q.y);
+        else ctx.moveTo(q.x, q.y);
+      });
+      ctx.stroke();
+    } else if (e.type === "point") {
+      drawPoint(ctx, view.toScreen(P2[0]), (st.size || 7) * sc, st.color, st.fill || "#fde68a", sc);
+    }
+  }
   function angleMarkPath(v, st, px, sc = 1) {
     const { A, B, C } = v;
     const a1 = Math.atan2(A.y - B.y, A.x - B.x);
@@ -1099,6 +1224,105 @@
     }
     return [X, Y];
   }
+
+  // src/ui/view.js
+  var CanvasView = class {
+    constructor(host) {
+      this.host = host;
+      this.canvas = document.createElement("canvas");
+      this.canvas.className = "board-canvas";
+      host.appendChild(this.canvas);
+      this.ctx = this.canvas.getContext("2d");
+      this.cx = 0;
+      this.cy = 0;
+      this.scale = 40;
+      this.W = 0;
+      this.H = 0;
+      this.painter = null;
+      this.frameHooks = [];
+      this.listeners = [];
+      this.frameRequested = false;
+      this.resize();
+      if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => this.resize()).observe(host);
+      else window.addEventListener("resize", () => this.resize());
+    }
+    resize() {
+      const r = this.host.getBoundingClientRect();
+      const W = Math.max(1, Math.round(r.width)), H = Math.max(1, Math.round(r.height));
+      const dpr = window.devicePixelRatio || 1;
+      if (W === this.W && H === this.H && dpr === this.dpr) return;
+      this.W = W;
+      this.H = H;
+      this.dpr = dpr;
+      this.canvas.width = Math.round(W * dpr);
+      this.canvas.height = Math.round(H * dpr);
+      this.canvas.style.width = W + "px";
+      this.canvas.style.height = H + "px";
+      this.drawNow();
+    }
+    /** Đăng ký hàm gọi khi khung nhìn đổi (dời/phóng). */
+    onViewChange(fn) {
+      this.listeners.push(fn);
+    }
+    viewChanged() {
+      for (const fn of this.listeners) fn(this);
+    }
+    toScreen(P2) {
+      return { x: this.W / 2 + (P2.x - this.cx) * this.scale, y: this.H / 2 - (P2.y - this.cy) * this.scale };
+    }
+    toUser(sx, sy) {
+      return { x: this.cx + (sx - this.W / 2) / this.scale, y: this.cy - (sy - this.H / 2) / this.scale };
+    }
+    /** [xTrái, yTrên, xPhải, yDưới] (cùng quy ước với JSXGraph trước đây, để tương thích tệp cũ). */
+    getBoundingBox() {
+      const a = this.toUser(0, 0), b = this.toUser(this.W, this.H);
+      return [a.x, a.y, b.x, b.y];
+    }
+    setBoundingBox([x1, y1, x2, y2]) {
+      const w = Math.abs(x2 - x1), h = Math.abs(y1 - y2);
+      if (!(w > 0) || !(h > 0)) return;
+      this.scale = Math.min(this.W / w, this.H / h);
+      this.cx = (x1 + x2) / 2;
+      this.cy = (y1 + y2) / 2;
+      this.requestDraw();
+      this.viewChanged();
+    }
+    panBy(dx, dy) {
+      this.cx -= dx / this.scale;
+      this.cy += dy / this.scale;
+      this.requestDraw();
+      this.viewChanged();
+    }
+    zoomAt(sx, sy, factor) {
+      const P2 = this.toUser(sx, sy);
+      this.scale = Math.min(1e5, Math.max(0.02, this.scale * factor));
+      this.cx = P2.x - (sx - this.W / 2) / this.scale;
+      this.cy = P2.y + (sy - this.H / 2) / this.scale;
+      this.requestDraw();
+      this.viewChanged();
+    }
+    /** Xin vẽ lại; nhiều lần xin trong cùng một khung chỉ vẽ một lần. */
+    requestDraw() {
+      if (this.frameRequested || this.drawing) return;
+      this.frameRequested = true;
+      requestAnimationFrame(() => {
+        this.frameRequested = false;
+        this.drawNow();
+      });
+    }
+    drawNow() {
+      this.drawing = true;
+      try {
+        for (const f of this.frameHooks) f();
+        const ctx = this.ctx;
+        ctx.setTransform(this.dpr || 1, 0, 0, this.dpr || 1, 0, 0);
+        ctx.clearRect(0, 0, this.W, this.H);
+        if (this.painter) this.painter(ctx, this);
+      } finally {
+        this.drawing = false;
+      }
+    }
+  };
 
   // src/ui/tools.js
   var T = (id, label, group, icon, inputs, hints, make, extra = {}) => ({ id, label, group, icon, inputs, hints, make, ...extra });
@@ -1433,21 +1657,9 @@
     }
     // ================= khởi tạo =================
     mount() {
-      JXG.Options.text.useMathJax = false;
-      JXG.Options.text.display = "html";
-      this.board = JXG.JSXGraph.initBoard("board", {
-        boundingbox: [-8, 6, 8, -6],
-        keepAspectRatio: true,
-        axis: false,
-        grid: false,
-        showCopyright: false,
-        showNavigation: false,
-        showInfobox: false,
-        pan: { enabled: true, needShift: false, needTwoFingers: false },
-        zoom: { wheel: true, needShift: false, min: 0.02, max: 100, factorX: 1.15, factorY: 1.15 },
-        resize: { enabled: true }
-      });
-      this.renderer = new Renderer(this.board);
+      this.view = new CanvasView(document.getElementById("board"));
+      this.view.setBoundingBox([-8, 6, 8, -6]);
+      this.renderer = new Renderer(this.view);
       this.stage = document.getElementById("stage");
       this.buildToolbar();
       this.bindPointer();
@@ -1476,7 +1688,7 @@
       this.highlight.clear();
       this.relation = null;
       this.cancelTool();
-      if (doc.view && Array.isArray(doc.view.bbox)) this.board.setBoundingBox(doc.view.bbox, true);
+      if (doc.view && Array.isArray(doc.view.bbox)) this.view.setBoundingBox(doc.view.bbox);
       this.refresh();
       this.emit("load");
       this.emit("change");
@@ -1562,7 +1774,8 @@
     refresh() {
       this.values = evaluate(this.doc);
       this.renderer.scale = this.projector ? 1.9 : 1;
-      this.renderer.rebuild(this.doc, this.values, {
+      this.renderer.grid = this.grid;
+      this.renderer.setScene(this.doc, this.values, {
         visible: this.visibleSet(),
         selected: this.mode === "present" ? /* @__PURE__ */ new Set() : this.selection,
         highlight: this.highlight
@@ -1571,11 +1784,11 @@
       this.drawRelationOverlay?.();
       this.renderPanels();
     }
-    /** Cập nhật nhanh khi kéo (không dựng lại phần tử). */
+    /** Cập nhật nhanh khi kéo: chỉ tính lại các bước phụ thuộc (nếu có bộ cập nhật), rồi vẽ lại. */
     quickUpdate() {
-      this.values = evaluate(this.doc);
+      if (this.dragUpdater) this.dragUpdater(this.values);
+      else this.values = evaluate(this.doc);
       this.renderer.update(this.values);
-      this.updateCoordsReadout?.();
     }
     renderPanels() {
       renderStepList(this);
@@ -1587,15 +1800,13 @@
     }
     // ================= toạ độ & chọn đối tượng =================
     toScreen(P2) {
-      const b = this.board;
-      return { x: b.origin.scrCoords[1] + P2.x * b.unitX, y: b.origin.scrCoords[2] - P2.y * b.unitY };
+      return this.view.toScreen(P2);
     }
     toUser(sx, sy) {
-      const b = this.board;
-      return { x: (sx - b.origin.scrCoords[1]) / b.unitX, y: (b.origin.scrCoords[2] - sy) / b.unitY };
+      return this.view.toUser(sx, sy);
     }
     eventPos(e) {
-      const r = this.board.containerObj.getBoundingClientRect();
+      const r = this.boardRect || (this.boardRect = this.view.canvas.getBoundingClientRect());
       return { sx: e.clientX - r.left, sy: e.clientY - r.top };
     }
     /** Các đối tượng gần vị trí màn hình (sx, sy), điểm trước, rồi theo khoảng cách. */
@@ -1603,7 +1814,7 @@
       const vis = this.visibleSet();
       const k = kinds(this.doc);
       const P2 = this.toUser(sx, sy);
-      const px = 1 / this.board.unitX;
+      const px = 1 / this.view.scale;
       const f = this.projector ? 1.6 : 1;
       const out = [];
       for (const s of this.doc.steps) {
@@ -1637,7 +1848,7 @@
     /** Điểm đã có trùng (về số) với P. */
     existingPointAt(P2, tolPx = 0.5) {
       const k = kinds(this.doc);
-      const tol = Math.max(1e-9 * this.figureScale(), tolPx / this.board.unitX);
+      const tol = Math.max(1e-9 * this.figureScale(), tolPx / this.view.scale);
       for (const s of this.doc.steps) {
         if (k.get(s.id) !== "point") continue;
         const v = this.values.get(s.id);
@@ -1679,7 +1890,7 @@
       if (pHit) return pHit.id;
       const P2 = this.toUser(sx, sy);
       const curves = hits.filter((h) => h.kind === "line" || h.kind === "circle").slice(0, 4);
-      const px = 1 / this.board.unitX;
+      const px = 1 / this.view.scale;
       let best = null;
       for (let i = 0; i < curves.length; i++)
         for (let j = i + 1; j < curves.length; j++)
@@ -1706,7 +1917,6 @@
       this.toolId = id;
       document.querySelectorAll(".tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === id));
       this.stage.classList.toggle("tool-active", id !== "move");
-      this.board.attr.pan.enabled = id === "move";
       this.showHint();
       renderToolOptions(this);
     }
@@ -1829,41 +2039,55 @@
       this.renderer.clearExtra();
       if (!tool.preview || !this.picks.length) return;
       const r = this.renderer;
-      const ptOf = (id) => r.addExtra("point", [() => this.values.get(id)?.x ?? NaN, () => this.values.get(id)?.y ?? NaN], { visible: false });
-      const mouse = r.addExtra("point", [() => this.mouse.x, () => this.mouse.y], { visible: false });
-      const st = { strokeColor: "#9ca3af", strokeWidth: 1.5, dash: 2 };
-      const pts = this.picks.map(ptOf);
-      if (tool.preview === "segment") r.addExtra("segment", [pts[0], mouse], st);
-      else if (tool.preview === "line") r.addExtra("line", [pts[0], mouse], st);
-      else if (tool.preview === "ray") r.addExtra("line", [pts[0], mouse], { ...st, straightFirst: false });
-      else if (tool.preview === "circle") r.addExtra("circle", [pts[0], mouse], st);
-      else if (tool.preview === "polygon") {
-        for (let i = 0; i + 1 < pts.length; i++) r.addExtra("segment", [pts[i], pts[i + 1]], st);
-        r.addExtra("segment", [pts[pts.length - 1], mouse], st);
-      }
+      const pts = this.picks.map((id) => () => this.values.get(id));
+      const mouse = () => this.mouse;
+      if (["segment", "line", "ray", "circle"].includes(tool.preview)) r.addExtra({ type: tool.preview, pts: [pts[0], mouse] });
+      else if (tool.preview === "polygon") r.addExtra({ type: "polyline", pts: [...pts, mouse] });
     }
     // ================= chuột / cảm ứng =================
     bindPointer() {
-      const box = this.board.containerObj;
+      const canvas = this.view.canvas;
       const wrap = this.stage;
+      const resetRect = () => {
+        this.boardRect = null;
+      };
+      window.addEventListener("resize", resetRect);
+      window.addEventListener("scroll", resetRect, true);
+      this.view.onViewChange(resetRect);
+      if (typeof ResizeObserver !== "undefined") new ResizeObserver(resetRect).observe(canvas);
       wrap.addEventListener("pointerdown", (e) => this.onPointerDown(e), true);
+      let hoverPending = false;
+      let lastEvent = null;
       wrap.addEventListener("pointermove", (e) => {
-        const { sx, sy } = this.eventPos(e);
-        this.mouse = this.toUser(sx, sy);
-        if (this.picks.length && this.renderer.extra.length) this.board.update();
-        if (!this.drag) {
+        if (this.drag) return;
+        lastEvent = e;
+        if (hoverPending) return;
+        hoverPending = true;
+        requestAnimationFrame(() => {
+          hoverPending = false;
+          if (this.drag || !lastEvent) return;
+          const ev = lastEvent;
+          const { sx, sy } = this.eventPos(ev);
+          this.mouse = this.toUser(sx, sy);
+          if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
           const hits = this.hitTest(sx, sy);
           let cursor = "";
-          if (this.toolId === "move" && this.mode !== "edit-disabled") {
+          if (this.toolId === "move" || this.mode === "present") {
             const h = hits[0];
             if (h && h.kind === "point" && isDraggableType(stepById(this.doc, h.id).type)) cursor = "grab";
-            else if (h) cursor = "pointer";
-            else if (this.labelAt(e)) cursor = "move";
-          } else if (this.toolId !== "move") cursor = hits.length ? "pointer" : "crosshair";
-          box.style.cursor = cursor;
-        }
+            else if (h && this.mode === "edit") cursor = "pointer";
+            else if (this.mode === "edit" && this.labelAt(ev)) cursor = "move";
+          } else cursor = hits.length ? "pointer" : "crosshair";
+          canvas.style.cursor = cursor;
+        });
       });
-      box.addEventListener("dblclick", (e) => {
+      canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const { sx, sy } = this.eventPos(e);
+        const dy = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
+        this.view.zoomAt(sx, sy, Math.exp(-dy * 15e-4));
+      }, { passive: false });
+      canvas.addEventListener("dblclick", (e) => {
         if (this.mode === "present") return;
         const { sx, sy } = this.eventPos(e);
         const h = this.hitTest(sx, sy)[0];
@@ -1872,20 +2096,52 @@
     }
     /** Nhãn điểm tại vị trí chuột (để kéo nhãn). */
     labelAt(e) {
-      for (const [id, arr] of this.renderer.els) {
-        const p = arr[arr.length - 1];
-        if (!p || p.elType !== "point" || !p.label || !p.label.rendNode || !p.visProp.visible || !p.visProp.withlabel) continue;
-        const r = p.label.rendNode.getBoundingClientRect();
-        if (r.width && e.clientX >= r.left - 2 && e.clientX <= r.right + 2 && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2) return id;
+      const { sx, sy } = this.eventPos(e);
+      for (const [id, b] of this.renderer.labelBoxes) {
+        if (sx >= b.x - 2 && sx <= b.x + b.w + 2 && sy >= b.y - 2 && sy <= b.y + b.h + 2) return id;
       }
       return null;
+    }
+    /** Dời hình bằng cách kéo nền (một ngón/chuột) hoặc chụm hai ngón để phóng (màn hình cảm ứng). */
+    startPan(e) {
+      const pointers = this.panPointers || (this.panPointers = /* @__PURE__ */ new Map());
+      pointers.set(e.pointerId, this.eventPos(e));
+      if (this.panning) return;
+      this.panning = true;
+      const move = (ev) => {
+        if (!pointers.has(ev.pointerId)) return;
+        const prev = [...pointers.values()];
+        const before = pointers.get(ev.pointerId);
+        const now = this.eventPos(ev);
+        pointers.set(ev.pointerId, now);
+        if (pointers.size >= 2) {
+          const [a0, b0] = prev, [a1, b1] = [...pointers.values()];
+          const d0 = Math.hypot(a0.sx - b0.sx, a0.sy - b0.sy), d1 = Math.hypot(a1.sx - b1.sx, a1.sy - b1.sy);
+          if (d0 > 5) this.view.zoomAt((a1.sx + b1.sx) / 2, (a1.sy + b1.sy) / 2, d1 / d0);
+        } else this.view.panBy(now.sx - before.sx, now.sy - before.sy);
+      };
+      const up = (ev) => {
+        pointers.delete(ev.pointerId);
+        if (pointers.size) return;
+        this.panning = false;
+        window.removeEventListener("pointermove", move, true);
+        window.removeEventListener("pointerup", up, true);
+        window.removeEventListener("pointercancel", up, true);
+      };
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", up, true);
+      window.addEventListener("pointercancel", up, true);
     }
     onPointerDown(e) {
       if (e.button !== void 0 && e.button !== 0) return;
       if (document.querySelector(".modal-back")) return;
+      this.boardRect = null;
       const { sx, sy } = this.eventPos(e);
-      const r = this.board.containerObj.getBoundingClientRect();
-      if (sx < 0 || sy < 0 || sx > r.width || sy > r.height) return;
+      if (sx < 0 || sy < 0 || sx > this.view.W || sy > this.view.H) return;
+      if (this.panning) {
+        this.startPan(e);
+        return;
+      }
       this.mouse = this.toUser(sx, sy);
       if (this.toolId !== "move" && this.mode === "edit") {
         e.stopPropagation();
@@ -1918,29 +2174,35 @@
         if (this.mode === "edit") this.select(h.id, e.shiftKey);
         return;
       }
-      if (this.mode === "edit" && (this.selection.size || this.highlight.size) && !e.shiftKey) {
+      e.preventDefault();
+      if (this.mode === "edit" && this.selection.size && !e.shiftKey) {
         this.selection.clear();
         this.refresh();
       }
+      this.startPan(e);
     }
+    /**
+     * Kéo điểm hoặc nhãn. Sự kiện chuột chỉ ghi lại vị trí mới nhất; việc tính lại và vẽ được gom
+     * vào requestAnimationFrame (≤ 1 lần mỗi khung hình) và chỉ tính lại các bước phụ thuộc vào điểm
+     * đang kéo. Ghi lịch sử hoàn tác, đặt lại nhãn tự động, lưu nháp… chỉ làm một lần khi thả chuột.
+     */
     startDrag(e, info) {
       this.drag = info;
       const step = stepById(this.doc, info.id);
       const P0 = this.values.get(info.id);
       if (info.kind === "point" && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
-      const move = (ev) => {
-        const { sx, sy } = this.eventPos(ev);
+      if (info.kind === "point") this.dragUpdater = makeUpdater(this.doc, [info.id]);
+      let pending = null;
+      const apply = () => {
+        if (!pending) return;
+        const { sx, sy } = pending;
+        pending = null;
         this.mouse = this.toUser(sx, sy);
         if (info.kind === "label") {
           const sc = this.projector ? 1.9 : 1;
           const off = [round1(info.off[0] + (sx - info.sx) / sc), round1(info.off[1] - (sy - info.sy) / sc)];
           step.style = { ...step.style || {}, labelOffset: off };
-          const arr = this.renderer.els.get(info.id);
-          const p = arr && arr[arr.length - 1];
-          if (p && p.label) {
-            p.label.setAttribute({ offset: off.map((v) => v * sc) });
-            this.board.update();
-          }
+          this.renderer.setLabelOffset(info.id, off);
           return;
         }
         const target = { x: this.mouse.x + info.grab.x, y: this.mouse.y + info.grab.y };
@@ -1953,11 +2215,19 @@
         }
         this.quickUpdate();
       };
+      this.view.frameHooks.push(apply);
+      const move = (ev) => {
+        pending = this.eventPos(ev);
+        this.view.requestDraw();
+      };
       const up = () => {
         window.removeEventListener("pointermove", move, true);
         window.removeEventListener("pointerup", up, true);
         window.removeEventListener("pointercancel", up, true);
+        apply();
+        this.view.frameHooks = this.view.frameHooks.filter((f) => f !== apply);
         this.drag = null;
+        this.dragUpdater = null;
         if (JSON.stringify(this.doc) !== info.start) {
           this.pushUndo(info.start);
           this.afterChange();
@@ -2047,7 +2317,6 @@
       if (mode === "present") {
         this.frameIdx = 0;
         this.selection.clear();
-        this.board.attr.pan.enabled = true;
       } else this.setTool(this.toolId);
       this.refresh();
       this.showHint();
@@ -2074,19 +2343,16 @@
       } catch {
       }
       setTimeout(() => {
-        this.board.resizeContainer(this.stage.clientWidth, this.stage.clientHeight, true, true);
+        this.view.resize();
+        this.boardRect = null;
         this.refresh();
-      }, 60);
+      }, 80);
     }
     toggleGrid() {
       this.grid = !this.grid;
-      if (this.gridEl) {
-        this.board.removeObject(this.gridEl);
-        this.gridEl = null;
-      }
-      if (this.grid) this.gridEl = this.board.create("grid", [], { majorStep: [1, 1], minorElements: 0, strokeColor: "#cbd5e1", strokeOpacity: 0.7 });
+      this.renderer.grid = this.grid;
       document.getElementById("btn-grid").classList.toggle("on", this.grid);
-      this.board.update();
+      this.view.requestDraw();
     }
     zoomFit() {
       const pts = [];
@@ -2098,15 +2364,15 @@
         if (v.kind === "point") pts.push(v);
         if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
       }
-      if (!pts.length) return this.board.setBoundingBox([-8, 6, 8, -6], true);
+      if (!pts.length) return this.view.setBoundingBox([-8, 6, 8, -6]);
       const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
       let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
       const m = Math.max(x2 - x1, y2 - y1, 1) * 0.1;
       [x1, x2, y1, y2] = [x1 - m, x2 + m, y1 - m, y2 + m];
-      const W = this.board.canvasWidth, H = this.board.canvasHeight;
+      const W = this.view.W, H = this.view.H;
       const per = Math.max((x2 - x1) / W, (y2 - y1) / H);
       const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
-      this.board.setBoundingBox([cx - per * W / 2, cy + per * H / 2, cx + per * W / 2, cy - per * H / 2], true);
+      this.view.setBoundingBox([cx - per * W / 2, cy + per * H / 2, cx + per * W / 2, cy - per * H / 2]);
     }
     // ================= bàn phím & nút =================
     bindKeys() {
@@ -2193,7 +2459,7 @@
           doc.steps = [];
           doc.title = "";
         });
-        this.board.setBoundingBox([-8, 6, 8, -6], true);
+        this.view.setBoundingBox([-8, 6, 8, -6]);
       });
     }
   };
@@ -2314,6 +2580,81 @@
         b.add("intersection_other", [w1, w2, F], {}, "M");
         return b.doc;
       }
+    },
+    dense: {
+      title: "H\xECnh d\xE0y (m\xF4 ph\u1ECFng \u0111\u1EC1 VMO, d\xF9ng \u0111o hi\u1EC7u n\u0103ng)",
+      build() {
+        const b = new Builder();
+        const A = b.point(0.6, 3.6, "A"), B = b.point(-1.4, -0.6, "B"), C = b.point(2.4, -0.6, "C");
+        const BC = b.add("line", [B, C]);
+        b.add("segment", [A, B]);
+        b.add("segment", [A, C]);
+        const eA = b.add("angle_bisector", [B, A, C], { external: true }, void 0, { hidden: true });
+        const eB = b.add("angle_bisector", [A, B, C], { external: true }, void 0, { hidden: true });
+        const eC = b.add("angle_bisector", [A, C, B], { external: true }, void 0, { hidden: true });
+        const IA = b.add("intersection", [eB, eC], {}, "I_A");
+        const IB = b.add("intersection", [eA, eC], {}, "I_B");
+        const IC = b.add("intersection", [eA, eB], {}, "I_C");
+        const TA = b.add("projection", [IA, BC], {}, "T");
+        const Q = b.add("projection", [IB, BC], {}, "Q");
+        const P2 = b.add("projection", [IC, BC], {}, "P");
+        b.add("circle", [IA, TA]);
+        b.add("circle", [IB, Q]);
+        b.add("circle", [IC, P2]);
+        const w = b.add("circumcircle", [A, B, C]);
+        const I = b.add("incenter", [A, B, C], {}, "I", { hidden: true });
+        for (const [X, Y] of [[IC, IB], [IC, B], [IC, C], [IB, B], [IB, C], [IA, B], [IA, C], [A, IA], [IC, P2], [IB, Q]]) b.add("segment", [X, Y]);
+        const lBIB = b.add("line", [B, IB], {}, void 0, { hidden: true });
+        const lCIC = b.add("line", [C, IC], {}, void 0, { hidden: true });
+        const U = b.add("intersection_other", [lBIB, w, B], {}, "U");
+        const V = b.add("intersection_other", [lCIC, w, C], {}, "V");
+        const XA = b.add("midpoint", [I, IA], {}, "X_A");
+        const XB = b.add("midpoint", [I, IB], {}, "X_B");
+        const XC = b.add("midpoint", [I, IC], {}, "X_C");
+        const sUV = b.add("segment", [U, V]);
+        const PA = b.add("projection", [A, sUV], {}, "P_A");
+        const PB = b.add("midpoint", [B, U], {}, "P_B");
+        const PC = b.add("midpoint", [C, V], {}, "P_C");
+        const Bp = b.add("reflect", [B, lCIC], {}, "B'");
+        const Cp = b.add("reflect", [C, lBIB], {}, "C'");
+        for (const [X, Y] of [
+          [A, U],
+          [A, V],
+          [IC, U],
+          [IB, V],
+          [V, IB],
+          [U, IC],
+          [A, XA],
+          [B, XB],
+          [C, XC],
+          [PB, PC],
+          [PA, XA],
+          [XB, XC],
+          [B, Bp],
+          [C, Cp],
+          [Cp, IA],
+          [Bp, IA],
+          [C, Cp],
+          [B, PC],
+          [C, PB],
+          [V, XB],
+          [U, XC],
+          [IA, U],
+          [IA, V],
+          [PB, XA],
+          [PC, XA]
+        ]) b.add("segment", [X, Y]);
+        const sAB = b.doc.steps[4].id, sAC = b.doc.steps[5].id;
+        const tp = [];
+        for (const X of [IA, IB, IC]) for (const l of [sAB, sAC]) tp.push(b.add("projection", [X, l]));
+        const mids = [[B, C], [C, A], [A, B]].map(([X, Y]) => b.add("midpoint", [X, Y]));
+        b.add("segment", [tp[0], tp[1]]);
+        b.add("segment", [mids[0], mids[1]]);
+        b.add("segment", [mids[1], mids[2]]);
+        b.add("nine_point_circle", [IA, IB, IC], {}, void 0, { hidden: true });
+        b.add("circle_3pts", [U, V, I]);
+        return b.doc;
+      }
     }
   };
 
@@ -2326,6 +2667,7 @@
     VERSION: () => VERSION,
     argAccepts: () => argAccepts,
     clone: () => clone,
+    computeStep: () => computeStep,
     dependents: () => dependents,
     describe: () => describe,
     emptyDoc: () => emptyDoc,
@@ -2334,6 +2676,7 @@
     geom: () => geom_exports,
     indexOf: () => indexOf,
     kinds: () => kinds,
+    makeUpdater: () => makeUpdater,
     newId: () => newId,
     nextName: () => nextName,
     paramsOf: () => paramsOf,
@@ -2418,7 +2761,7 @@
   // src/ui/share.js
   var DRAFT_KEY = "hinh-hoc-dong:nhap";
   function docWithView(app) {
-    const bb = app.board.getBoundingBox().map((v) => Math.round(v * 1e3) / 1e3);
+    const bb = app.view.getBoundingBox().map((v) => Math.round(v * 1e3) / 1e3);
     return { ...app.doc, view: { bbox: bb } };
   }
   function saveDraft(app) {
@@ -2510,7 +2853,7 @@
       clearTimeout(timer);
       timer = setTimeout(() => saveDraft(app), 300);
     });
-    app.board.on("boundingbox", () => {
+    app.view.onViewChange(() => {
       clearTimeout(timer);
       timer = setTimeout(() => saveDraft(app), 600);
     });
@@ -3304,8 +3647,7 @@
     if (!r) return;
     const R = app.renderer;
     const V = (id) => app.values.get(id);
-    const st = { strokeColor: "#f59e0b", strokeWidth: 2.2 * (app.projector ? 1.9 : 1), dash: 2 };
-    const pt2 = (id) => R.addExtra("point", [() => V(id)?.x ?? NaN, () => V(id)?.y ?? NaN], { visible: false });
+    const style = { color: "#f59e0b", width: 2.2, dash: true };
     if (r.type === "collinear") {
       const ids = r.ids;
       let best = [ids[0], ids[1]], bd = -1;
@@ -3316,16 +3658,15 @@
           best = [a, b];
         }
       }
-      R.addExtra("line", best.map(pt2), st);
+      R.addExtra({ type: "line", pts: best.map((id) => () => V(id)), style });
     } else if (r.type === "concyclic") {
-      R.addExtra("circumcircle", r.ids.slice(0, 3).map(pt2), { ...st, center: { visible: false } });
+      R.addExtra({ type: "circle3", pts: r.ids.slice(0, 3).map((id) => () => V(id)), style });
     } else if (r.type === "concurrent") {
       const common = () => {
         const [a, b, ...rest] = r.ids.map(V);
         if (!a || !b) return null;
-        const roots = intersect(a, b);
         let best = null, bd = Infinity;
-        for (const X of roots) {
+        for (const X of intersect(a, b)) {
           const d = rest.reduce((s, c) => s + (c ? distToObject(c, X) : 1e9), 0);
           if (d < bd) {
             bd = d;
@@ -3334,9 +3675,8 @@
         }
         return best;
       };
-      R.addExtra("point", [() => common()?.x ?? NaN, () => common()?.y ?? NaN], { size: 7 * (app.projector ? 1.9 : 1), strokeColor: "#f59e0b", fillColor: "#fde68a", strokeWidth: 2 });
+      R.addExtra({ type: "point", pts: [common], style: { color: "#f59e0b", fill: "#fde68a", size: 7 } });
     }
-    app.board.update();
   }
 
   // src/export/tikz.js
@@ -3356,12 +3696,6 @@
     return s === "-0" ? "0" : s;
   };
   var xy = (P2) => `(${f3(P2.x)}, ${f3(P2.y)})`;
-  function texLabel(name) {
-    const greek = { "\u03C9": "\\omega", "\u03A9": "\\Omega", "\u03B1": "\\alpha", "\u03B2": "\\beta", "\u03B3": "\\gamma", "\u03B4": "\\delta", "\u0394": "\\Delta", "\u03C6": "\\varphi", "\u03B8": "\\theta" };
-    let s = name.replace(/[ωΩαβγδΔφθ]/g, (c) => greek[c] + " ");
-    s = s.replace(/^(.*?)(\d+)('*)$/, (_, a, d, p) => a ? `${a.trim()}_{${d}}${p}` : d + p);
-    return `$${s.trim()}$`;
-  }
   function coordName(name, used) {
     let base = (name || "P").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/'/g, "p").replace(/[^A-Za-z0-9]/g, "");
     if (!base || /^\d/.test(base)) base = "P" + base;
