@@ -2842,14 +2842,15 @@
     return Number.isFinite(s) && s > 1e-12 ? s : 1;
   }
   var TRIANGLE_TYPES = /* @__PURE__ */ new Set(["circumcenter", "orthocenter", "incenter", "centroid", "nine_point_center", "altitude_foot", "incircle_touch", "arc_midpoint", "circle_3pts", "circumcircle", "incircle", "nine_point_circle", "angle_bisector"]);
-  function findTriangles(doc, kindOf) {
+  function findTriangles(doc, kindOf, { strict = false } = {}) {
     const tri2 = /* @__PURE__ */ new Map();
     const addTri = (ids) => {
       if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === "point")) return;
       const key = [...ids].sort().join(",");
       if (!tri2.has(key)) tri2.set(key, ids);
     };
-    for (const s of doc.steps) if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3) addTri(s.args);
+    for (const s of doc.steps)
+      if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === "circle_3pts" || s.type === "angle_bisector"))) addTri(s.args);
     const adj = /* @__PURE__ */ new Map();
     const link = (a, b) => {
       if (!adj.has(a)) adj.set(a, /* @__PURE__ */ new Set());
@@ -2987,7 +2988,7 @@
     const rep = (id) => repOf.get(id) || id;
     const reps = pointIds.filter((id) => rep(id) === id);
     const know = new Knowledge(doc, rep);
-    const special = recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts, triangles);
+    const special = recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts, findTriangles(doc, kindOf, { strict: true }));
     const rel = [];
     const name = (id) => stepById(doc, id)?.name || id;
     const desc = (id) => describe(doc, id);

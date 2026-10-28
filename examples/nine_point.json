@@ -1,0 +1,207 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Đường tròn Euler (9 điểm)",
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.6,
+    "y": 3.4
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.4,
+    "y": -1.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 3.6,
+    "y": -1.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2"
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3"
+  },
+  {
+   "id": "s7",
+   "type": "orthocenter",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "H"
+  },
+  {
+   "id": "s8",
+   "type": "altitude_foot",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "D"
+  },
+  {
+   "id": "s9",
+   "type": "altitude_foot",
+   "args": [
+    "s2",
+    "s3",
+    "s1"
+   ],
+   "name": "E"
+  },
+  {
+   "id": "s10",
+   "type": "altitude_foot",
+   "args": [
+    "s3",
+    "s1",
+    "s2"
+   ],
+   "name": "F"
+  },
+  {
+   "id": "s11",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s8"
+   ],
+   "name": "d4",
+   "style": {
+    "dash": true
+   }
+  },
+  {
+   "id": "s12",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s9"
+   ],
+   "name": "d5",
+   "style": {
+    "dash": true
+   }
+  },
+  {
+   "id": "s13",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s10"
+   ],
+   "name": "d6",
+   "style": {
+    "dash": true
+   }
+  },
+  {
+   "id": "s14",
+   "type": "midpoint",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "M"
+  },
+  {
+   "id": "s15",
+   "type": "midpoint",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "K"
+  },
+  {
+   "id": "s16",
+   "type": "midpoint",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "L"
+  },
+  {
+   "id": "s17",
+   "type": "midpoint",
+   "args": [
+    "s1",
+    "s7"
+   ],
+   "name": "X"
+  },
+  {
+   "id": "s18",
+   "type": "midpoint",
+   "args": [
+    "s2",
+    "s7"
+   ],
+   "name": "Y"
+  },
+  {
+   "id": "s19",
+   "type": "midpoint",
+   "args": [
+    "s3",
+    "s7"
+   ],
+   "name": "Z"
+  },
+  {
+   "id": "s20",
+   "type": "circle_3pts",
+   "args": [
+    "s14",
+    "s15",
+    "s16"
+   ],
+   "name": "ω",
+   "style": {
+    "color": "#7e22ce"
+   }
+  }
+ ]
+}

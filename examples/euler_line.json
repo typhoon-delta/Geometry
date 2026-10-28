@@ -1,0 +1,104 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Đường thẳng Euler",
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.6,
+    "y": 3.4
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.4,
+    "y": -1.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 3.6,
+    "y": -1.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2"
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3"
+  },
+  {
+   "id": "s7",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s8",
+   "type": "circumcenter",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "O"
+  },
+  {
+   "id": "s9",
+   "type": "centroid",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "G"
+  },
+  {
+   "id": "s10",
+   "type": "orthocenter",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "H"
+  }
+ ]
+}

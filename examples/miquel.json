@@ -1,0 +1,137 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Định lý Miquel",
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.6,
+    "y": 3.4
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.4,
+    "y": -1.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 3.6,
+    "y": -1.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2"
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3"
+  },
+  {
+   "id": "s7",
+   "type": "point_on",
+   "args": [
+    "s5"
+   ],
+   "params": {
+    "t": 0.4
+   },
+   "name": "D"
+  },
+  {
+   "id": "s8",
+   "type": "point_on",
+   "args": [
+    "s6"
+   ],
+   "params": {
+    "t": 0.35
+   },
+   "name": "E"
+  },
+  {
+   "id": "s9",
+   "type": "point_on",
+   "args": [
+    "s4"
+   ],
+   "params": {
+    "t": 0.55
+   },
+   "name": "F"
+  },
+  {
+   "id": "s10",
+   "type": "circle_3pts",
+   "args": [
+    "s1",
+    "s8",
+    "s9"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s11",
+   "type": "circle_3pts",
+   "args": [
+    "s2",
+    "s9",
+    "s7"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s12",
+   "type": "circle_3pts",
+   "args": [
+    "s3",
+    "s7",
+    "s8"
+   ],
+   "name": "ω3"
+  },
+  {
+   "id": "s13",
+   "type": "intersection_other",
+   "args": [
+    "s10",
+    "s11",
+    "s9"
+   ],
+   "name": "M"
+  }
+ ]
+}

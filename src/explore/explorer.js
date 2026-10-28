@@ -49,14 +49,17 @@ const TRIANGLE_TYPES = new Set(['circumcenter', 'orthocenter', 'incenter', 'cent
  * Các tam giác trong hình: bộ 3 điểm dùng trong bước kiểu tam giác, hoặc 3 điểm đôi một nối bằng
  * đoạn/đường thẳng/tia. Dùng để loại cấu hình có tam giác dẹt và để nhận diện O, H, I, đường tròn Euler...
  */
-export function findTriangles(doc, kindOf) {
+export function findTriangles(doc, kindOf, { strict = false } = {}) {
   const tri = new Map();
   const addTri = (ids) => {
     if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === 'point')) return;
     const key = [...ids].sort().join(',');
     if (!tri.has(key)) tri.set(key, ids);
   };
-  for (const s of doc.steps) if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3) addTri(s.args);
+  // strict: chỉ tam giác "thật" (dựng bằng công cụ tam giác hoặc vẽ cạnh), không tính bộ 3 điểm của
+  // "đường tròn qua 3 điểm" hay góc của phân giác
+  for (const s of doc.steps)
+    if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === 'circle_3pts' || s.type === 'angle_bisector'))) addTri(s.args);
   const adj = new Map();
   const link = (a, b) => {
     if (!adj.has(a)) adj.set(a, new Set());
@@ -209,7 +212,7 @@ export function explore(doc, options = {}) {
   const reps = pointIds.filter((id) => rep(id) === id);
   const know = new Knowledge(doc, rep);
 
-  const special = recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts, triangles);
+  const special = recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts, findTriangles(doc, kindOf, { strict: true }));
   const rel = [];
   const name = (id) => stepById(doc, id)?.name || id;
   const desc = (id) => describe(doc, id);

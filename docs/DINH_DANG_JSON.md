@@ -1,0 +1,147 @@
+# Định dạng JSON của một hình
+
+Một hình là **một danh sách bước dựng có thứ tự**. Mỗi bước sinh ra đúng **một** đối tượng
+(điểm, đường thẳng, đường tròn hoặc dấu trang trí) và chỉ được tham chiếu tới các bước **đứng trước nó**.
+Toạ độ của mọi đối tượng (trừ các tham số tự do) đều được tính lại từ danh sách này, nên tệp JSON
+mô tả *cách dựng*, không phải một bức ảnh.
+
+Mọi tính năng đều đọc/ghi đúng định dạng này: vẽ, tua bước, chia sẻ (link chứa chính JSON này đã nén),
+khám phá, xuất TikZ, và các công cụ dòng lệnh trong `scripts/`.
+
+## Cấu trúc
+
+```json
+{
+  "format": "hinh-hoc-dong",
+  "version": 1,
+  "title": "Đường thẳng Euler",
+  "view": { "bbox": [-8, 6, 8, -6] },
+  "steps": [
+    { "id": "s1", "type": "free_point", "args": [], "params": { "x": -0.6, "y": 3.4 }, "name": "A" },
+    { "id": "s2", "type": "free_point", "args": [], "params": { "x": -3.4, "y": -1.6 }, "name": "B" },
+    { "id": "s3", "type": "free_point", "args": [], "params": { "x": 3.6, "y": -1.6 }, "name": "C" },
+    { "id": "s4", "type": "segment", "args": ["s1", "s2"], "name": "d1" },
+    { "id": "s7", "type": "circumcircle", "args": ["s1", "s2", "s3"], "name": "ω1", "style": { "fill": 0.12 } },
+    { "id": "s8", "type": "circumcenter", "args": ["s1", "s2", "s3"], "name": "O", "joinPrev": true }
+  ]
+}
+```
+
+| Trường | Ý nghĩa |
+|---|---|
+| `format`, `version` | Luôn là `"hinh-hoc-dong"`, `1`. |
+| `title` | Tên hình (tuỳ chọn). |
+| `view.bbox` | Khung nhìn `[xTrái, yTrên, xPhải, yDưới]` (tuỳ chọn, chỉ để hiển thị). |
+| `steps[].id` | Mã định danh **bất biến** (không đổi khi đổi tên). Ứng dụng sinh dạng `s1, s2, …`. |
+| `steps[].type` | Loại bước (bảng dưới). |
+| `steps[].args` | Danh sách `id` của các bước trước, đúng kiểu yêu cầu. |
+| `steps[].params` | Tham số số của bước (bậc tự do, lựa chọn nghiệm). Thiếu thì dùng mặc định. |
+| `steps[].name` | Nhãn hiển thị (`A`, `A1` → A₁, `A'`, `ω1`…). Không trùng nhau. Dấu trang trí không có tên. |
+| `steps[].style` | Kiểu hiển thị (không ảnh hưởng toán học): `color`, `fillColor`, `width`, `dash`, `size`, `fill` (độ đậm tô nền 0–1), `showLabel`, `labelOffset` `[dx, dy]` (pixel), `arcs`, `ticks`, `border`. |
+| `steps[].hidden` | `true`: đối tượng phụ, không vẽ (vẫn tính, vẫn dùng làm đối số). |
+| `steps[].joinPrev` | `true`: khi trình bày, hiện cùng **khung** với bước hiển thị phía trước. |
+
+Kiểu đối số: `point`, `line` (gồm đường thẳng, đoạn, tia), `circle`, `curve` (đường thẳng hoặc đường tròn),
+`obj` (điểm/đường thẳng/đường tròn), `pl` (điểm hoặc đường thẳng), `...point` (≥ 3 điểm).
+
+## Các loại bước
+
+### Điểm
+
+| `type` | `args` | `params` | Ý nghĩa |
+|---|---|---|---|
+| `free_point` | – | `x`, `y` | Điểm tự do (kéo được). |
+| `point_on` | `curve` | `t` | Điểm trên đối tượng (kéo được, bị ràng buộc). Đường qua P với vectơ chỉ phương d: điểm = P + t·d (đoạn: t ∈ [0,1], tia: t ≥ 0). Đường tròn: t là góc (radian) tính từ tâm. |
+| `intersection` | `curve`, `curve` | `which` (0/1) | Giao điểm. Với 2 nghiệm, `which` chọn theo **thứ tự chuẩn**: đường thẳng–đường tròn: theo chiều vectơ chỉ phương của đường thẳng; đường tròn–đường tròn: nghiệm 0 ở bên phải, nghiệm 1 bên trái hướng tâm₁→tâm₂. |
+| `intersection_other` | `curve`, `curve`, `point` Q | – | Giao điểm *khác Q* (Q thường đã là một giao điểm). |
+| `midpoint` | `point` A, `point` B | – | Trung điểm AB. |
+| `projection` | `point` P, `line` l | – | Hình chiếu vuông góc của P lên l. |
+| `reflect` | `obj` X, `pl` M | – | Ảnh của X qua phép đối xứng tâm M (điểm) hoặc trục M (đường thẳng). Kết quả cùng loại với X. |
+| `circumcenter`, `orthocenter`, `incenter`, `centroid`, `nine_point_center` | A, B, C | – | O, H, I, G, N của tam giác ABC. |
+| `altitude_foot` | A, B, C | – | Chân đường cao hạ từ A xuống BC. |
+| `incircle_touch` | A, B, C | – | Tiếp điểm của đường tròn nội tiếp với BC. |
+| `arc_midpoint` | A, B, C | `contains` (bool) | Điểm chính giữa cung BC của (ABC): `false` = cung không chứa A, `true` = cung chứa A. |
+
+### Đường thẳng
+
+| `type` | `args` | `params` | Ý nghĩa |
+|---|---|---|---|
+| `line`, `segment`, `ray` | A, B | – | Đường thẳng AB, đoạn AB, tia AB (gốc A). |
+| `perpendicular` | `point` P, `line` l | – | Đường qua P vuông góc với l. |
+| `parallel` | `point` P, `line` l | – | Đường qua P song song với l. |
+| `perp_bisector` | A, B | – | Trung trực AB. |
+| `angle_bisector` | A, B, C | `external` (bool) | Phân giác (trong/ngoài) của góc ABC, đỉnh B. |
+
+### Đường tròn
+
+| `type` | `args` | Ý nghĩa |
+|---|---|---|
+| `circle` | O, A | Tâm O, đi qua A. |
+| `circle_radius` | O, A, B | Tâm O, bán kính AB (compa). |
+| `circle_3pts` | A, B, C | Đường tròn qua 3 điểm. |
+| `circumcircle`, `incircle`, `nine_point_circle` | A, B, C | Đường tròn ngoại tiếp, nội tiếp, Euler của ABC. |
+
+### Dấu trang trí (không tham gia khám phá, không cần khi dịch sang hệ khác)
+
+| `type` | `args` | `style` |
+|---|---|---|
+| `polygon` | ≥ 3 điểm | `color`, `fill`, `border` |
+| `angle_mark` | A, B, C (đỉnh B) | `color`, `arcs` (1–3); góc vuông tự vẽ ô vuông |
+| `segment_mark` | A, B | `color`, `ticks` (1–3) |
+
+## Quy ước toán học quan trọng
+
+* **Liên tục khi kéo**: mọi phép dựng là hàm liên tục của các tham số tự do trên miền không suy biến.
+  Nghiệm của giao điểm được chọn theo thứ tự chuẩn ở trên (không theo "gần vị trí cũ"), vì vậy cùng
+  một tệp JSON luôn cho cùng một hình, và điểm giao không nhảy sang nghiệm kia trừ khi đi qua vị trí
+  tiếp xúc (khi đó hai nghiệm trùng nhau – suy biến thật sự).
+* Giao điểm dùng **đường mang** của đoạn/tia (không cắt theo giới hạn đoạn).
+* Một bước không xác định (vd hai đường song song không có giao điểm) cho giá trị rỗng; mọi bước
+  phụ thuộc vào nó cũng rỗng. Hình vẫn hợp lệ.
+* Tham số tự do của hình = `params` của các bước `free_point` (x, y) và `point_on` (t). Bộ khám phá
+  chỉ xê dịch các tham số này.
+
+## Dịch sang hệ khác (Newclid / AlphaGeometry, Python)
+
+Danh sách bước đã sắp theo thứ tự phụ thuộc và có kiểu rõ ràng, nên có thể dịch tuần tự từng bước.
+Trong ngôn ngữ của AlphaGeometry/Newclid, đường thẳng và đường tròn không phải đối tượng riêng mà
+được mô tả qua điểm, nên khi dịch cần "điểm hoá" đường:
+
+| Bước ở đây | Gợi ý dịch sang AlphaGeometry/Newclid |
+|---|---|
+| 3 `free_point` A, B, C (tam giác) | `a b c = triangle a b c` |
+| `free_point` khác | `x = free x` |
+| `midpoint` | `m = midpoint m a b` |
+| `circumcenter` | `o = circle o a b c` |
+| `orthocenter` / `incenter` / `centroid` | `h = orthocenter h a b c` / `i = incenter i a b c` / `g = centroid ...` |
+| `altitude_foot` A,B,C | `d = foot d a b c` |
+| `projection` P, l (l = đường AB) | `f = foot f p a b` |
+| `reflect` P qua điểm M | `q = mirror q p m` · qua đường AB: `q = reflect q p a b` |
+| `point_on` đường AB / đường tròn (O, OA) | `x = on_line x a b` / `x = on_circle x o a` |
+| `intersection` của hai đường | ghép hai ràng buộc: `x = on_line x a b, on_circle x o c` … |
+| `perpendicular` P ⊥ AB, `parallel` P ∥ AB | ràng buộc `on_tline x p a b`, `on_pline x p a b` |
+| `perp_bisector` AB, `angle_bisector` ABC | `on_bline x a b`, `on_aline`/`angle_bisector x a b c` |
+| `circle_3pts`, `circumcircle` | thêm tâm phụ `o = circle o a b c` rồi dùng `on_circle … o a` |
+| `incircle_touch`, `arc_midpoint`, `nine_point_*` | dựng qua điểm phụ (tâm nội tiếp, chân đường vuông góc, giao với phân giác …) |
+
+Tên điểm dùng trường `name` (đã duy nhất), có thể chuẩn hoá về chữ thường cho các hệ trên.
+Quan hệ do bộ khám phá tìm ra cũng dùng đúng các `id` của tài liệu (`relations[].ids`), nên có thể
+chuyển thành mục tiêu chứng minh: `coll a b c`, `cyclic a b c d`, `para …`, `perp …`, …
+
+### Công cụ dòng lệnh
+
+```bash
+node scripts/kham-pha.mjs examples/simson.json            # kết quả khám phá dạng JSON
+node scripts/kham-pha.mjs examples/simson.json --text     # dạng bảng, dễ đọc
+node scripts/tikz.mjs examples/euler_line.json --width 10 # mã TikZ
+```
+
+Kết quả khám phá có dạng:
+
+```json
+{ "relations": [ { "type": "collinear", "ids": ["s7", "s8", "s9"], "text": "D, E, F thẳng hàng", "score": 5 } ],
+  "stats": { "samples": 12, "attempts": 15, "rejected": { "điểm gần trùng": 3 }, "points": 7, "lines": 3, "circles": 1, "ms": 3 } }
+```
+
+Các loại quan hệ: `collinear`, `concyclic`, `concurrent` (≥ 3 đường thẳng/đường tròn qua một điểm
+chưa dựng), `parallel`, `perpendicular`, `tangent`, `on_line`, `on_circle`, `coincide`, `same_line`, `same_circle`.

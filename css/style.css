@@ -141,6 +141,10 @@ body.projector #exit-projector { display: block; }
 @media (max-width: 1500px) {
   #topbar .brand { display: none; }
 }
+@media (max-width: 1200px) {
+  #tools { width: 165px; }
+  #side { width: 270px; }
+}
 @media (max-width: 900px) {
   #tools { width: 150px; }
   .tool .tl { font-size: 11px; }
