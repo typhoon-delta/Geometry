@@ -8,6 +8,8 @@ import { initShare, shareLink, saveFile, openFile } from './share.js';
 import * as codec from '../io/codec.js';
 import { setupExplore, drawRelationOverlay } from './explorePanel.js';
 import { explore } from '../explore/explorer.js';
+import { toTikZ } from '../export/tikz.js';
+import { textDialog } from './dialog.js';
 
 function start() {
   const app = new App();
@@ -41,6 +43,14 @@ function start() {
   app.drawRelationOverlay = () => drawRelationOverlay(app);
   setupExplore(app);
 
+  // Xuất TikZ (các đối tượng đang hiện; ở chế độ trình bày: tới khung hiện tại)
+  document.getElementById('btn-tikz').onclick = () => {
+    const vis = app.visibleSet();
+    const doc = vis ? { ...app.doc, steps: app.doc.steps.map((s) => (vis.has(s.id) ? s : { ...s, hidden: true })) } : app.doc;
+    textDialog('Mã TikZ', toTikZ(doc, { values: app.values }),
+      '<div class="modal-body">Dán vào tài liệu LaTeX (chỉ cần <code>\\usepackage{tikz}</code>). Đổi kích thước bằng cách sửa <code>x=…, y=…</code>.</div>');
+  };
+
   // Lưu / mở / chia sẻ
   document.getElementById('btn-share').onclick = () => shareLink(app);
   document.getElementById('btn-save').onclick = () => saveFile(app);
@@ -56,7 +66,7 @@ function start() {
 
   // Cho phép dùng từ console / test tự động
   window.__app = app;
-  window.GeoCore = { ...core, Builder, EXAMPLES, codec, explore };
+  window.GeoCore = { ...core, Builder, EXAMPLES, codec, explore, toTikZ };
   return app;
 }
 

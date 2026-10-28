@@ -130,5 +130,14 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   await page.evaluate(() => { const s = __app.doc.steps.find((x) => x.name === 'P'); s.params.t = 0.4; __app.quickUpdate(); __app.refresh(); });
   await shot('m4-simson');
 
+  // ---------- Mốc 5: TikZ ----------
+  console.log('Mốc 5: xuất TikZ');
+  await page.click('#btn-tikz');
+  await page.waitForSelector('.modal textarea');
+  const tex = await page.locator('.modal textarea').inputValue();
+  ok(/\\begin\{tikzpicture\}/.test(tex) && /\\coordinate \(P\)/.test(tex) && !/NaN|undefined/.test(tex), 'xuất TikZ từ giao diện');
+  await shot('m5-tikz');
+  await page.click('.modal .primary');
+
   if (globalThis.__smokeMore) await globalThis.__smokeMore({ page, ok, shot, state, tool, clickAt });
 }

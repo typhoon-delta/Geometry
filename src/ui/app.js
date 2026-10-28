@@ -75,6 +75,7 @@ export class App {
     this.doc = clone(doc);
     this.selection.clear();
     this.highlight.clear();
+    this.relation = null;
     this.cancelTool();
     if (doc.view && Array.isArray(doc.view.bbox)) this.board.setBoundingBox(doc.view.bbox, true);
     this.refresh();
@@ -97,6 +98,7 @@ export class App {
 
   afterChange() {
     for (const id of [...this.selection]) if (!stepById(this.doc, id)) this.selection.delete(id);
+    if (this.relation && !this.relation.ids.every((id) => stepById(this.doc, id))) { this.relation = null; this.highlight.clear(); }
     this.refresh();
     this.emit('change');
   }

@@ -1393,6 +1393,7 @@
       this.doc = clone(doc);
       this.selection.clear();
       this.highlight.clear();
+      this.relation = null;
       this.cancelTool();
       if (doc.view && Array.isArray(doc.view.bbox)) this.board.setBoundingBox(doc.view.bbox, true);
       this.refresh();
@@ -1412,6 +1413,10 @@
     }
     afterChange() {
       for (const id of [...this.selection]) if (!stepById(this.doc, id)) this.selection.delete(id);
+      if (this.relation && !this.relation.ids.every((id) => stepById(this.doc, id))) {
+        this.relation = null;
+        this.highlight.clear();
+      }
       this.refresh();
       this.emit("change");
     }
@@ -3236,6 +3241,214 @@
     app.board.update();
   }
 
+  // src/export/tikz.js
+  var NAMED_COLORS = {
+    "#111827": "black",
+    "#1d4ed8": "xanhduong",
+    "#dc2626": "do",
+    "#15803d": "xanhla",
+    "#ea580c": "cam",
+    "#7e22ce": "tim",
+    "#0e7490": "xanhngoc",
+    "#6b7280": "xam"
+  };
+  var DEFAULT_COLOR = { circumcircle: "#1d4ed8", incircle: "#15803d", nine_point_circle: "#7e22ce", polygon: "#1d4ed8", angle_mark: "#dc2626", segment_mark: "#dc2626" };
+  var f3 = (v) => {
+    const s = (Math.round(v * 1e3) / 1e3).toFixed(3).replace(/\.?0+$/, "");
+    return s === "-0" ? "0" : s;
+  };
+  var xy = (P2) => `(${f3(P2.x)}, ${f3(P2.y)})`;
+  function texLabel(name) {
+    const greek = { "\u03C9": "\\omega", "\u03A9": "\\Omega", "\u03B1": "\\alpha", "\u03B2": "\\beta", "\u03B3": "\\gamma", "\u03B4": "\\delta", "\u0394": "\\Delta", "\u03C6": "\\varphi", "\u03B8": "\\theta" };
+    let s = name.replace(/[ωΩαβγδΔφθ]/g, (c) => greek[c] + " ");
+    s = s.replace(/^(.*?)(\d+)('*)$/, (_, a, d, p) => a ? `${a.trim()}_{${d}}${p}` : d + p);
+    return `$${s.trim()}$`;
+  }
+  function coordName(name, used) {
+    let base = (name || "P").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/'/g, "p").replace(/[^A-Za-z0-9]/g, "");
+    if (!base || /^\d/.test(base)) base = "P" + base;
+    let n = base, i = 2;
+    while (used.has(n)) n = base + "-" + i++;
+    used.add(n);
+    return n;
+  }
+  function anchorFor(off) {
+    const a = Math.atan2(off[1], off[0]) * 180 / Math.PI;
+    const dirs = ["right", "above right", "above", "above left", "left", "below left", "below", "below right"];
+    return dirs[(Math.round(a / 45) % 8 + 8) % 8];
+  }
+  function clipLine(l, box, tMin = -Infinity) {
+    let t0 = tMin, t1 = Infinity;
+    const { p, d } = l;
+    for (const [pp, dd, lo, hi] of [[p.x, d.x, box.x1, box.x2], [p.y, d.y, box.y1, box.y2]]) {
+      if (Math.abs(dd) < 1e-14) {
+        if (pp < lo || pp > hi) return null;
+        continue;
+      }
+      let a = (lo - pp) / dd, b = (hi - pp) / dd;
+      if (a > b) [a, b] = [b, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, b);
+    }
+    if (t0 >= t1) return null;
+    return [{ x: p.x + t0 * d.x, y: p.y + t0 * d.y }, { x: p.x + t1 * d.x, y: p.y + t1 * d.y }];
+  }
+  function toTikZ(doc, opts = {}) {
+    const width = opts.width || 12;
+    const vals = opts.values || evaluate(doc);
+    const k = kinds(doc);
+    const visible = doc.steps.filter((s) => !s.hidden && vals.get(s.id));
+    const pts = [];
+    for (const s of visible) {
+      const v = vals.get(s.id);
+      if (v.kind === "point") pts.push(v);
+      if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
+    }
+    if (!pts.length) return "% H\xECnh tr\u1ED1ng\n";
+    let x1 = Math.min(...pts.map((p) => p.x)), x2 = Math.max(...pts.map((p) => p.x));
+    let y1 = Math.min(...pts.map((p) => p.y)), y2 = Math.max(...pts.map((p) => p.y));
+    const span = Math.max(x2 - x1, y2 - y1, 1e-6);
+    const m = span * 0.08;
+    const box = { x1: x1 - m, x2: x2 + m, y1: y1 - m, y2: y2 + m };
+    const unit2 = width / (box.x2 - box.x1);
+    const cm = (c) => c / unit2;
+    const colorDefs = /* @__PURE__ */ new Map();
+    const col = (s) => {
+      const hex = (s.style && s.style.color || DEFAULT_COLOR[s.type] || "#111827").toLowerCase();
+      if (NAMED_COLORS[hex]) {
+        if (NAMED_COLORS[hex] !== "black") colorDefs.set(NAMED_COLORS[hex], hex);
+        return NAMED_COLORS[hex];
+      }
+      const nm = "c" + hex.replace("#", "");
+      colorDefs.set(nm, hex);
+      return nm;
+    };
+    const opt = (...xs) => {
+      const o = xs.filter((x) => x && x !== "black");
+      return o.length ? `[${o.join(", ")}]` : "";
+    };
+    const lineOpts = (s) => {
+      const st = s.style || {};
+      const w = st.width && Math.abs(st.width - 1.6) > 1e-9 ? `line width=${f3(st.width * 0.45)}pt` : "";
+      return opt(col(s), st.dash ? "dashed" : "", w);
+    };
+    const used = /* @__PURE__ */ new Set();
+    const cname = /* @__PURE__ */ new Map();
+    for (const s of visible) if (k.get(s.id) === "point") cname.set(s.id, coordName(s.name, used));
+    for (const s of visible) if (k.get(s.id) === "mark" || ["segment", "circle"].includes(s.type)) for (const a of s.args) {
+      if (!cname.has(a) && vals.get(a)) cname.set(a, coordName(stepById(doc, a)?.name || a, used));
+    }
+    const ref = (id) => `(${cname.get(id)})`;
+    const out = { coords: [], fills: [], circles: [], lines: [], marks: [], points: [], labels: [] };
+    for (const [id, n] of cname) out.coords.push(`\\coordinate (${n}) at ${xy(vals.get(id))};${stepById(doc, id)?.hidden ? " % \u0111i\u1EC3m \u1EA9n" : ""}`);
+    for (const s of visible) {
+      const v = vals.get(s.id);
+      const st = s.style || {};
+      const kind = k.get(s.id);
+      if (kind === "circle") {
+        const center = s.type === "circle" || s.type === "circle_radius" ? ref(s.args[0]) : xy(v.c);
+        const fill = st.fill || 0;
+        if (fill > 0) out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(fill)}] ${center} circle (${f3(v.r)});`);
+        out.circles.push(`\\draw${lineOpts(s)} ${center} circle (${f3(v.r)}); % ${s.name || ""}`);
+        if (st.showLabel && s.name) {
+          const P2 = { x: v.c.x + v.r * Math.cos(Math.PI / 4), y: v.c.y + v.r * Math.sin(Math.PI / 4) };
+          out.labels.push(`\\node[above right, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
+        }
+      } else if (kind === "line") {
+        const sub2 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
+        const desc = s.type === "line" || s.type === "segment" || s.type === "ray" ? s.args.map((a) => stepById(doc, a)?.name).join("") : s.name;
+        if (sub2 === "segment" && s.type === "segment") out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
+        else if (sub2 === "segment") out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(add(v.p, v.d))};`);
+        else {
+          const seg = clipLine(v, box, sub2 === "ray" ? 0 : -Infinity);
+          if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub2 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub2 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${desc}`);
+          if (seg && st.showLabel && s.name) {
+            const P2 = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
+            out.labels.push(`\\node[above, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
+          }
+        }
+      } else if (s.type === "polygon") {
+        const path = s.args.map(ref).join(" -- ") + " -- cycle";
+        out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.12)}] ${path};`);
+        if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path};`);
+      } else if (s.type === "angle_mark") {
+        out.marks.push(...angleMark(v, s, col(s), cm, ref));
+      } else if (s.type === "segment_mark") {
+        out.marks.push(...segMark(v, s, col(s), cm));
+      } else if (kind === "point") {
+        const r = ((st.size || 3) * 0.5).toFixed(1);
+        const pc = st.color && st.color.toLowerCase() !== "#111827" ? col(s) : "black";
+        out.points.push(`\\fill${opt(pc)} ${ref(s.id)} circle (${r}pt);`);
+        if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(st.labelOffset || [8, 10])}] at ${ref(s.id)} {${texLabel(s.name)}};`);
+      }
+    }
+    const L = [];
+    L.push(`% ${doc.title ? doc.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
+    L.push("% C\u1EA7n trong ph\u1EA7n m\u1EDF \u0111\u1EA7u: \\usepackage{tikz}");
+    L.push("% \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc h\xECnh: s\u1EEDa x=\u2026, y=\u2026 (\u0111\u01A1n v\u1ECB c\u1EE7a m\u1ED9t \xF4 to\u1EA1 \u0111\u1ED9).");
+    L.push(`\\begin{tikzpicture}[x=${f3(unit2)}cm, y=${f3(unit2)}cm, line width=0.6pt, line cap=round, line join=round]`);
+    if (colorDefs.size) {
+      L.push("  % M\xE0u");
+      for (const [n, hex] of colorDefs) L.push(`  \\definecolor{${n}}{HTML}{${hex.slice(1).toUpperCase()}}`);
+    }
+    const sec = (title, arr) => {
+      if (arr.length) {
+        L.push(`  % ${title}`);
+        for (const x of arr) L.push("  " + x);
+      }
+    };
+    sec("To\u1EA1 \u0111\u1ED9 c\xE1c \u0111i\u1EC3m", out.coords);
+    sec("T\xF4 n\u1EC1n", out.fills);
+    sec("\u0110\u01B0\u1EDDng tr\xF2n", out.circles);
+    sec("\u0110\u01B0\u1EDDng th\u1EB3ng, \u0111o\u1EA1n th\u1EB3ng, tia", out.lines);
+    sec("\u0110\xE1nh d\u1EA5u g\xF3c, \u0111o\u1EA1n b\u1EB1ng nhau", out.marks);
+    sec("\u0110i\u1EC3m", out.points);
+    sec("Nh\xE3n", out.labels);
+    L.push("\\end{tikzpicture}");
+    return L.join("\n") + "\n";
+  }
+  function angleMark(v, s, color, cm, ref) {
+    const { A, B, C } = v;
+    const st = s.style || {};
+    const a1 = Math.atan2(A.y - B.y, A.x - B.x);
+    let diff = Math.atan2(C.y - B.y, C.x - B.x) - a1;
+    while (diff <= -Math.PI) diff += 2 * Math.PI;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    const deg = (r) => f3(r * 180 / Math.PI);
+    const r0 = cm(0.45);
+    const vtx = ref(s.args[1]);
+    const o = color === "black" ? "" : `[${color}]`;
+    if (Math.abs(Math.abs(diff) - Math.PI / 2) < 1e-6 && st.right !== false) {
+      const r = r0 * 0.7;
+      return [`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) -- ++(${deg(a1 + diff)}:${f3(r)}) -- ++(${deg(a1 + Math.PI)}:${f3(r)}); % g\xF3c vu\xF4ng`];
+    }
+    const n = Math.max(1, Math.min(4, st.arcs || 1));
+    const outL = [];
+    for (let i = 0; i < n; i++) {
+      const r = r0 + i * cm(0.09);
+      outL.push(`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) arc[start angle=${deg(a1)}, end angle=${deg(a1 + diff)}, radius=${f3(r)}];`);
+    }
+    return outL;
+  }
+  function segMark(v, s, color, cm) {
+    const { A, B } = v;
+    const st = s.style || {};
+    const L = dist(A, B);
+    const u = { x: (B.x - A.x) / L, y: (B.y - A.y) / L };
+    const n = { x: -u.y, y: u.x };
+    const M = mid(A, B);
+    const kk = Math.max(1, Math.min(4, st.ticks || 1));
+    const h = cm(0.13), gap = cm(0.08);
+    const o = color === "black" ? "" : `[${color}]`;
+    const outL = [];
+    for (let i = 0; i < kk; i++) {
+      const off = (i - (kk - 1) / 2) * gap;
+      const c = { x: M.x + off * u.x, y: M.y + off * u.y };
+      outL.push(`\\draw${o} ${xy({ x: c.x - h * n.x, y: c.y - h * n.y })} -- ${xy({ x: c.x + h * n.x, y: c.y + h * n.y })};`);
+    }
+    return outL;
+  }
+
   // src/ui/main.js
   function start() {
     const app = new App();
@@ -3261,6 +3474,15 @@
     }
     app.drawRelationOverlay = () => drawRelationOverlay(app);
     setupExplore(app);
+    document.getElementById("btn-tikz").onclick = () => {
+      const vis = app.visibleSet();
+      const doc = vis ? { ...app.doc, steps: app.doc.steps.map((s) => vis.has(s.id) ? s : { ...s, hidden: true }) } : app.doc;
+      textDialog(
+        "M\xE3 TikZ",
+        toTikZ(doc, { values: app.values }),
+        '<div class="modal-body">D\xE1n v\xE0o t\xE0i li\u1EC7u LaTeX (ch\u1EC9 c\u1EA7n <code>\\usepackage{tikz}</code>). \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc b\u1EB1ng c\xE1ch s\u1EEDa <code>x=\u2026, y=\u2026</code>.</div>'
+      );
+    };
     document.getElementById("btn-share").onclick = () => shareLink(app);
     document.getElementById("btn-save").onclick = () => saveFile(app);
     document.getElementById("btn-open").onclick = () => openFile(app);
@@ -3285,7 +3507,7 @@
       title.value = app.doc.title || "";
     });
     window.__app = app;
-    window.GeoCore = { ...core_exports, Builder, EXAMPLES, codec: codec_exports, explore };
+    window.GeoCore = { ...core_exports, Builder, EXAMPLES, codec: codec_exports, explore, toTikZ };
     return app;
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
