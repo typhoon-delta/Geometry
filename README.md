@@ -177,7 +177,7 @@ npm install
 ```
 
 ```bash
-npm run build          # đóng gói src/ → dist/app.js (nhớ chạy lại và commit dist/ sau khi sửa src/)
+npm run build          # đóng gói src/ → dist/app.js và gắn mã phiên bản vào index.html (commit cả hai sau khi sửa src/ hoặc css/)
 ```
 
 ```bash
@@ -201,7 +201,9 @@ npm run test:perf      # đo hiệu năng kéo điểm trên hình dày (CPU th�
 5. Đợi 1–2 phút, trang sẽ có tại `https://<tên-tài-khoản>.github.io/<tên-repo>/`
    (với repo này: `https://typhoon-delta.github.io/Geometry/`).
 
-Không cần bước build nào trên GitHub vì `dist/app.js` đã được commit sẵn. Tệp `.nojekyll` báo cho GitHub
+Không cần bước build nào trên GitHub vì `dist/app.js` đã được commit sẵn. `index.html` gọi CSS/JS kèm mã phiên bản
+(`style.css?v=…`) nên sau mỗi lần cập nhật trình duyệt luôn tải bản mới. Nếu vẫn thấy giao diện lạ ngay sau khi
+cập nhật (trình duyệt còn giữ `index.html` cũ), bấm `Ctrl+F5`. Tệp `.nojekyll` báo cho GitHub
 phục vụ nguyên trạng các tệp tĩnh.
 
 ## 5. Thư viện bên ngoài
