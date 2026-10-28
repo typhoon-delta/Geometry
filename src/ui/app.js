@@ -702,7 +702,7 @@ export class App {
       if (on && !document.fullscreenElement) await document.documentElement.requestFullscreen();
       if (!on && document.fullscreenElement) await document.exitFullscreen();
     } catch { /* trình duyệt có thể chặn toàn màn hình – vẫn dùng được kiểu trình chiếu */ }
-    setTimeout(() => { this.board.resizeContainer(this.board.containerObj.clientWidth, this.board.containerObj.clientHeight, false, true); this.refresh(); }, 60);
+    setTimeout(() => { this.board.resizeContainer(this.stage.clientWidth, this.stage.clientHeight, true, true); this.refresh(); }, 60);
   }
 
   toggleGrid() {

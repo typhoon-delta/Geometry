@@ -1948,7 +1948,7 @@
       } catch {
       }
       setTimeout(() => {
-        this.board.resizeContainer(this.board.containerObj.clientWidth, this.board.containerObj.clientHeight, false, true);
+        this.board.resizeContainer(this.stage.clientWidth, this.stage.clientHeight, true, true);
         this.refresh();
       }, 60);
     }
