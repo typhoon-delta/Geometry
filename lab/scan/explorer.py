@@ -284,7 +284,7 @@ def explore(doc, **options):
         return rep_of.get(i, i)
 
     reps = [i for i in point_ids if rep(i) == i]
-    know = Knowledge(doc, rep)
+    know = opts.get("knowledge", Knowledge)(doc, rep)
     special = recognize_special(doc, samples, reps, circle_ids, kind_of, opts, find_triangles(doc, kind_of, strict=True))
     rel = []
 

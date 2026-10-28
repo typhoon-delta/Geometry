@@ -303,3 +303,144 @@ class Knowledge:
         if not ca or not cb:
             return False
         return any((x == ca and y == cb) or (x == cb and y == ca) for x, y in self.tans)
+
+
+class KnowledgePlus(Knowledge):
+    """Kiến thức hiển nhiên MỞ RỘNG cho phòng thí nghiệm (không có trong bản JS): coi thêm là "dễ suy ra"
+      T1  (Thales) X nhìn PQ dưới góc vuông theo cách dựng (XP ⊥ XQ) → X thuộc đường tròn đường kính PQ;
+      T2  (đường trung bình) M, N là trung điểm PQ, PR → MN ∥ QR;
+      T3  (phép vị tự) các trung điểm XP (hoặc điểm đối xứng của X qua P) với cùng P là ảnh của X qua một phép
+          vị tự tâm P → ảnh của các điểm thẳng hàng/đồng viên cũng thẳng hàng/đồng viên, ảnh song song với gốc;
+      (phép đối xứng tâm M biến P thành P' được coi như M là trung điểm PP').
+    """
+
+    def __init__(self, doc, rep=lambda x: x, extra=()):
+        super().__init__(doc, rep)
+        # sự kiện đã biết (vd đã tìm được trước đó) được dùng như kiến thức: hệ quả của chúng không còn "mới"
+        known_ids = {s["id"] for s in doc["steps"]}
+        for f in extra:
+            if "col" in f or "cyc" in f:
+                # tập con của một tập thẳng hàng / đồng viên vẫn thẳng hàng / đồng viên
+                key = "col" if "col" in f else "cyc"
+                sub = [x for x in f[key] if x in known_ids]
+                if len(sub) >= (3 if key == "col" else 4):
+                    self.add_fact({key: sub})
+                continue
+            refs = [x for v in f.values() for x in v if isinstance(x, str)]
+            if all(r in known_ids for r in refs):
+                self.add_fact(f)
+        mids = []  # (M, P, Q): M trung điểm PQ
+        for s in doc["steps"]:
+            if s["type"] == "midpoint":
+                mids.append((s["id"], s["args"][0], s["args"][1]))
+            elif s["type"] == "reflect" and self.kind.get(s["args"][0]) == "point" and self.kind.get(s["args"][1]) == "point":
+                mids.append((s["args"][1], s["args"][0], s["id"]))
+        for i in range(len(mids)):
+            for j in range(i + 1, len(mids)):
+                M, a1, b1 = (rep(x) for x in mids[i])
+                N, a2, b2 = (rep(x) for x in mids[j])
+                for P, Q in ((a1, b1), (b1, a1)):
+                    for P2, R in ((a2, b2), (b2, a2)):
+                        if P == P2 and Q != R and M != N:
+                            self.add_fact({"par": [{"L": [M, N]}, {"L": [Q, R]}]})
+        self.saturate()
+        self._thales()
+        self.saturate()
+        groups = {}
+        for s in doc["steps"]:
+            t, a = s["type"], s["args"]
+            if t == "midpoint":
+                groups.setdefault(("mid", rep(a[1])), {})[rep(a[0])] = rep(s["id"])
+                groups.setdefault(("mid", rep(a[0])), {})[rep(a[1])] = rep(s["id"])
+            elif t == "reflect" and self.kind.get(a[0]) == "point" and self.kind.get(a[1]) == "point":
+                groups.setdefault(("ref", rep(a[1])), {})[rep(a[0])] = rep(s["id"])
+            elif t == "homothety" and self.kind.get(a[0]) == "point":
+                k = (s.get("params") or {}).get("k", 2)
+                groups.setdefault(("hom", rep(a[1]), k), {})[rep(a[0])] = rep(s["id"])
+        groups = {g: m for g, m in groups.items() if len(m) >= 2}
+        for _ in range(2):
+            if not groups:
+                break
+            for m in groups.values():
+                for e in list(self.lines):
+                    if not e["alive"]:
+                        continue
+                    src = [x for x in e["pts"] if x in m]
+                    if len(src) >= 2:
+                        img = [m[x] for x in src]
+                        if len(img) >= 3:
+                            self.add_fact({"col": img})
+                        self.add_fact({"par": [{"L": img[:2]}, {"L": src[:2]}]})
+                for e in list(self.circles):
+                    if not e["alive"]:
+                        continue
+                    src = [x for x in e["pts"] if x in m]
+                    if len(src) >= 3:
+                        self.add_fact({"cyc": [m[x] for x in src]})
+            self.saturate()
+
+    def _thales(self):
+        L = self.lines
+        perp_cls = set()
+        for x, y in self.perps:
+            rx, ry = self.dir.find(x), self.dir.find(y)
+            perp_cls.add((rx, ry))
+            perp_cls.add((ry, rx))
+        alive = [i for i, e in enumerate(L) if e["alive"]]
+        for a in range(len(alive)):
+            for b in range(a + 1, len(alive)):
+                i, j = alive[a], alive[b]
+                if (self.dir.find(i), self.dir.find(j)) not in perp_cls:
+                    continue
+                for X in L[i]["pts"] & L[j]["pts"]:
+                    for P in L[i]["pts"] - {X}:
+                        for Q in L[j]["pts"] - {X}:
+                            tag = "DIA:" + _sort_key([P, Q])
+                            k = next((t for t, e in enumerate(self.circles) if e["alive"] and tag in e["tags"]), -1)
+                            if k < 0:
+                                k = self.new_circle()
+                                self.circles[k]["tags"].add(tag)
+                            self.circles[k]["pts"].update((P, Q, X))
+
+
+def relation_facts(rel_type, ids):
+    """Quan hệ (loại, ids) → các sự kiện dạng Knowledge (để dùng làm kiến thức)."""
+    if rel_type == "collinear":
+        return [{"col": list(ids)}]
+    if rel_type == "concyclic":
+        return [{"cyc": list(ids)}]
+    if rel_type == "on_line" or rel_type == "on_circle":
+        return [{"on": [p, ids[0]]} for p in ids[1:]]
+    if rel_type == "parallel":
+        return [{"par": list(ids)}]
+    if rel_type == "perpendicular":
+        return [{"perp": list(ids)}]
+    if rel_type == "tangent":
+        return [{"tan": list(ids)}]
+    return []
+
+
+def fact_known(k, f):
+    """Sự kiện f (dạng facts của STEP_TYPES) đã suy ra được từ kiến thức k chưa?"""
+    if "on" in f:
+        P, ref = f["on"]
+        c = k.curve_of(ref)
+        if not c or c[1] < 0:
+            return False
+        return k.rep(P) in (k.lines if c[0] == "L" else k.circles)[c[1]]["pts"]
+    if "col" in f:
+        return k.collinear(f["col"])
+    if "cyc" in f:
+        return k.concyclic(f["cyc"])
+    if "par" in f or "perp" in f:
+        a, b = (k.line_of(r) for r in (f.get("par") or f.get("perp")))
+        if a < 0 or b < 0:
+            return False
+        ra, rb = k.dir.find(a), k.dir.find(b)
+        if "par" in f:
+            return ra == rb
+        return any({k.dir.find(x), k.dir.find(y)} == {ra, rb} for x, y in k.perps)
+    if "tan" in f:
+        a, b = (k.curve_of(r) for r in f["tan"])
+        return bool(a and b) and any((x == a and y == b) or (x == b and y == a) for x, y in k.tans)
+    return False
