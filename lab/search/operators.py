@@ -155,7 +155,7 @@ def _transversal(U, a, b):
     """Hai đường cắt nhau "rõ" ở mọi mẫu (hai giao điểm không quá gần nhau)."""
     for k in range(U.K):
         r = G.intersect(U.vals[k][a], U.vals[k][b])
-        if len(r) < 2 or G.dist(r[0], r[1]) < 0.02 * U.scale[k]:
+        if len(r) < 2 or G.dist(r[0], r[1]) < 0.005 * U.scale[k]:
             return False
     return True
 
@@ -196,6 +196,12 @@ class CandidateGen:
         self.max_depth = max_depth
         self.max_new_steps = max_new_steps
         self.tried = set()
+        self.jitter = {}  # hệ số ngẫu nhiên riêng của vòng cho từng đối tượng → mỗi vòng đi một hướng khác
+
+    def _jit(self, sid):
+        if sid not in self.jitter:
+            self.jitter[sid] = math.exp(self.rnd.gauss(0.0, 0.6))
+        return self.jitter[sid]
 
     def _ok(self, args_objs):
         d = 1 + max(o.depth for o in args_objs)
@@ -205,6 +211,17 @@ class CandidateGen:
         for o in args_objs:
             anc |= o.anc
         return len(anc - self.U.base_ids) + 1 <= self.max_new_steps
+
+    def _on_host(self, pid, vid, on_circ):
+        st = self.U.step.get(pid)
+        if not st or st["type"] != "point_on":
+            return False
+        host = self.U.step.get(st["args"][0])
+        if host is None:
+            return False
+        if host["type"] in ("segment", "line", "ray"):
+            return vid in host["args"]
+        return vid in (on_circ.get(host["id"]) or [])
 
     def key(self, op, args):
         sym = op in ("midpoint", "circumcenter", "orthocenter", "incenter", "centroid", "circle3", "line", "diameter")
@@ -218,7 +235,7 @@ class CandidateGen:
         if not frontier:
             return []
         pool = [o for o in objs if o.depth <= lvl - 1]
-        W = {o.id: obj_weight(U, o, self.stations) for o in pool}
+        W = {o.id: obj_weight(U, o, self.stations) * self._jit(o.id) for o in pool}
         pts = [o for o in pool if o.kind == "point"]
         fpts = [o for o in frontier if o.kind == "point"]
         fcurves = [o for o in frontier if o.kind in ("line", "circle")]
@@ -279,7 +296,9 @@ class CandidateGen:
                 push("line", (p.id, q.id), w2 * 0.6)
                 for v in pts:
                     if v.id not in (p.id, q.id) and v.depth == 0:
-                        push("circle3", (v.id, p.id, q.id), w2 * W[v.id] * 0.5)
+                        # đỉnh nằm trên cả hai đường chứa hai điểm tuỳ ý (dạng Miquel) → ưu tiên cao
+                        boost = 4.0 if self._on_host(p.id, v.id, on_circ) and self._on_host(q.id, v.id, on_circ) else 1.0
+                        push("circle3", (v.id, p.id, q.id), w2 * W[v.id] * 0.5 * boost)
         # (4) đường tròn mới của lớp trước: giao với các đường tròn khác tại điểm chung đã biết
         for c in [o for o in fcurves if o.kind == "circle"]:
             on_c = set(U._points_on_circle(c.id))

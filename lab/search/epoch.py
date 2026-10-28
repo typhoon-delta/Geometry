@@ -15,19 +15,50 @@ from .operators import CandidateGen, apply
 from .universe import Universe
 
 
-def base_with_stations(stations_specs):
-    """Cấu hình gốc + các trạm (mỗi trạm: danh sách bước dựng ra nó, id đã đổi để không trùng)."""
+def base_with_stations(stations_specs, check_samples=None):
+    """Cấu hình gốc + các trạm (mỗi trạm: danh sách bước dựng ra nó, id đã đổi để không trùng).
+
+    Bước của trạm trùng (bằng số, trên vài tam giác mẫu) một đối tượng đã có thì được GỘP vào đối tượng đó – nếu
+    không, vũ trụ có những điểm trùng hẳn nhau và sinh ra vô số "quan hệ" rác.
+    """
+    from ..core import geom as G
+    from ..core.model import compute_step, evaluate
+
     doc = build_base_doc()
+    samples = check_samples or make_samples(3, 99)
+    vals = [evaluate(doc, o) for o in samples]
     have = {s["id"] for s in doc["steps"]}
     names = {s.get("name") for s in doc["steps"]}
+    alias = {}
+
+    def same(u, v):
+        if u is None or v is None or isinstance(u, dict) or isinstance(v, dict) or u.kind != v.kind:
+            return False
+        if u.kind == "point":
+            return G.dist(u, v) < 1e-9
+        if u.kind == "circle":
+            return G.dist(u.c, v.c) < 1e-9 and abs(u.r - v.r) < 1e-9
+        du, dv = G.unit(u.d), G.unit(v.d)
+        return abs(G.cross(du, dv)) < 1e-9 and G.dist_point_line(v.p, u) < 1e-9
+
     for spec in stations_specs:
         for s in spec["steps"]:
             if s["id"] in have:
                 continue
             s = copy.deepcopy(s)
+            s["args"] = [alias.get(a, a) for a in s["args"]]
+            vs = [compute_step(s, vals[k], samples[k]) for k in range(len(samples))]
+            if any(v is None for v in vs):
+                break  # trạm không dựng được trong cấu hình này: bỏ phần còn lại của trạm
+            dup = next((t["id"] for t in doc["steps"] if all(same(vs[k], vals[k].get(t["id"])) for k in range(len(samples)))), None)
+            if dup is not None:
+                alias[s["id"]] = dup
+                continue
             if s.get("name") in names:
                 s.pop("name", None)
             doc["steps"].append(s)
+            for k in range(len(samples)):
+                vals[k][s["id"]] = vs[k]
             have.add(s["id"])
             if s.get("name"):
                 names.add(s["name"])
@@ -62,6 +93,30 @@ def base_facts(pipeline, samples, seed=2024):
     return out
 
 
+def free_param_samples(doc, samples):
+    """Điểm tuỳ ý (point_on) có sẵn trong cấu hình xuất phát (của các trạm) cũng phải được xê dịch giữa các mẫu,
+    nếu không vũ trụ sẽ "thấy" các quan hệ chỉ đúng tại đúng một vị trí của điểm đó."""
+    from .operators import _h
+
+    by = {s["id"]: s for s in doc["steps"]}
+    out = [dict(o) for o in samples]
+    for s in doc["steps"]:
+        if s["type"] != "point_on":
+            continue
+        t0 = (s.get("params") or {}).get("t", 0)
+        host = by.get(s["args"][0], {})
+        for k in range(1, len(out)):
+            r = 2 * _h(s["id"], k) - 1
+            if host.get("type") == "segment":
+                t = min(0.92, max(0.08, t0 + 0.15 * r))
+            elif host.get("type") in ("line", "ray") or host.get("type") in ("perpendicular", "parallel", "tangent_at"):
+                t = t0 + 0.3 * r
+            else:
+                t = t0 + 0.6 * r
+            out[k][s["id"]] = {"t": t}
+    return out
+
+
 class Epoch:
     def __init__(self, cfg, seed, pipeline, stations=None, station_specs=(), log=print):
         self.cfg = cfg
@@ -70,7 +125,9 @@ class Epoch:
         self.stations = stations or {}
         self.log = log
         samples = make_samples(cfg["mau"], cfg["hat_giong_mau"])
-        self.U = Universe(base_with_stations(station_specs), samples, tol=cfg["dung_sai"], fp_samples=make_fp_samples(samples),
+        doc0 = base_with_stations(station_specs)
+        samples = free_param_samples(doc0, samples)
+        self.U = Universe(doc0, samples, tol=cfg["dung_sai"], fp_samples=make_fp_samples(samples),
                           base_ids={s["id"] for s in build_base_doc()["steps"]})
         # các trạm được tính là lớp 0 của vòng này
         self.rnd = random.Random(seed)

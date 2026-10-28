@@ -136,6 +136,23 @@ def _nc_group(nc):
     return "chua"
 
 
+def _proof_text(nc, doc):
+    """Vết chứng minh của Newclid, tên điểm đổi về tên trên hình (điểm phụ của bản dịch giữ tên gốc)."""
+    import re
+
+    names = {s["id"]: s.get("name") for s in doc["steps"]}
+    out = []
+    for part in nc.get("parts") or []:
+        pr = part.get("proof")
+        if not pr:
+            continue
+        mp = {v.upper(): names.get(k) or v for k, v in (part.get("names") or {}).items()}
+        if mp:
+            pr = re.sub(r"\b(" + "|".join(sorted(map(re.escape, mp), key=len, reverse=True)) + r")\b", lambda m: mp[m.group(1)], pr)
+        out.append(pr.strip())
+    return "\n\n".join(out) or (nc.get("proof") or "").strip()
+
+
 def _card(i, f, cfg, weights):
     title = f"Sự kiện {i}"
     doc = display_doc(f, title=title)
@@ -152,7 +169,7 @@ def _card(i, f, cfg, weights):
         chips.append(f'<span class="chip">{nc.get("goals_proved", 0)}/{nc["goals_total"]} mục tiêu</span>')
     parts = explain(f.get("dac_trung", {}), weights)
     expl = "".join(f"<tr><td>{html.escape(k)}</td><td>{v:+.2f}</td></tr>" for k, v in parts)
-    proof = nc.get("proof") or ""
+    proof = _proof_text(nc, doc)
     probs = "\n\n".join(p.get("problem", "") for p in nc.get("parts", []) if p.get("problem"))
     reasons = "; ".join(p.get("reason") or p.get("error") or "" for p in nc.get("parts", []) if p.get("reason") or p.get("error"))
     text = statement_text(f, doc).lower()

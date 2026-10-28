@@ -1,0 +1,4 @@
+# Thư viện cho phòng thí nghiệm (cài bằng: pip install -r lab/requirements.txt)
+numpy>=1.23
+# Bộ suy diễn Newclid. Dùng bản 2.0.2 (thuần Python): bản 3.x cần bộ máy C++ "yuclid" không có sẵn qua pip.
+newclid==2.0.2

@@ -101,6 +101,7 @@ def display_doc(fact, title=None):
         if s.get("name"):
             used_names.add(s["name"])
     doc["title"] = title or "Sự kiện"
+    _spread_out(doc)
     vals = evaluate(doc)
     xs = [v.x for v in vals.values() if isinstance(v, G.Pt)]
     ys = [v.y for v in vals.values() if isinstance(v, G.Pt)]
@@ -109,6 +110,36 @@ def display_doc(fact, title=None):
         w = max(max(xs) - min(xs), (max(ys) - min(ys)) * 4 / 3, 1) * 0.65
         doc["view"] = {"bbox": [round(cx - w, 3), round(cy + w * 0.75, 3), round(cx + w, 3), round(cy - w * 0.75, 3)]}
     return doc
+
+
+def _spread_out(doc, tries=10):
+    """Chọn toạ độ tam giác ABC (trong vài tam giác mẫu tổng quát) sao cho các điểm hiện trên hình tách nhau rõ
+    nhất – hình dễ đọc hơn, không có hai điểm gần chồng lên nhau do tình cờ."""
+    from .search.base import make_samples
+
+    free = {s["id"]: s for s in doc["steps"] if s["type"] == "free_point" and s["id"] in ("A", "B", "C")}
+    if len(free) != 3:
+        return
+
+    def quality(ov):
+        vals = evaluate(doc, ov)
+        pts = [vals.get(s["id"]) for s in doc["steps"] if not s.get("hidden") and kinds(doc).get(s["id"]) == "point"]
+        if any(p is None for p in pts) or len(pts) < 2:
+            return -1
+        size = max(max(p.x for p in pts) - min(p.x for p in pts), max(p.y for p in pts) - min(p.y for p in pts), 1e-9)
+        dmin = min(G.dist(a, b) for i, a in enumerate(pts) for b in pts[i + 1:])
+        return dmin / size
+
+    best, best_q = None, quality(None)
+    if best_q > 0.06:
+        return
+    for ov in make_samples(tries, 11, perturb=0.22)[1:]:
+        q = quality(ov)
+        if q > best_q * 1.2:
+            best, best_q = ov, q
+    if best:
+        for sid, p in best.items():
+            free[sid]["params"] = {"x": round(p["x"], 4), "y": round(p["y"], 4)}
 
 
 # ---------------------------------------------------------------------------------------------- phát biểu

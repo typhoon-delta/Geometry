@@ -277,3 +277,202 @@ công cụ có tham số, tự tạo công cụ); `npm run test:perf` đạt ng�
 **Gợi ý tiếp theo**: góc/tỉ số động cho quay và vị tự; nghịch đảo đường thẳng/đường tròn; thêm vài mô hình hay
 gặp ở VMO (cấu hình tứ giác toàn phần, đường tròn Apollonius…); cho phép gán phím tắt cho công cụ hay dùng; lưu
 "Công cụ của tôi" kèm trong tệp hình khi chia sẻ.
+
+---
+
+# Bản 2 – Phòng thí nghiệm tự chạy (Python, `lab/`)
+
+Vòng lặp khám phá chạy nhiều giờ trên máy cá nhân, tìm các sự kiện hình học "lạ" để chế đề, thử chứng minh bằng
+Newclid, sáng hôm sau có báo cáo HTML để duyệt. Viết bằng Python trong `lab/`, dùng **đúng định dạng JSON danh sách
+bước dựng** của công cụ web. **Không sửa phần web hiện có** (chỉ thêm một job Python vào `.github/workflows/test.yml`
+và vài dòng giới thiệu trong `README.md`).
+
+Hướng dẫn cài đặt và sử dụng cho Windows (tiếng Việt, cho người không rành Python): **`lab/HUONG_DAN.md`**.
+Ngắn gọn: bấm đúp `lab\cai-dat.bat` (một lần), `lab\chay-7-tieng.bat` (buổi tối), `lab\xem-bao-cao.bat` (buổi sáng);
+hoặc `python -m lab chay --gio 7` và `python -m lab bao-cao`.
+
+## 1. Đã làm
+
+Làm theo mốc, mỗi mốc một commit trên nhánh riêng.
+
+| Mốc | Nội dung |
+|---|---|
+| 1 | **Lõi tính toán Python** `lab/core` (geom, steps, model, codec): mọi loại bước của công cụ, kể cả các bước do thư viện công cụ sinh ra. **Test đối chiếu với lõi JS**: script Node `lab/tools/xuat-doi-chieu.mjs` chạy các hình mẫu và **mọi công cụ trong menu Công cụ** (85 hình × 4 cấu hình, > 3000 giá trị) → Python khớp tới 1e-9. Mã hoá link `#h=` giống hệt (deflate-raw + base64url), test giải mã link Python bằng chính `codec.js`. |
+| 2 | **Bộ quét quan hệ** `lab/scan`: bản Python của `explorer.js` + `knowledge.js` (cùng bộ sinh số ngẫu nhiên mulberry32, cùng ngưỡng suy biến) → **cho kết quả giống hệt bản JS** trên mọi hình mẫu (kể cả 67 quan hệ của hình dày). |
+| 3 | **Vòng mở rộng** `lab/search`: cấu hình gốc (tam giác ABC, O, H, I, G, N, chân đường cao D, E, F, trung điểm M_a, M_b, M_c, tiếp điểm T_a, T_b, T_c, điểm chính giữa cung S_a… (không chứa đỉnh) và S'_a… (chứa đỉnh), (O), (I), đường tròn Euler, ba cạnh); "vũ trụ đối tượng" tính đồng thời trên 16 tam giác mẫu bằng numpy; mở rộng theo **lớp độ sâu** (tìm theo chiều rộng, giới hạn độ sâu 3 và 6 bước mới), trong mỗi lớp **ưu tiên** hướng triển vọng; gộp điểm trùng; "trạm" cho vòng sau. |
+| 4 | **Cầu nối Newclid** `lab/prover`: dịch hình + sự kiện sang JGEX với **toạ độ cố định của chính hình** (đúng nhánh nghiệm), chạy trong tiến trình con có giới hạn thời gian cứng, lưu vết chứng minh, chỗ cắm mô hình ngôn ngữ (`goi_y.py`). |
+| 5 | **Chấm điểm "lạ"** `lab/score.py`, trọng số trong **`lab/cau-hinh.toml`**. |
+| 6 | **Báo cáo** `lab/report.py` → `reports/<lần chạy>/index.html`: xếp hạng, phát biểu tiếng Việt, hình tĩnh, link mở thẳng trong công cụ web. |
+| 7 | **Phản hồi** Hay/Chán → `lab/du-lieu/phan-hoi.json` → lần chạy sau tự chỉnh trọng số; `python -m lab chay --gio 7` (lưu định kỳ, chạy tiếp khi bị tắt), `python -m lab bao-cao`. |
+
+### Vòng khám phá (thuật toán)
+
+* **Vũ trụ**: mỗi đối tượng là một bước JSON đúng định dạng, được tính trên K = 16 tam giác mẫu "tổng quát" (không
+  dẹt, không gần cân, không gần vuông, cùng chiều) – cố định theo hạt giống để kết quả tái lập được – cộng 6 **mẫu
+  vân tay** (tam giác mẫu với các đỉnh đổi tên theo 6 hoán vị) dùng để nhận ra hai sự kiện chỉ khác nhau bởi cách gọi
+  tên A, B, C (chỉ báo một lần).
+* **Phép dựng mở rộng** (`operators.py`): trung điểm, chân đường vuông góc, đối xứng qua điểm/đường thẳng, tâm ngoại
+  tiếp/trực tâm/tâm nội tiếp/trọng tâm của tam giác bất kỳ, liên hợp đẳng giác, giao hai đường thẳng, giao điểm thứ
+  hai của đường thẳng với đường tròn, của hai đường tròn, điểm tuỳ ý trên cạnh/đường tròn, đường tròn qua 3 điểm,
+  đường thẳng qua 2 điểm, tiếp tuyến, đường vuông góc/song song, đường tròn đường kính. Mọi bước là bước của công cụ
+  → hình nào cũng mở được trong công cụ web.
+* **Tìm theo lớp**: lớp d chỉ dùng phép dựng có ít nhất một đối số ở lớp d − 1. Ứng viên = liệt kê có cấu trúc
+  (điểm tuỳ ý trên 3 cạnh và 3 đường tròn gốc; với các điểm nổi bật của lớp trước: chân đường vuông góc xuống ba
+  cạnh, đối xứng qua ba cạnh, trung điểm/đối xứng với O, H, I…, giao lại với các đường tròn gốc; với các cặp điểm
+  tuỳ ý: đường tròn qua một điểm gốc và hai điểm đó…) + lấy mẫu ngẫu nhiên theo trọng số. Trọng số đối tượng: O, H,
+  I, (O), (I), đường tròn Euler cao nhất; điểm tuỳ ý ×5; đối tượng có mặt trong sự kiện vừa tìm được tăng dần; trạm
+  ×2–3. Các loại phép dựng được **xen kẽ** để không loại nào lấn át; thời gian vòng chia cho các lớp (25/40/35%).
+* **Dò quan hệ tăng dần** khi thêm đối tượng X (numpy, vài ms): X trùng điểm đã có (→ gộp; nếu không tầm thường thì
+  thành sự kiện "trùng nhau"), X nằm trên đường thẳng/đường tròn đã dựng, X thẳng hàng với 2 điểm (sắp xếp theo góc
+  nhìn từ X), X đồng viên với 3 điểm (nghịch đảo tâm X biến đường tròn qua X thành đường thẳng, rồi lại sắp theo góc),
+  đường mới song song/vuông góc/tiếp xúc/đồng quy (giữ danh sách "giao điểm ảo" của các đường đã dựng, ghép nghiệm
+  giữa các mẫu bằng cách loại nghiệm trùng điểm đã có).
+* **Loại cấu hình gần suy biến**: đối tượng không xác định / quá xa / gần trùng (nhưng không trùng) điểm khác ở một
+  mẫu nào đó / đường tròn bán kính bất thường / giao điểm gần tiếp xúc / hai đường gần song song đều bị bỏ.
+* **Kiểm chứng**: mỗi ứng viên → khoá chuẩn (bất biến với cách dựng và cách gọi tên đỉnh) → bỏ nếu đã gặp → **tài
+  liệu con tối thiểu** (bao đóng phụ thuộc) → lọc "hiển nhiên" → **bộ quét đầy đủ** trên 12 cấu hình ngẫu nhiên MỚI
+  của tài liệu con (đúng thuật toán bản JS, loại suy biến) – chỉ giữ quan hệ có chứa đối tượng mới nhất.
+* **Loại quan hệ hiển nhiên** (`KnowledgePlus`): luật của bản JS + Thales (hai góc vuông theo cách dựng nhìn cùng một
+  đoạn → đồng viên), đường trung bình, phép vị tự (trung điểm/đối xứng với cùng một tâm), và **các sự kiện đã tìm
+  được** (vd khi đã biết O, G, H, N thẳng hàng thì điểm dựng từ hai điểm trên đường Euler không còn "mới").
+* **Trạm**: đầu mỗi vòng, chọn ngẫu nhiên vài sự kiện điểm cao (ưu tiên sự kiện được khen); bước dựng ra đối tượng
+  mới nhất của chúng được thêm vào cấu hình gốc của vòng (tính là lớp 0) → vòng sau đào sâu quanh chúng.
+
+### Cầu nối Newclid
+
+* Newclid **cài được** trong môi trường này. Dùng **Newclid 2.0.2** (thuần Python, chạy tốt trên Windows). Đã thử
+  bản mới nhất 3.0.1: thiếu khai báo phụ thuộc `pyyaml`, phần thuần Python có lỗi (`enumerate_lconsts` lặp sai
+  dict, `MappingMatcher` lỗi `KeyError: '1/2'`…), bản đầy đủ cần bộ máy C++ "yuclid" không có trong gói pip ⇒ không
+  dùng được trên máy Windows thông thường.
+* Dịch: đường thẳng ↦ hai điểm, đường tròn ↦ (tâm, một điểm); mỗi bước JSON ↦ phép dựng JGEX tương ứng (`foot`,
+  `mirror`, `reflect`, `circle`, `orthocenter`, `incenter`, `on_line`/`on_circle` cho giao điểm, `on_tline`/`on_pline`,
+  `on_aline` cho liên hợp đẳng giác…), **toạ độ cố định** `x@x_y` đủ 17 chữ số (Newclid kiểm tra số với dung sai
+  tuyệt đối 1e-12) nên luôn đúng nhánh nghiệm của hình. N dịch đúng như lõi JS (trung điểm OH).
+* Quan hệ nhiều điểm được **tách thành mục tiêu nguyên tử**, mỗi mục tiêu chỉ mang phần hình cần thiết (Newclid
+  chậm đi rất nhiều khi thừa điểm); điểm trên đường tròn qua 3 điểm viết dạng `cyclic`.
+* Kết quả: *chứng minh được* (tầm thường, hạ hạng), *một phần*, *không chứng minh được* / *hết giờ* (ứng viên sâu,
+  tăng hạng), *chưa dịch được* (trung tính). Vết chứng minh lưu trong báo cáo.
+* **Kiểm thử**: Newclid chứng minh được đúng các sự kiện mà vòng khám phá tìm ra: đường thẳng Euler (O, G, H, N),
+  đường tròn Euler (D, E, F, M_a, M_b, M_c), đường thẳng Simson, ba đường tròn Miquel đồng quy – mỗi định lý 3–10 giây.
+* Chỗ cắm mô hình ngôn ngữ: `lab/prover/goi_y.py` (lớp `Suggester`; đặt `goi_y_diem_phu` trong cấu hình). Với sự
+  kiện chưa chứng minh được, các điểm phụ được gợi ý lần lượt thêm vào bài toán và chạy lại.
+
+### Chấm điểm "lạ"
+
+Điểm = Σ trọng số × đặc trưng (trọng số trong `[trong_so]` của `lab/cau-hinh.toml`):
+loại quan hệ; kết quả Newclid (−4 nếu chứng minh được, +4 nếu không, +3 nếu hết giờ, +1,5 nếu một phần) cộng chút
+theo độ dài chứng minh; **xa nhau trong cây dựng** (khoảng cách Jaccard trung bình giữa tập tổ tiên của các đối tượng);
+**dính (O), (I), đường tròn Euler, O, I, H** (nhận diện bằng số, kể cả khi dựng bằng cách khác) và G, N; **ít bước
+dựng**; trừ nhẹ cho điểm tuỳ ý và phát biểu dài. Báo cáo hiện từng thành phần điểm.
+
+### Phản hồi
+
+Nút Hay/Chán trong báo cáo → máy chủ nhỏ của `python -m lab bao-cao` (chỉ 127.0.0.1) ghi vào
+`lab/du-lieu/phan-hoi.json` (mở báo cáo trực tiếp từ tệp thì lưu trong trình duyệt + nút "Tải phản hồi"). Lần chạy
+sau: Δw = 0,15 × Σ(±1 × đặc trưng) (kẹp), sự kiện bị chê không lên báo cáo, sự kiện được khen ưu tiên làm trạm.
+
+### Kiểm thử (`python -m unittest discover -s lab/tests -t .`)
+
+* `test_doi_chieu_js` – lõi Python khớp lõi JS (mọi công cụ thư viện), link `#h=` hai chiều, giải mã bằng `codec.js`.
+* `test_quet` – bộ quét Python cho kết quả giống hệt bộ khám phá JS; Simson, Euler.
+* `test_kham_pha` – **vòng khám phá tự tìm lại** (không gợi ý): đường thẳng Euler và đường tròn Euler (ở lớp 0),
+  trung điểm AH trên đường tròn Euler (lớp 1), đường thẳng Simson (~10 giây), ba đường tròn Miquel đồng quy (~40 giây);
+  không báo quan hệ hiển nhiên kiểu "trung điểm nằm trên đoạn".
+* `test_newclid` – dịch JGEX; **Newclid đánh giá Euler, đường tròn Euler, Simson, Miquel là chứng minh được (tầm thường)**
+  (bỏ qua nếu máy chưa cài Newclid).
+* `test_chay` – chạy 36 giây, giả lập bị tắt rồi **chạy tiếp đúng lần chạy dở**, sinh báo cáo có link giải mã được,
+  học trọng số từ phản hồi.
+* CI: thêm job "Phòng thí nghiệm (Python)" (Python 3.12 + Newclid 2.0.2) vào `.github/workflows/test.yml`.
+
+### Phong cách hình
+
+Yêu cầu nói phong cách "Cổ điển" của công cụ; công cụ hiện có hai bộ kiểu *Đơn sắc* (mặc định, kiểu Sketchpad cổ
+điển) và *Sách giáo khoa*. Tôi hiểu "Cổ điển" là bộ **Đơn sắc**: hình tĩnh trong báo cáo vẽ nét đen 1px, điểm tròn
+rỗng ruột trắng (điểm trong kết luận tô đen), nhãn serif nghiêng có chỉ số dưới, hướng nhãn theo đúng thuật toán
+`src/core/labels.js`; đường phụ minh hoạ quan hệ nét đứt xám. Hình hiển thị chọn trong vài tam giác mẫu cách đặt
+mà các điểm tách nhau rõ nhất. Link trong báo cáo mở hình trong công cụ (bộ kiểu theo lựa chọn của người xem).
+
+## 2. Chưa làm / ngoài phạm vi
+
+* **Mô hình ngôn ngữ của AlphaGeometry**: chưa tích hợp (theo yêu cầu); đã để sẵn chỗ cắm `lab/prover/goi_y.py`
+  (có một bộ gợi ý ví dụ "trung điểm" để thử cơ chế).
+* Phép dựng mở rộng chưa có: phép quay/vị tự/nghịch đảo, tâm bàng tiếp, đường đối trung, tiếp tuyến chung, trục
+  đẳng phương (lõi Python tính được hết, chỉ chưa đưa vào danh sách phép dựng của vòng khám phá). Bộ dịch Newclid
+  cũng chưa dịch: quay, vị tự, tịnh tiến, nghịch đảo, Lemoine, Kosnita, đối trung, mixtilinear, tiếp tuyến chung,
+  trục/tâm đẳng phương, đối xứng của đường thẳng/đường tròn (sự kiện chứa chúng được ghi "chưa dịch được").
+* Chưa tìm các quan hệ: đoạn bằng nhau, góc bằng nhau, tỉ số (như bản JS).
+* Chưa có giao diện xem tiến độ trong lúc chạy (chỉ cửa sổ dòng lệnh + báo cáo sinh lại mỗi 30 phút).
+* Chưa chạy thật 7 tiếng trên Windows (môi trường phát triển là Linux); đã chạy liền 30 phút và nhiều lần ngắn, giả
+  lập tắt giữa chừng rồi chạy tiếp. Mã chỉ dùng thư viện chuẩn + numpy, đường dẫn qua `os.path`, ghi tệp kiểu
+  "ghi tạm rồi đổi tên" (`os.replace`, an toàn trên Windows), tiến trình con bằng `sys.executable`.
+
+## 3. Lỗi / hạn chế đã biết
+
+* **Kiểm chứng bằng số, không phải chứng minh** (như bản JS). Mỗi sự kiện đúng trên 16 tam giác mẫu của vũ trụ và
+  12 cấu hình ngẫu nhiên mới của tài liệu con, dung sai 10⁻⁷–10⁻⁶ theo kích thước hình.
+* **"Sâu" theo nghĩa của Newclid**: bộ suy diễn DDAR của Newclid 2.0.2 không có điểm phụ nên có những sự kiện quen
+  thuộc nó không chứng minh được (vd trung điểm AH nằm trên đường tròn Euler – còn gặp lỗi nội bộ `TypeError` của
+  Newclid; "I và tâm nội tiếp tam giác S'_aBC cùng nằm trên đường tròn qua B, C"; hai tâm nội tiếp cùng nằm trên một
+  phân giác – do góc có hướng mod π). Các sự kiện này vẫn được xếp là "ứng viên sâu" → thầy/cô đánh "Chán" để hạ.
+  Giới hạn 30 giây mỗi mục tiêu: nhiều sự kiện "hết giờ" có thể chứng minh được nếu cho lâu hơn (`gioi_han_giay`).
+* Newclid đôi khi lỗi nội bộ (`TypeError`, `InvalidLineIntersectError` ở cấu hình đặc biệt) → ghi "lỗi suy diễn",
+  trung tính. Newclid 3.x không dùng được (xem trên).
+* **Khối lượng**: mỗi giờ vòng khám phá xác nhận hàng nghìn sự kiện; chỉ giữ 4000 sự kiện điểm cao nhất mỗi lần chạy
+  và Newclid kịp kiểm khoảng 300–400 sự kiện/giờ với 2 tiến trình (ưu tiên điểm sơ bộ cao), phần còn lại ghi
+  "chưa kiểm tra". Tăng `so_tien_trinh` nếu máy nhiều nhân.
+* Nhiều sự kiện đứng đầu là các biến thể của cùng một ý (vd nhiều đường tròn qua trực tâm của các tam giác con);
+  chỉ khử trùng lặp khi trùng hẳn về hình học (kể cả đổi tên A/B/C). Phản hồi "Chán" giúp hạ cả nhóm (qua đặc trưng).
+* Lọc "hiển nhiên" chỉ dùng vài luật (bản JS + Thales, đường trung bình, vị tự, sự kiện đã biết); phần còn lại nhờ
+  Newclid. Sự kiện "hai điểm trùng nhau" mà là định nghĩa tương đương (vd chân đường vuông góc từ H xuống BC là D)
+  đã được loại; các trùng hợp quen thuộc (vd N là tâm (DEF)) vẫn được báo (và Newclid chấm).
+* Vòng khám phá mặc định sâu 3 lớp, 6 bước mới; muốn sâu hơn chỉnh `do_sau`, `so_buoc_toi_da` (chậm hơn nhiều).
+* Kết quả phụ thuộc thời gian máy (ngân sách theo giây): cùng cấu hình, máy nhanh tìm được nhiều hơn máy chậm.
+* Dữ liệu đối chiếu `lab/tests/fixtures/js_doi_chieu.json` (~1 MB) cần sinh lại khi sửa lõi JS (test tự báo).
+
+## 4. Hướng dẫn chạy (tóm tắt – chi tiết ở `lab/HUONG_DAN.md`)
+
+Windows: cài Python 3.12 (đánh dấu *Add python.exe to PATH*), tải mã nguồn, rồi bấm đúp:
+
+1. `lab\cai-dat.bat` – một lần: tạo `.venv`, cài `numpy`, `newclid==2.0.2`, chạy thử.
+2. `lab\chay-7-tieng.bat` – buổi tối (tắt giữa chừng thì bấm lại để chạy tiếp).
+3. `lab\xem-bao-cao.bat` – buổi sáng: mở báo cáo, bấm Hay/Chán.
+
+Bằng lệnh (trong `.venv`):
+
+```bat
+python -m lab chay --gio 7
+```
+
+```bat
+python -m lab bao-cao
+```
+
+Kiểm thử:
+
+```bat
+python -m unittest discover -s lab/tests -t .
+```
+
+## 5. Quyết định thiết kế chính và lý do
+
+1. **Lõi Python dịch sát từng dòng lõi JS**, kể cả ngưỡng và thứ tự chọn nghiệm, và **cùng bộ sinh số ngẫu nhiên**
+   ở bộ quét: nhờ vậy có thể đối chiếu "giống hệt" chứ không chỉ "gần đúng", và hình nào phòng thí nghiệm sinh ra mở
+   trong công cụ web cũng đúng y như vậy.
+2. **Vũ trụ dùng chung thay cho cây cấu hình**: thay vì mỗi nút tìm kiếm là một hình riêng, mọi đối tượng của một
+   vòng sống chung trên cùng 16 tam giác mẫu; sự kiện được kiểm chứng trên **tài liệu con tối thiểu** (bao đóng phụ
+   thuộc) → "số bước dựng" của sự kiện là số bước thật sự cần, và cùng một đối tượng không phải tính lại ở mỗi nhánh.
+3. **Dò tăng dần + kiểm chứng đầy đủ**: dò bằng numpy rất nhanh nhưng lỏng; mọi ứng viên qua bộ quét đầy đủ (giống
+   bản JS) trên cấu hình ngẫu nhiên mới → không báo sai do trùng hợp của bộ mẫu.
+4. **Mẫu vân tay hoán vị đỉnh**: một định lý thường xuất hiện 3 hoặc 6 lần (theo A, B, C); khoá chuẩn lấy nhỏ nhất qua
+   6 hoán vị nên chỉ báo một lần.
+5. **Newclid 2.0.2 + toạ độ cố định**: Newclid tự đặt toạ độ ngẫu nhiên có thể chọn nhầm nhánh nghiệm (giao điểm, cung)
+   làm mục tiêu sai về số; dùng đúng toạ độ của hình loại bỏ hẳn vấn đề này. Chạy trong tiến trình con để có giới hạn
+   thời gian **cứng** (bộ suy diễn có thể kẹt lâu trong một bước) và để lỗi của Newclid không làm đổ vòng chạy.
+6. **Tách mục tiêu nguyên tử**: đo được Newclid chậm hẳn khi bài toán thừa điểm (đường tròn Euler 6 điểm: hết giờ; tách
+   ra: mỗi chân đường cao ~3 giây).
+7. **Điểm = tổng có trọng số, học bằng cộng dồn có kẹp**: đơn giản, giải thích được (báo cáo hiện từng thành phần),
+   chỉnh tay được trong tệp cấu hình; phản hồi chỉ dịch trọng số trong giới hạn nên không "học lệch" khi có ít đánh giá.
+8. **Báo cáo là một tệp HTML tĩnh, không thư viện ngoài**: mở được không cần mạng; máy chủ nhỏ chỉ dùng để ghi phản
+   hồi vào tệp (trình duyệt không được ghi tệp trực tiếp).
+9. **Lưu tiến độ ở ranh giới vòng + mỗi phút** (tệp JSON ghi tạm rồi đổi tên): một vòng chỉ 2–3 phút nên mất điện
+   chỉ mất tối đa một vòng; lần chạy dở được nhận ra và chạy tiếp tự động.

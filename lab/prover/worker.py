@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 import contextlib
+from pathlib import Path
 
 
 def newclid_version():
@@ -61,7 +62,7 @@ def run(problem: str, timeout: float, seed: int = 1) -> dict:
             try:
                 fd, path = tempfile.mkstemp(suffix=".txt")
                 os.close(fd)
-                solver.write_solution(path)
+                solver.write_solution(Path(path))
                 with open(path, encoding="utf-8") as f:
                     out["proof"] = f.read()
                 os.unlink(path)

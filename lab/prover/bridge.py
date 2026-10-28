@@ -95,6 +95,7 @@ def check_fact(fact: dict, timeout: float = 30.0, suggester_name: str | None = N
             break
         r = run_problem(prob.text, timeout)
         r["problem"] = prob.text
+        r["names"] = prob.names  # id bước → tên điểm trong Newclid (để đổi tên trong vết chứng minh)
         if prob.notes:
             r["notes"] = prob.notes
         sug = get_suggester(suggester_name)

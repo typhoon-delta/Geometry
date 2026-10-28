@@ -117,6 +117,7 @@ class FactPipeline:
         self.seed = seed
         self.known = []  # sự kiện đã tìm được trong vòng này (dạng Knowledge) – dùng làm kiến thức
         self.base_known = []  # sự kiện của cấu hình gốc (id cố định, dùng cho mọi vòng)
+        self.debug = None  # đặt [] để ghi vài ví dụ ứng viên không xác nhận được (gỡ lỗi)
         self.stats = {"ung_vien": 0, "da_gap": 0, "hien_nhien": 0, "khong_xac_nhan": 0, "su_kien": 0}
 
     def new_epoch(self):
@@ -155,6 +156,10 @@ class FactPipeline:
         found = [r for r in res["relations"] if newest in r["ids"]]
         if not found:
             self.stats["khong_xac_nhan"] += 1
+            k = "kxn_" + rtype
+            self.stats[k] = self.stats.get(k, 0) + 1
+            if self.debug is not None and len(self.debug) < 30:
+                self.debug.append((rtype, ids, res["stats"], [(r["type"], r["ids"]) for r in res["relations"][:4]]))
             if key is not None:
                 self.seen[key] = "khong-xac-nhan"
             return []

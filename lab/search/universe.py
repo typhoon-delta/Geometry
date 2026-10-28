@@ -256,7 +256,7 @@ class Universe:
         if sample_params is not None:
             ovs_backup = [o.get(step["id"]) for o in self.ovs]
             for k in range(self.K + self.F):
-                self.ovs[k][step["id"]] = sample_params[k] if k < self.K else sample_params[min(1, self.K - 1)]
+                self.ovs[k][step["id"]] = sample_params[k] if k < self.K else sample_params[0]
         vs = self.evaluate_step(step)
         if vs is None:
             self._restore(step["id"], ovs_backup)
@@ -708,7 +708,7 @@ class Universe:
             if np.isnan(X).any():
                 continue
             n = X.shape[1]
-            if n == 2 and np.any(np.hypot(*(X[:, 0] - X[:, 1]).T) < 0.01 * self.scale):
+            if n == 2 and np.any(np.hypot(*(X[:, 0] - X[:, 1]).T) < 1e-3 * self.scale):
                 continue
             if P.shape[1]:
                 d = np.hypot(X[:, :, None, 0] - P[:, None, :, 0], X[:, :, None, 1] - P[:, None, :, 1])  # (K, n, N)
@@ -731,7 +731,10 @@ class Universe:
     def fingerprint(self, sid, j=None):
         """Dấu vân tay hình học của đối tượng ở mẫu vân tay j (mặc định: mẫu kiểm chứng 1 và 2)."""
         k = self.kind.get(sid)
-        js = [self.K + j] if j is not None else [1, 2]
+        if j is not None:
+            js = [self.K + j]
+        else:  # mặc định: mẫu vân tay "không đổi tên" (ổn định giữa các vòng, kể cả với điểm tuỳ ý của trạm)
+            js = [self.K] if self.F else [1, 2]
         out = [k]
         for idx in js:
             s = float(self.scale[min(idx, 1)]) if idx >= self.K else float(self.scale[idx])
