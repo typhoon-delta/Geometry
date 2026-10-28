@@ -81,6 +81,9 @@ lưu trong trình duyệt; *Xuất/Nhập* để mang sang máy khác. Nút ✕ 
 
 * Công cụ **Chọn / kéo**: kéo điểm tự do hoặc điểm trên đối tượng; kéo **nhãn** để dời nhãn; kéo nền để dời cả
   hình; lăn chuột (hoặc chụm hai ngón trên màn hình cảm ứng) để phóng to/thu nhỏ.
+* **Điểm chồng nhau** (vd A gần như trùng một chân đường vuông góc): khi bấm, đối tượng đang chọn được ưu tiên,
+  rồi đến điểm kéo được – nên nhấn vào là kéo được A. **Bấm lại tại chỗ** (không kéo) để chọn lần lượt từng điểm
+  chồng nhau; thanh trạng thái cho biết đang chọn điểm nào.
 * Bấm vào đối tượng (trên hình hoặc trong bảng các bước) để chọn; giữ `Shift` để chọn nhiều. Thẻ thuộc tính
   cho đổi **tên**, **màu**, nét đứt, độ dày, tô nền nhạt, số cung/số vạch của dấu, ẩn đối tượng…
 * **Đổi tên**: nháy đúp vào điểm. Gõ như công thức: `I_A` → I với chỉ số A, `X_{AB}`, `B'` → B phẩy,

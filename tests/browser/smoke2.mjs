@@ -227,5 +227,48 @@ export async function run({ page, ok, shot, state, tool, clickAt, menu, example 
   const savedTools = await page.evaluate(() => localStorage.getItem('hinh-hoc-dong:tools'));
   ok(savedTools && savedTools.includes('Trực tâm của tôi'), 'công cụ tự tạo được lưu trong trình duyệt');
 
+  // ---------- Điểm chồng nhau: bấm vào vẫn kéo được điểm tự do ----------
+  console.log('Chọn khi các điểm chồng nhau (A gần như trùng E trong hình Simson)');
+  await example('simson');
+  await tool('move');
+  await page.evaluate(() => { __app.doc.steps.find((x) => x.name === 'A').params = { x: -3.823, y: 6.606 }; __app.refresh(); __app.zoomFit(); });
+  await page.waitForTimeout(100);
+  const scr = await page.evaluate(() => {
+    const r = __app.view.canvas.getBoundingClientRect();
+    const at = (n) => { const q = __app.toScreen(__app.values.get(__app.doc.steps.find((x) => x.name === n).id)); return { x: r.left + q.x, y: r.top + q.y }; };
+    return { A: at('A'), E: at('E') };
+  });
+  // bấm lệch về phía E (E gần con trỏ hơn A)
+  const cx = scr.E.x + (scr.E.x - scr.A.x) * 0.5, cy = scr.E.y + (scr.E.y - scr.A.y) * 0.5;
+  const A0 = await page.evaluate(() => ({ ...__app.doc.steps.find((x) => x.name === 'A').params }));
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 30, cy + 20, { steps: 5 });
+  await page.mouse.up();
+  const A1 = await page.evaluate(() => ({ ...__app.doc.steps.find((x) => x.name === 'A').params }));
+  ok(Math.hypot(A1.x - A0.x, A1.y - A0.y) > 0.1, `bấm sát E vẫn kéo được A (A dời ${Math.hypot(A1.x - A0.x, A1.y - A0.y).toFixed(2)})`);
+  // bấm lại tại chỗ (không kéo): lần lượt chọn các đối tượng chồng nhau
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(50);
+  const name = () => page.evaluate(() => [...__app.selection].map((id) => __app.doc.steps.find((x) => x.id === id).name).join(','));
+  await page.mouse.click(cx, cy);
+  const n1 = await name();
+  await page.mouse.click(cx, cy);
+  const n2 = await name();
+  await page.mouse.click(cx, cy);
+  const n3 = await name();
+  ok(n1 === 'A' && n2 === 'E' && n3 === 'A', `bấm lại tại chỗ chọn lần lượt A → E → A (${n1} → ${n2} → ${n3})`);
+  // A đang được chọn (chọn từ danh sách/bảng): bấm vào chỗ chồng nhau phải là A, không phải E
+  await page.evaluate(() => __app.select(__app.doc.steps.find((x) => x.name === 'A').id));
+  await page.mouse.click(cx, cy);
+  ok((await name()) === 'A', 'chọn A rồi bấm vào chỗ đó vẫn là A (đối tượng đang chọn được ưu tiên)');
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx - 25, cy + 15, { steps: 4 });
+  await page.mouse.up();
+  const A2 = await page.evaluate(() => ({ ...__app.doc.steps.find((x) => x.name === 'A').params }));
+  ok(Math.hypot(A2.x - A0.x, A2.y - A0.y) > 0.1, 'đang chọn A, kéo tại chỗ chồng nhau thì A di chuyển');
+  await shot('chon-diem-chong-nhau');
+
   if (globalThis.__smokeMore) await globalThis.__smokeMore({ page, ok, shot, state, tool, clickAt });
 }
