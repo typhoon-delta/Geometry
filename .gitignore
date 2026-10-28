@@ -1,2 +1,9 @@
 node_modules/
 tests/browser/out/
+__pycache__/
+*.pyc
+.venv/
+venv/
+lab/du-lieu/
+reports/*
+!reports/README.md
