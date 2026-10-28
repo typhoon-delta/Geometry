@@ -35,7 +35,23 @@ const toPage = async (x, y) => {
   return { x: boardBox.x + s.x, y: boardBox.y + s.y };
 };
 const clickAt = async (x, y) => { const p = await toPage(x, y); await page.mouse.click(p.x, p.y); };
-const tool = (id) => page.click(`.tool[data-tool="${id}"]`);
+// Chọn công cụ qua giao diện thật: bấm biểu tượng nhóm trên thanh dọc rồi chọn trong danh sách bung ra
+const tool = async (id) => {
+  const g = await page.evaluate((id) => document.querySelector(`.tool[data-tool="${id}"]`)?.closest('.tb-group')?.dataset.group || null, id);
+  if (!g) { await page.click(`.tb-btn[data-group="${id}"]`); return; }
+  await page.click(`.tb-btn[data-group="${g}"]`);
+  await page.click(`.tool[data-tool="${id}"]`);
+};
+// Bấm một mục trong menu trên cùng (Tệp/Sửa/Hiển thị)
+const menu = async (id) => {
+  const i = await page.evaluate((id) => [...document.querySelectorAll('#topbar .menu')].indexOf(document.getElementById(id).closest('.menu')), id);
+  await page.click(`#topbar .menu:nth-child(${i + 1}) .menu-btn`);
+  await page.click('#' + id);
+};
+const example = async (key) => {
+  await page.click('#topbar .menu:nth-child(1) .menu-btn');
+  await page.click(`[data-example="${key}"]`);
+};
 
 // ---------- Mốc 1: dựng hình, kéo thả, hoàn tác ----------
 console.log('Mốc 1: dựng hình + kéo thả + hoàn tác');
@@ -74,7 +90,7 @@ const far = Opt.reduce((a, b) => (Math.hypot(a.x + 1, a.y - 3) > Math.hypot(b.x 
 await clickAt(far.x, far.y);
 st = await state();
 ok(st.n === before + 1 && st.steps[st.n - 1].type === 'intersection_other', 'giao điểm thứ hai của đường thẳng qua A với (O) dùng "giao điểm thứ hai"');
-await page.click('.tool[data-tool="move"]');
+await tool('move');
 await shot('m1-dung-hinh');
 
 // kéo điểm A
@@ -140,7 +156,7 @@ const extra = process.env.SMOKE_ONLY_M1 ? [] : ['./smoke2.mjs'];
 for (const f of extra) {
   try {
     const m = await import(f);
-    await m.run({ page, ok, shot, state, tool, clickAt, toPage, errors });
+    await m.run({ page, ok, shot, state, tool, clickAt, toPage, errors, menu, example });
   } catch (e) {
     if (e.code === 'ERR_MODULE_NOT_FOUND' && String(e.message).includes('smoke2')) continue;
     console.log('  ✗ lỗi khi chạy ' + f + ': ' + e.stack);

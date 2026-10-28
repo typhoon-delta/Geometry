@@ -1,16 +1,16 @@
 // Kiểm thử trình duyệt cho các mốc 2–5 (được gọi từ smoke.mjs).
 
-export async function run({ page, ok, shot, state, tool, clickAt }) {
+export async function run({ page, ok, shot, state, tool, clickAt, menu, example }) {
   // ---------- Mốc 2: tua bước, đánh dấu, trình chiếu ----------
   console.log('Mốc 2: đánh dấu + tua bước + trình chiếu');
-  await page.selectOption('#sel-example', 'euler_line');
+  await example('euler_line');
   let st = await state();
   ok(st.steps.some((s) => s.name === 'H'), 'mở ví dụ đường thẳng Euler');
   const P = await page.evaluate(() => Object.fromEntries(__app.doc.steps.filter((s) => s.type === 'free_point').map((s) => [s.name, s.params])));
   const at = (n) => clickAt(P[n].x, P[n].y);
   // đánh dấu hai góc bằng nhau? (dùng góc B và góc C với cùng kiểu) + đoạn bằng nhau
   await tool('angle_mark');
-  await page.click('#tool-options .sw[data-c="#15803d"]');
+  await page.click('#tool-options .sw[data-c="#4e8f5a"]');
   await page.click('#tool-options [data-n="2"]');
   await at('A'); await at('B'); await at('C');
   await at('B'); await at('C'); await at('A');
@@ -22,7 +22,7 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   st = await state();
   const marks = st.steps.filter((s) => ['angle_mark', 'segment_mark', 'polygon'].includes(s.type));
   ok(marks.length === 4, `tạo 2 dấu góc, 1 dấu đoạn, 1 miền tô (${marks.length})`);
-  ok(marks[0].style.arcs === 2 && marks[0].style.color === '#15803d', 'dấu góc dùng kiểu đã chọn (2 cung, xanh lá)');
+  ok(marks[0].style.arcs === 2 && marks[0].style.color === '#4e8f5a', 'dấu góc dùng kiểu đã chọn (2 cung, xanh lá)');
   // tô nền đường tròn ngoại tiếp
   await tool('move');
   const circId = st.steps.find((s) => s.type === 'circumcircle').id;
@@ -62,6 +62,7 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
 
   // gộp khung
   const fr0 = await page.evaluate(() => GeoCore.frames(__app.doc).length);
+  await page.click('#btn-panel');
   await page.click('.step:nth-child(3) .join');
   const fr1 = await page.evaluate(() => GeoCore.frames(__app.doc).length);
   ok(fr1 === fr0 - 1, `gộp bước 3 vào khung trước (${fr0} → ${fr1} khung)`);
@@ -74,7 +75,7 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   // ---------- Mốc 3: chia sẻ + lưu ----------
   console.log('Mốc 3: chia sẻ link + lưu/mở JSON + bản nháp');
   const ref = await page.evaluate(() => JSON.stringify(__app.doc.steps));
-  await page.click('#btn-share');
+  await menu('btn-share');
   await page.waitForSelector('.modal textarea');
   const url = await page.locator('.modal textarea').inputValue();
   ok(/#h=z[A-Za-z0-9_-]+$/.test(url), `tạo link nén (${url.length} ký tự)`);
@@ -86,16 +87,16 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   ok((await p2.evaluate(() => JSON.stringify(__app.doc.steps))) === ref, 'mở link ở tab mới cho đúng hình');
   await p2.close();
 
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#btn-save')]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), menu('btn-save')]);
   const path = await dl.path();
   const { readFileSync } = await import('node:fs');
   const saved = JSON.parse(readFileSync(path, 'utf8'));
   ok(saved.format === 'hinh-hoc-dong' && saved.steps.length === JSON.parse(ref).length, `lưu tệp JSON "${dl.suggestedFilename()}"`);
 
-  await page.click('#btn-new');
+  await menu('btn-new');
   await page.click('.modal .primary');
   ok((await state()).n === 0, 'hình mới rỗng');
-  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#btn-open')]);
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), menu('btn-open')]);
   await fc.setFiles(path);
   await page.waitForFunction(() => __app.doc.steps.length > 0);
   ok((await page.evaluate(() => JSON.stringify(__app.doc.steps))) === ref, 'mở lại tệp JSON đúng hình');
@@ -108,7 +109,7 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
 
   // ---------- Mốc 4: khám phá ----------
   console.log('Mốc 4: khám phá bằng số');
-  await page.selectOption('#sel-example', 'nine_point');
+  await example('nine_point');
   await page.click('#btn-explore');
   await page.waitForSelector('.rel');
   const rels = await page.locator('.rel .rel-text').allTextContents();
@@ -123,7 +124,7 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   await shot('m4-kham-pha-dong-vien');
   await page.evaluate(() => __app.commit((d) => { d.steps[0].params.x += 0.1; }));
   ok(await page.locator('.stale').count() === 1, 'sửa hình → báo kết quả cũ');
-  await page.selectOption('#sel-example', 'simson');
+  await example('simson');
   ok(await page.locator('.rel').count() === 0, 'mở hình khác → xoá kết quả cũ');
   await page.click('#btn-run-explore');
   await page.waitForFunction(() => !document.querySelector('.stale') && document.querySelector('.rel'));
@@ -134,7 +135,7 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
 
   // ---------- Mốc 5: TikZ ----------
   console.log('Mốc 5: xuất TikZ');
-  await page.click('#btn-tikz');
+  await menu('btn-tikz');
   await page.waitForSelector('.modal textarea');
   const tex = await page.locator('.modal textarea').inputValue();
   ok(/\\begin\{tikzpicture\}/.test(tex) && /\\coordinate \(P\)/.test(tex) && !/NaN|undefined/.test(tex), 'xuất TikZ từ giao diện');

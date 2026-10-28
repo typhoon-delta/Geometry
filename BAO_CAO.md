@@ -190,3 +190,23 @@ sự kiện chuột qua DevTools, không có khi dùng chuột thật. Phần c�
 mềm (headless không có GPU); trên laptop thật canvas được GPU tăng tốc. Ngưỡng tự kiểm trong
 `npm run test:perf`: p95 khoảng cách khung ≤ 25 ms ở ×4, JS mỗi khung < 6 ms ở ×4, một lần vẽ < 3 ms ở ×4,
 luồng chính < 8 ms ở ×1.
+
+## B. Phong cách (giống hình mẫu Sketchpad, không sao chép giao diện/biểu tượng)
+
+* **Bộ kiểu "Đơn sắc" (mặc định)**: mọi đối tượng màu đen, nét 1px đều nhau (canvas khử răng cưa), điểm là
+  vòng tròn nhỏ ruột trắng viền đen, nền trắng, tắt lưới. Nhãn serif nghiêng (Times/LaTeX), vẽ trực tiếp có
+  **chỉ số dưới** và **dấu phẩy**: gõ `I_C`, `X_A`, `X_{AB}`, `B'`, `A'_1` hiển thị đúng như công thức; `A1` vẫn tự
+  thành A₁. Nhãn đặt sát điểm (11 px) theo hướng tránh các đường đi qua điểm.
+* **Bộ kiểu "Sách giáo khoa"**: màu dịu (đường tròn ngoại tiếp xanh, nội tiếp xanh lá, Euler tím, điểm kéo được
+  tô đỏ/cam), nét 1,4px. Chuyển qua lại ở menu *Hiển thị*; lựa chọn được nhớ trong trình duyệt. Màu đặt riêng
+  cho từng đối tượng luôn được giữ ở cả hai bộ.
+* **Giao diện tối giản**: thanh menu mỏng (*Tệp / Sửa / Hiển thị*) + vài nút biểu tượng; **thanh công cụ dọc
+  bằng biểu tượng SVG tự vẽ** ở bên trái, mỗi biểu tượng là một nhóm, bấm vào là mở danh sách công cụ của nhóm;
+  bảng các bước dựng **ẩn mặc định** (nút ◫ để mở), thuộc tính đối tượng hiện thành thẻ nổi nhỏ khi đang chọn;
+  gợi ý thao tác ở thanh trạng thái dưới đáy. Gần như toàn màn hình dành cho bảng vẽ.
+* **TikZ theo bộ kiểu đang chọn**: Đơn sắc → `line width=0.4pt`, điểm `\filldraw[fill=white]`, không định nghĩa
+  màu; Sách giáo khoa → màu dịu (`\definecolor`), điểm tô màu. Nhãn xuất đúng cú pháp LaTeX (`$I_C$`,
+  `$X_{AB}$`, `$B'$`, `$A'_1$`), tên toạ độ được làm sạch (`I_C` → `(IC)`, `B'` → `(Bp)`). Tâm đường tròn dùng
+  tên điểm nếu có.
+* Mọi công cụ vẽ đường tròn (qua 3 điểm, ngoại tiếp, nội tiếp, Euler, …) **dựng kèm tâm** (bước `center`);
+  nếu tâm đã có sẵn (vd đã dựng O trước) thì không dựng thêm điểm trùng.

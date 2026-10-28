@@ -6,8 +6,9 @@ import { STEP_TYPES, argAccepts } from '../core/steps.js';
 import * as G from '../core/geom.js';
 import { Renderer } from './render.js';
 import { CanvasView } from './view.js';
-import { TOOLS, TOOL_BY_ID } from './tools.js';
-import { isDraggableType, PALETTE } from './styles.js';
+import { TOOL_BY_ID, TOOLBAR } from './tools.js';
+import { ICONS } from './icons.js';
+import { isDraggableType, PALETTE, setTheme } from '../core/styles.js';
 import { confirmDialog, promptDialog, toast } from './dialog.js';
 import { renderStepList, renderProps, renderToolOptions } from './panels.js';
 
@@ -29,7 +30,9 @@ export class App {
     this.projector = false;
     this.grid = false;
     this.mouse = { x: 0, y: 0 };
-    this.markDefaults = { color: '#dc2626', arcs: 1, ticks: 1, polyColor: '#1d4ed8' };
+    this.markDefaults = { color: null, arcs: 1, ticks: 1, polyColor: null }; // null = màu mặc định của bộ kiểu
+    this.theme = loadPref('theme', 'mono');
+    setTheme(this.theme);
     this.listeners = { change: [] };
   }
 
@@ -134,7 +137,7 @@ export class App {
       const step = { id, type: sp.type, args };
       if (sp.params && Object.keys(sp.params).length) step.params = { ...sp.params };
       if (kind !== 'mark') step.name = sp.name && !this.nameUsed(sp.name) ? sp.name : nextName(this.doc, kind, sp.name);
-      if (sp.style) step.style = { ...sp.style };
+      if (sp.style && Object.keys(sp.style).length) step.style = { ...sp.style };
       if (i > 0 && join) step.joinPrev = true;
       this.doc.steps.push(step);
       k.set(id, kind);
@@ -161,6 +164,7 @@ export class App {
     this.renderer.scale = this.projector ? 1.9 : 1;
     this.renderer.grid = this.grid;
     this.renderer.setScene(this.doc, this.values, {
+      theme: this.theme,
       visible: this.visibleSet(),
       selected: this.mode === 'present' ? new Set() : this.selection,
       highlight: this.highlight,
@@ -181,8 +185,8 @@ export class App {
     renderStepList(this);
     renderProps(this);
     renderToolOptions(this);
-    document.getElementById('btn-undo').disabled = !this.undoStack.length;
-    document.getElementById('btn-redo').disabled = !this.redoStack.length;
+    for (const id of ['btn-undo', 'menu-undo']) { const b = document.getElementById(id); if (b) b.disabled = !this.undoStack.length; }
+    for (const id of ['btn-redo', 'menu-redo']) { const b = document.getElementById(id); if (b) b.disabled = !this.redoStack.length; }
     this.updatePresentBar();
   }
 
@@ -304,7 +308,7 @@ export class App {
   setTool(id) {
     this.cancelTool();
     this.toolId = id;
-    document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
+    this.markActiveTool(id);
     this.stage.classList.toggle('tool-active', id !== 'move');
     this.showHint();
     renderToolOptions(this);
@@ -431,9 +435,10 @@ export class App {
 
   markStyle(kind) {
     const m = this.markDefaults;
-    if (kind === 'angle') return { color: m.color, arcs: m.arcs };
-    if (kind === 'segment') return { color: m.color, ticks: m.ticks };
-    return { color: m.polyColor, fill: 0.12 };
+    const c = (x) => (x ? { color: x } : {});
+    if (kind === 'angle') return { ...c(m.color), arcs: m.arcs };
+    if (kind === 'segment') return { ...c(m.color), ticks: m.ticks };
+    return { ...c(m.polyColor) };
   }
 
   startPreview(tool) {
@@ -538,6 +543,7 @@ export class App {
   }
 
   onPointerDown(e) {
+    if (!e.target.closest('#board')) return; // thẻ nổi (thuộc tính, tuỳ chọn) nằm trên bảng vẽ: để chúng tự xử lý
     if (e.button !== undefined && e.button !== 0) return;
     if (document.querySelector('.modal-back')) return;
     this.boardRect = null;
@@ -659,7 +665,7 @@ export class App {
   async renameStep(id) {
     const s = stepById(this.doc, id);
     if (!s || !s.name) return;
-    const v = await promptDialog('Đổi tên', s.name, 'Chữ số ở cuối hiển thị thành chỉ số dưới (A1 → A₁). Có thể dùng dấu phẩy trên: A\'.');
+    const v = await promptDialog('Đổi tên', s.name, 'Gõ như công thức: I_A → I với chỉ số A, X_{AB} → chỉ số AB, B\' → B phẩy, A1 → A₁.');
     if (v == null) return;
     this.setName(id, v.trim());
   }
@@ -759,10 +765,32 @@ export class App {
     setTimeout(() => { this.view.resize(); this.boardRect = null; this.refresh(); }, 80);
   }
 
+  setThemeId(id) {
+    this.theme = setTheme(id);
+    savePref('theme', this.theme);
+    this.updateMenuChecks();
+    this.refresh();
+  }
+
+  /** Hiện/ẩn bảng các bước dựng (mặc định ẩn để dành chỗ cho bảng vẽ). */
+  togglePanel(show = !document.body.classList.contains('panel-open'), remember = true) {
+    document.body.classList.toggle('panel-open', !!show);
+    if (remember) savePref('panel', show ? '1' : '0');
+    this.updateMenuChecks();
+    setTimeout(() => { this.view.resize(); this.boardRect = null; }, 0);
+  }
+
+  updateMenuChecks() {
+    document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('on', b.dataset.theme === this.theme));
+    document.getElementById('btn-grid')?.classList.toggle('on', this.grid);
+    document.getElementById('menu-panel')?.classList.toggle('on', document.body.classList.contains('panel-open'));
+    document.getElementById('btn-panel')?.classList.toggle('on', document.body.classList.contains('panel-open'));
+  }
+
   toggleGrid() {
     this.grid = !this.grid;
     this.renderer.grid = this.grid;
-    document.getElementById('btn-grid').classList.toggle('on', this.grid);
+    this.updateMenuChecks();
     this.view.requestDraw();
   }
 
@@ -823,27 +851,97 @@ export class App {
 
   buildToolbar() {
     const host = document.getElementById('tools');
-    const groups = [];
-    for (const t of TOOLS) {
-      let g = groups.find((x) => x.name === t.group);
-      if (!g) groups.push((g = { name: t.group, tools: [] }));
-      g.tools.push(t);
-    }
+    const groups = this.toolbarGroups || TOOLBAR;
+    this.groupCurrent = this.groupCurrent || {};
+    for (const g of groups) if (!this.groupCurrent[g.id]) this.groupCurrent[g.id] = g.tools[0];
     host.innerHTML = groups
-      .map((g) => `<div class="tool-group"><div class="tool-group-name">${g.name}</div><div class="tool-grid">${g.tools
-        .map((t) => `<button class="tool" data-tool="${t.id}" title="${t.label}"><span class="ti">${t.icon}</span><span class="tl">${t.label}</span></button>`)
-        .join('')}</div></div>`)
-      .join('') + '<div id="tool-options"></div>';
-    host.addEventListener('click', (e) => {
-      const b = e.target.closest('.tool');
-      if (b) this.setTool(b.dataset.tool);
-    });
+      .map((g) => {
+        const many = g.tools.length > 1 || g.menu;
+        const items = g.menu ? '' : g.tools.map((id) => {
+          const t = TOOL_BY_ID[id];
+          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t.label)}"><span class="ti">${t.icon}</span><span class="tl">${escapeHTML(t.label)}</span></button>`;
+        }).join('');
+        return `<div class="tb-group" data-group="${g.id}">
+          <button class="tb-btn" data-group="${g.id}" title="${escapeHTML(g.label)}">${ICONS[g.icon] || ''}${many ? '<span class="tb-more"></span>' : ''}</button>
+          ${many ? `<div class="flyout"><div class="flyout-title">${escapeHTML(g.label)}</div>${items}</div>` : ''}
+        </div>`;
+      })
+      .join('');
+    const closeAll = () => host.querySelectorAll('.tb-group.open').forEach((x) => x.classList.remove('open'));
+    host.onclick = (e) => {
+      const tb = e.target.closest('.tb-btn');
+      const tl = e.target.closest('.tool');
+      if (tl) {
+        const g = tl.closest('.tb-group').dataset.group;
+        this.groupCurrent[g] = tl.dataset.tool;
+        closeAll();
+        this.setTool(tl.dataset.tool);
+        return;
+      }
+      if (!tb) return;
+      const gEl = tb.closest('.tb-group');
+      const g = groups.find((x) => x.id === tb.dataset.group);
+      const wasOpen = gEl.classList.contains('open');
+      closeAll();
+      if (g.menu) { if (!wasOpen) { gEl.classList.add('open'); g.menu(gEl.querySelector('.flyout'), this, closeAll); } return; }
+      this.setTool(this.groupCurrent[g.id]);
+      if (g.tools.length > 1 && !wasOpen) gEl.classList.add('open');
+    };
+    // bấm ra ngoài khi danh sách đang mở: chỉ đóng danh sách (không để lần bấm đó tạo điểm trên hình)
+    document.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('#tools') || !host.querySelector('.tb-group.open')) return;
+      closeAll();
+      if (e.target.closest('#board')) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(); });
+  }
+
+  /** Đánh dấu công cụ đang dùng trên thanh công cụ. */
+  markActiveTool(id) {
+    const groups = this.toolbarGroups || TOOLBAR;
+    document.querySelectorAll('#tools .tool').forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
+    for (const g of groups) {
+      const on = g.tools.includes(id) || !!(g.isActive && g.isActive(id));
+      if (g.tools.includes(id)) this.groupCurrent[g.id] = id;
+      document.querySelector(`#tools .tb-group[data-group="${g.id}"]`)?.classList.toggle('active', on);
+    }
   }
 
   bindButtons() {
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    // biểu tượng các nút trên thanh trên
+    for (const [id, ic] of [['btn-undo', 'undo'], ['btn-redo', 'redo'], ['btn-explore', 'explore'], ['btn-present', 'present'], ['btn-projector', 'projector'], ['btn-panel', 'panel']]) {
+      const b = document.getElementById(id);
+      if (b) b.innerHTML = ICONS[ic];
+    }
+    // menu thả xuống: bấm để mở, bấm một mục hoặc ra ngoài để đóng
+    const menus = [...document.querySelectorAll('#topbar .menu')];
+    const closeMenus = () => menus.forEach((m) => m.classList.remove('open'));
+    for (const m of menus) {
+      m.querySelector('.menu-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = m.classList.contains('open');
+        closeMenus();
+        if (!open) m.classList.add('open');
+      });
+      m.querySelector('.menu-pop').addEventListener('click', (e) => { if (e.target.closest('button')) closeMenus(); });
+      m.addEventListener('mouseenter', () => { if (menus.some((x) => x.classList.contains('open')) && !m.classList.contains('open')) { closeMenus(); m.classList.add('open'); } });
+    }
+    document.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('#topbar .menu') || !menus.some((m) => m.classList.contains('open'))) return;
+      closeMenus();
+      if (e.target.closest('#board')) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
     on('btn-undo', () => this.undo());
     on('btn-redo', () => this.redo());
+    on('menu-undo', () => this.undo());
+    on('menu-redo', () => this.redo());
+    document.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', () => this.setThemeId(b.dataset.theme)));
+    on('btn-panel', () => this.togglePanel());
+    on('menu-panel', () => this.togglePanel());
+    on('btn-close-panel', () => this.togglePanel(false));
+    this.togglePanel(loadPref('panel', '0') === '1', false);
+    this.updateMenuChecks();
     on('btn-delete', () => this.deleteSteps([...this.selection]));
     on('btn-grid', () => this.toggleGrid());
     on('btn-fit', () => this.zoomFit());
@@ -861,6 +959,12 @@ export class App {
 }
 
 // ---------- tiện ích ----------
+function loadPref(key, def) {
+  try { return localStorage.getItem('hinh-hoc-dong:' + key) ?? def; } catch { return def; }
+}
+function savePref(key, v) {
+  try { localStorage.setItem('hinh-hoc-dong:' + key, v); } catch { /* bỏ qua */ }
+}
 const round6 = (v) => Math.round(v * 1e6) / 1e6;
 const round9 = (v) => Math.round(v * 1e9) / 1e9;
 const round1 = (v) => Math.round(v * 10) / 10;

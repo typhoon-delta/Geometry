@@ -24,20 +24,18 @@ function start() {
     }));
   document.getElementById('exit-projector').onclick = () => app.setProjector(false);
 
-  // Menu ví dụ
-  const sel = document.getElementById('sel-example');
-  if (sel) {
-    sel.innerHTML = '<option value="">Ví dụ…</option>' + Object.entries(EXAMPLES).map(([k, e]) => `<option value="${k}">${e.title}</option>`).join('');
-    sel.onchange = () => {
-      const ex = EXAMPLES[sel.value];
-      sel.value = '';
-      if (!ex) return;
-      const doc = ex.build();
-      doc.title = ex.title;
-      app.loadDoc(doc, { keepHistory: true });
-      app.zoomFit();
-    };
-  }
+  // Hình mẫu (menu Tệp)
+  const exList = document.getElementById('example-list');
+  exList.innerHTML = Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${e.title}</button>`).join('');
+  app.loadExample = (key) => {
+    const ex = EXAMPLES[key];
+    if (!ex) return;
+    const doc = ex.build();
+    doc.title = ex.title;
+    app.loadDoc(doc, { keepHistory: true });
+    app.zoomFit();
+  };
+  exList.addEventListener('click', (e) => { const b = e.target.closest('[data-example]'); if (b) app.loadExample(b.dataset.example); });
 
   // Khám phá
   app.drawRelationOverlay = () => drawRelationOverlay(app);
@@ -47,8 +45,8 @@ function start() {
   document.getElementById('btn-tikz').onclick = () => {
     const vis = app.visibleSet();
     const doc = vis ? { ...app.doc, steps: app.doc.steps.map((s) => (vis.has(s.id) ? s : { ...s, hidden: true })) } : app.doc;
-    textDialog('Mã TikZ', toTikZ(doc, { values: app.values }),
-      '<div class="modal-body">Dán vào tài liệu LaTeX (chỉ cần <code>\\usepackage{tikz}</code>). Đổi kích thước bằng cách sửa <code>x=…, y=…</code>.</div>');
+    textDialog('Mã TikZ', toTikZ(doc, { values: app.values, theme: app.theme }),
+      `<div class="modal-body">Theo bộ kiểu đang chọn (<b>${app.theme === 'mono' ? 'Đơn sắc' : 'Sách giáo khoa'}</b>). Dán vào tài liệu LaTeX (chỉ cần <code>\\usepackage{tikz}</code>). Đổi kích thước bằng cách sửa <code>x=…, y=…</code>.</div>`);
   };
 
   // Lưu / mở / chia sẻ

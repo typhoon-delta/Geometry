@@ -396,6 +396,19 @@
         return [{ on: [s.id, { C: [A, B, C] }] }, { on: [s.id, { PB: [B, C] }] }];
       }
     },
+    center: {
+      // Tâm của một đường tròn (mọi công cụ vẽ đường tròn đều dựng kèm tâm).
+      kind: "point",
+      args: ["circle"],
+      label: "T\xE2m \u0111\u01B0\u1EDDng tr\xF2n",
+      compute: ([c]) => pt(c.c.x, c.c.y),
+      facts: (s, kinds2, doc) => {
+        const c = doc && doc.steps.find((x) => x.id === s.args[0]);
+        if (!c || !["circle_3pts", "circumcircle"].includes(c.type)) return [];
+        const [A, B, C] = c.args;
+        return [{ on: [s.id, { PB: [A, B] }] }, { on: [s.id, { PB: [B, C] }] }, { on: [s.id, { PB: [C, A] }] }];
+      }
+    },
     // ---------- ĐƯỜNG THẲNG ----------
     line: {
       kind: "line",
@@ -837,40 +850,71 @@
     return d > Math.PI ? 2 * Math.PI - d : d;
   }
 
-  // src/ui/styles.js
+  // src/core/styles.js
+  var THEMES = {
+    mono: { id: "mono", label: "\u0110\u01A1n s\u1EAFc", ink: "#000000" },
+    textbook: { id: "textbook", label: "S\xE1ch gi\xE1o khoa", ink: "#1f2937" }
+  };
   var PALETTE = [
     { name: "\u0110en", hex: "#111827" },
-    { name: "Xanh d\u01B0\u01A1ng", hex: "#1d4ed8" },
-    { name: "\u0110\u1ECF", hex: "#dc2626" },
-    { name: "Xanh l\xE1", hex: "#15803d" },
-    { name: "Cam", hex: "#ea580c" },
-    { name: "T\xEDm", hex: "#7e22ce" },
-    { name: "Xanh ng\u1ECDc", hex: "#0e7490" },
-    { name: "X\xE1m", hex: "#6b7280" }
+    { name: "Xanh d\u01B0\u01A1ng", hex: "#3b6fb6" },
+    { name: "\u0110\u1ECF", hex: "#c0504d" },
+    { name: "Xanh l\xE1", hex: "#4e8f5a" },
+    { name: "Cam", hex: "#d9822b" },
+    { name: "T\xEDm", hex: "#7d5ba6" },
+    { name: "Xanh ng\u1ECDc", hex: "#2f8f9d" },
+    { name: "X\xE1m", hex: "#8a8f98" }
   ];
-  var DEFAULT_BY_TYPE = {
-    free_point: { color: "#111827", fillColor: "#dc2626" },
-    point_on: { color: "#111827", fillColor: "#ea580c" },
-    circumcircle: { color: "#1d4ed8" },
-    incircle: { color: "#15803d" },
-    nine_point_circle: { color: "#7e22ce" },
-    polygon: { color: "#1d4ed8", fill: 0.12 },
-    angle_mark: { color: "#dc2626", arcs: 1 },
-    segment_mark: { color: "#dc2626", ticks: 1 }
+  var BY_KIND = {
+    mono: {
+      point: { color: "#000000", fillColor: "#ffffff", size: 3, hollow: true, showLabel: true, labelColor: "#000000" },
+      line: { color: "#000000", width: 1, dash: false, showLabel: false },
+      circle: { color: "#000000", width: 1, dash: false, fill: 0, showLabel: false },
+      mark: { color: "#000000", width: 1 }
+    },
+    textbook: {
+      point: { color: "#1f2937", size: 3.2, showLabel: true, labelColor: "#1f2937" },
+      line: { color: "#1f2937", width: 1.4, dash: false, showLabel: false },
+      circle: { color: "#1f2937", width: 1.4, dash: false, fill: 0, showLabel: false },
+      mark: { color: "#c0504d", width: 1.4 }
+    }
   };
-  var DEFAULT_BY_KIND = {
-    point: { color: "#111827", size: 3, showLabel: true },
-    line: { color: "#111827", width: 1.6, dash: false, showLabel: false },
-    circle: { color: "#111827", width: 1.6, dash: false, fill: 0, showLabel: false },
-    mark: { color: "#dc2626", width: 1.6 }
+  var BY_TYPE = {
+    mono: {
+      polygon: { color: "#000000", fill: 0.07 },
+      angle_mark: { arcs: 1 },
+      segment_mark: { ticks: 1 }
+    },
+    textbook: {
+      free_point: { fillColor: "#c0504d" },
+      point_on: { fillColor: "#d9822b" },
+      circumcircle: { color: "#3b6fb6" },
+      incircle: { color: "#4e8f5a" },
+      excircle: { color: "#4e8f5a" },
+      nine_point_circle: { color: "#7d5ba6" },
+      polygon: { color: "#3b6fb6", fill: 0.12 },
+      angle_mark: { color: "#c0504d", arcs: 1 },
+      segment_mark: { color: "#c0504d", ticks: 1 }
+    }
   };
-  function styleOf(step, kind) {
-    return { ...DEFAULT_BY_KIND[kind || "mark"], ...DEFAULT_BY_TYPE[step.type] || {}, ...step.style || {} };
+  var current = "mono";
+  function setTheme(id) {
+    if (THEMES[id]) current = id;
+    return current;
+  }
+  function styleOf(step, kind, theme = current) {
+    const t = BY_KIND[theme] ? theme : "mono";
+    const st = { ...BY_KIND[t][kind || "mark"], ...BY_TYPE[t][step.type] || {}, ...step.style || {} };
+    if (kind === "point" && step.style && step.style.color && !step.style.fillColor) {
+      st.fillColor = step.style.color;
+      st.hollow = false;
+    }
+    return st;
   }
   var isDraggableType = (type) => type === "free_point" || type === "point_on";
 
   // src/ui/render.js
-  var LABEL_DIST = 13;
+  var LABEL = { mono: { dist: 11, font: 15 }, textbook: { dist: 13, font: 16 } };
   var HALO = "rgba(96,165,250,0.45)";
   var RELATION = "#f59e0b";
   var LABEL_FONT = "'Times New Roman', 'Nimbus Roman', 'Liberation Serif', 'TeX Gyre Termes', Times, serif";
@@ -899,18 +943,20 @@
       const visible = opts.visible || null;
       const selected = opts.selected || /* @__PURE__ */ new Set();
       const highlight = opts.highlight || /* @__PURE__ */ new Set();
+      const theme = this.theme = opts.theme || "mono";
+      const L = LABEL[theme] || LABEL.mono;
       const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
       const layer = (s, kind) => order[s.type === "polygon" ? "polygon" : kind] ?? 3;
       this.items = doc.steps.filter((s) => !s.hidden && (!visible || visible.has(s.id))).map((s) => {
         const kind = k.get(s.id);
-        return { s, kind, st: styleOf(s, kind), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
+        return { s, kind, st: styleOf(s, kind, theme), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
       }).sort((a, b) => a.layer - b.layer);
       const dirs = autoLabelDirs(doc, values, (s) => !s.hidden && (!visible || visible.has(s.id)));
       this.labelOffsets = /* @__PURE__ */ new Map();
       for (const it of this.items) {
         if (it.kind !== "point") continue;
         const d = dirs.get(it.s.id) || { x: 0.7, y: 0.7 };
-        this.labelOffsets.set(it.s.id, it.st.labelOffset || [Math.round(d.x * LABEL_DIST), Math.round(d.y * LABEL_DIST)]);
+        this.labelOffsets.set(it.s.id, it.st.labelOffset || [Math.round(d.x * L.dist), Math.round(d.y * L.dist)]);
       }
       this.view.requestDraw();
     }
@@ -949,7 +995,7 @@
         this.drawnIds.add(it.s.id);
         const { s, kind, st, sel, hl } = it;
         const color = hl ? RELATION : st.color;
-        const width = (st.width || 1.6) * sc * (hl ? 1.8 : 1);
+        const width = (st.width || 1) * sc * (hl ? 1.8 : 1);
         if (kind === "line") {
           const sub2 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
           if (sel) strokeLine(ctx, view, v, sub2, HALO, width + 7 * sc, false);
@@ -989,12 +1035,12 @@
             ctx.fillStyle = HALO;
             ctx.fill();
           }
-          drawPoint(ctx, p, size, hl ? RELATION : st.color, hl ? RELATION : st.fillColor || st.color, sc, st.hollow);
+          drawPoint(ctx, p, size, hl ? RELATION : st.color, hl ? RELATION : st.fillColor || st.color, sc, st.hollow && !hl);
           if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: p, color: hl ? "#b45309" : st.labelColor || "#111827", off: this.labelOffsets.get(s.id) || [9, 9], point: true });
         }
       }
       for (const e of this.extra) drawExtra(ctx, view, e, sc);
-      const fontPx = 16 * sc;
+      const fontPx = (LABEL[this.theme] || LABEL.mono).font * sc;
       for (const L of labels) {
         const box = drawLabel(ctx, L.name, L.at.x + L.off[0] * sc, L.at.y - L.off[1] * sc, fontPx, L.color);
         if (L.point) this.labelBoxes.set(L.id, box);
@@ -1327,10 +1373,21 @@
   // src/ui/tools.js
   var T = (id, label, group, icon, inputs, hints, make, extra = {}) => ({ id, label, group, icon, inputs, hints, make, ...extra });
   var one = (type, params, name) => (picks) => [{ type, args: picks, params, name }];
+  var withCenter = (type, params, centerName) => (picks, app) => {
+    const out = [{ type, args: picks, params }];
+    let c = null;
+    try {
+      c = STEP_TYPES[type].compute(picks.map((id) => app.values.get(id)), { ...STEP_TYPES[type].params || {}, ...params || {} });
+    } catch {
+      c = null;
+    }
+    if (!c || !app.existingPointAt(c.c, 0.01)) out.push({ type: "center", args: ["$0"], name: centerName });
+    return out;
+  };
   var TRI = ["Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 hai", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 ba"];
   var VTX = ["Ch\u1ECDn \u0111\u1EC9nh A (\u0111\u1EC9nh \u0111\u1ED1i di\u1EC7n c\u1EA1nh c\u1EA7n x\xE9t)", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C"];
   var TOOLS = [
-    T("move", "Ch\u1ECDn / k\xE9o", "C\u01A1 b\u1EA3n", "\u2196", [], ["K\xE9o \u0111i\u1EC3m t\u1EF1 do (\u0111\u1ECF) ho\u1EB7c \u0111i\u1EC3m tr\xEAn \u0111\u1ED1i t\u01B0\u1EE3ng (cam). K\xE9o n\u1EC1n \u0111\u1EC3 d\u1EDDi h\xECnh; l\u0103n chu\u1ED9t \u0111\u1EC3 ph\xF3ng to/thu nh\u1ECF. K\xE9o nh\xE3n \u0111\u1EC3 d\u1EDDi nh\xE3n."], null),
+    T("move", "Ch\u1ECDn / k\xE9o", "C\u01A1 b\u1EA3n", "\u2196", [], ["K\xE9o \u0111i\u1EC3m ho\u1EB7c nh\xE3n; b\u1EA5m \u0111\u1EC3 ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng; k\xE9o n\u1EC1n \u0111\u1EC3 d\u1EDDi h\xECnh, l\u0103n chu\u1ED9t \u0111\u1EC3 ph\xF3ng to/thu nh\u1ECF"], null),
     T("point", "\u0110i\u1EC3m", "C\u01A1 b\u1EA3n", "\u2022", ["point"], ["B\u1EA5m v\xE0o ch\u1ED7 tr\u1ED1ng: \u0111i\u1EC3m t\u1EF1 do \xB7 b\u1EA5m l\xEAn \u0111\u01B0\u1EDDng/\u0111\u01B0\u1EDDng tr\xF2n: \u0111i\u1EC3m tr\xEAn \u0111\u1ED1i t\u01B0\u1EE3ng \xB7 b\u1EA5m g\u1EA7n ch\u1ED7 c\u1EAFt nhau: giao \u0111i\u1EC3m"], () => []),
     T("intersect", "Giao \u0111i\u1EC3m", "C\u01A1 b\u1EA3n", "\u2715", ["curve", "curve"], ["Ch\u1ECDn \u0111\u01B0\u1EDDng th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m ngay ch\u1ED7 hai \u0111\u01B0\u1EDDng c\u1EAFt nhau)", "Ch\u1ECDn \u0111\u01B0\u1EDDng th\u1EE9 hai"], null),
     T("midpoint", "Trung \u0111i\u1EC3m", "C\u01A1 b\u1EA3n", "\u25E6", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("midpoint"), { segmentShortcut: true }),
@@ -1343,7 +1400,7 @@
     T("angle_bisector", "Ph\xE2n gi\xE1c trong", "\u0110\u01B0\u1EDDng", "\u2220", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], one("angle_bisector")),
     T("ext_bisector", "Ph\xE2n gi\xE1c ngo\xE0i", "\u0110\u01B0\u1EDDng", "\u2220\u2091", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], one("angle_bisector", { external: true })),
     T("circle", "T\xE2m + \u0111i\u1EC3m", "\u0110\u01B0\u1EDDng tr\xF2n", "\u25EF", ["point", "point"], ["Ch\u1ECDn t\xE2m", "Ch\u1ECDn m\u1ED9t \u0111i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n"], one("circle"), { preview: "circle" }),
-    T("circle_3pts", "Qua 3 \u0111i\u1EC3m", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2299", ["point", "point", "point"], TRI, one("circle_3pts")),
+    T("circle_3pts", "Qua 3 \u0111i\u1EC3m", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2299", ["point", "point", "point"], TRI, withCenter("circle_3pts")),
     T("circle_radius", "Compa (t\xE2m, b\xE1n k\xEDnh AB)", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2300", ["point", "point", "point"], ["Ch\u1ECDn t\xE2m", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t c\u1EE7a b\xE1n k\xEDnh", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"], one("circle_radius")),
     T("reflect", "\u0110\u1ED1i x\u1EE9ng", "Bi\u1EBFn h\xECnh", "\u21CB", ["obj", "pl"], ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n l\u1EA5y \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn t\xE2m \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m) ho\u1EB7c tr\u1EE5c \u0111\u1ED1i x\u1EE9ng (\u0111\u01B0\u1EDDng th\u1EB3ng)"], one("reflect")),
     T("projection", "H\xECnh chi\u1EBFu", "Bi\u1EBFn h\xECnh", "\u22BE", ["point", "line"], ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"], (p) => [{ type: "projection", args: p }], { anyOrder: true }),
@@ -1353,13 +1410,13 @@
       { type: "segment", args: [C, A] }
     ], { preview: "polygon" }),
     T("circumcenter", "T\xE2m ngo\u1EA1i ti\u1EBFp O", "Tam gi\xE1c", "O", ["point", "point", "point"], TRI, one("circumcenter", void 0, "O")),
-    T("circumcircle", "\u0110\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", "Tam gi\xE1c", "(O)", ["point", "point", "point"], TRI, one("circumcircle")),
+    T("circumcircle", "\u0110\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", "Tam gi\xE1c", "(O)", ["point", "point", "point"], TRI, withCenter("circumcircle", void 0, "O")),
     T("orthocenter", "Tr\u1EF1c t\xE2m H", "Tam gi\xE1c", "H", ["point", "point", "point"], TRI, one("orthocenter", void 0, "H")),
     T("incenter", "T\xE2m n\u1ED9i ti\u1EBFp I", "Tam gi\xE1c", "I", ["point", "point", "point"], TRI, one("incenter", void 0, "I")),
-    T("incircle", "\u0110\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp", "Tam gi\xE1c", "(I)", ["point", "point", "point"], TRI, one("incircle")),
+    T("incircle", "\u0110\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp", "Tam gi\xE1c", "(I)", ["point", "point", "point"], TRI, withCenter("incircle", void 0, "I")),
     T("centroid", "Tr\u1ECDng t\xE2m G", "Tam gi\xE1c", "G", ["point", "point", "point"], TRI, one("centroid", void 0, "G")),
     T("nine_point_center", "T\xE2m Euler N", "Tam gi\xE1c", "N", ["point", "point", "point"], TRI, one("nine_point_center", void 0, "N")),
-    T("nine_point_circle", "\u0110\u01B0\u1EDDng tr\xF2n Euler", "Tam gi\xE1c", "(N)", ["point", "point", "point"], TRI, one("nine_point_circle")),
+    T("nine_point_circle", "\u0110\u01B0\u1EDDng tr\xF2n Euler", "Tam gi\xE1c", "(N)", ["point", "point", "point"], TRI, withCenter("nine_point_circle", void 0, "N")),
     T("altitude_foot", "Ch\xE2n \u0111\u01B0\u1EDDng cao", "Tam gi\xE1c", "h", ["point", "point", "point"], VTX, ([A, B, C]) => [
       { type: "altitude_foot", args: [A, B, C] },
       { type: "segment", args: [A, "$0"], style: { dash: true } }
@@ -1372,6 +1429,35 @@
     T("polygon", "T\xF4 mi\u1EC1n \u0111a gi\xE1c", "\u0110\xE1nh d\u1EA5u", "\u25B1", ["...point"], ["Ch\u1ECDn l\u1EA7n l\u01B0\u1EE3t c\xE1c \u0111\u1EC9nh; b\u1EA5m l\u1EA1i \u0111\u1EC9nh \u0111\u1EA7u (ho\u1EB7c Enter) \u0111\u1EC3 k\u1EBFt th\xFAc"], (p, app) => [{ type: "polygon", args: p, style: { ...app.markStyle("polygon") } }], { preview: "polygon" })
   ];
   var TOOL_BY_ID = Object.fromEntries(TOOLS.map((t) => [t.id, t]));
+  var TOOLBAR = [
+    { id: "move", label: "Ch\u1ECDn / k\xE9o", icon: "move", tools: ["move"] },
+    { id: "point", label: "\u0110i\u1EC3m", icon: "point", tools: ["point", "intersect", "midpoint"] },
+    { id: "circle", label: "\u0110\u01B0\u1EDDng tr\xF2n", icon: "circle", tools: ["circle", "circle_3pts", "circle_radius"] },
+    { id: "line", label: "\u0110o\u1EA1n, tia, \u0111\u01B0\u1EDDng th\u1EB3ng", icon: "line", tools: ["segment", "ray", "line"] },
+    { id: "construct", label: "D\u1EF1ng", icon: "construct", tools: ["perpendicular", "parallel", "perp_bisector", "angle_bisector", "ext_bisector", "projection", "reflect"] },
+    { id: "triangle", label: "Tam gi\xE1c", icon: "triangle", tools: ["triangle", "circumcenter", "circumcircle", "orthocenter", "incenter", "incircle", "centroid", "nine_point_center", "nine_point_circle", "altitude_foot", "incircle_touch", "arc_mid_no", "arc_mid_yes"] },
+    { id: "mark", label: "\u0110\xE1nh d\u1EA5u", icon: "mark", tools: ["angle_mark", "segment_mark", "polygon"] }
+  ];
+
+  // src/ui/icons.js
+  var svg = (body) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  var dot2 = (x, y, r = 2.2) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff"/>`;
+  var ICONS = {
+    move: svg('<path d="M6 3l12 9-5.5 1 3.2 6.2-2.2 1.1-3.2-6.2L6 18z" fill="currentColor" stroke-width="1"/>'),
+    point: svg(dot2(12, 12, 3.2)),
+    circle: svg('<circle cx="12" cy="12" r="8"/>' + dot2(12, 12, 1.6) + dot2(20, 12, 1.6)),
+    line: svg('<path d="M4 19L20 5"/>' + dot2(7, 16.4, 1.8) + dot2(17, 7.6, 1.8)),
+    construct: svg('<path d="M3 18h18M12 18V4"/><path d="M12 15h3v3"/>' + dot2(12, 6, 1.8)),
+    triangle: svg('<path d="M12 4L3.5 19h17z"/>' + dot2(12, 4, 1.8) + dot2(3.5, 19, 1.8) + dot2(20.5, 19, 1.8)),
+    mark: svg('<path d="M4 19h16M4 19L16 6"/><path d="M10 19a6 6 0 0 0-1.8-4.3"/><path d="M8 11.5l2 2M10 9.5l2 2"/>'),
+    tools: svg('<path d="M5 4l8 8-8 8z" fill="currentColor" stroke-width="1"/><circle cx="18" cy="7" r="1.4" fill="currentColor"/><circle cx="18" cy="12" r="1.4" fill="currentColor"/><circle cx="18" cy="17" r="1.4" fill="currentColor"/>'),
+    undo: svg('<path d="M9 7H4V2"/><path d="M4 7a9 9 0 1 1-1 7"/>'),
+    redo: svg('<path d="M15 7h5V2"/><path d="M20 7a9 9 0 1 0 1 7"/>'),
+    panel: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16"/>'),
+    explore: svg('<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/>'),
+    present: svg('<path d="M7 5l12 7-12 7z"/>'),
+    projector: svg('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>')
+  };
 
   // src/ui/dialog.js
   function modal(build) {
@@ -1496,7 +1582,7 @@
     let lastFrame = -1;
     const rows = doc.steps.map((s, i) => {
       const f = frameOf.get(s.id);
-      const st = styleOf(s, k.get(s.id));
+      const st = styleOf(s, k.get(s.id), app.theme);
       const cls = ["step"];
       if (app.selection.has(s.id)) cls.push("sel");
       if (app.highlight.has(s.id)) cls.push("hl");
@@ -1546,15 +1632,16 @@
     const host = document.getElementById("props");
     if (!host) return;
     const ids = [...app.selection].filter((id) => stepById(app.doc, id));
+    host.classList.toggle("show", ids.length > 0 && app.mode !== "present");
     if (!ids.length || app.mode === "present") {
-      host.innerHTML = '<div class="empty small">B\u1EA5m v\xE0o m\u1ED9t \u0111\u1ED1i t\u01B0\u1EE3ng (tr\xEAn h\xECnh ho\u1EB7c trong danh s\xE1ch) \u0111\u1EC3 xem v\xE0 s\u1EEDa thu\u1ED9c t\xEDnh. Gi\u1EEF Shift \u0111\u1EC3 ch\u1ECDn nhi\u1EC1u.</div>';
+      host.innerHTML = "";
       return;
     }
     const k = kinds(app.doc);
     const steps = ids.map((id) => stepById(app.doc, id));
     const s = steps[0];
     const kind = k.get(s.id);
-    const st = styleOf(s, kind);
+    const st = styleOf(s, kind, app.theme);
     const one2 = steps.length === 1;
     const allKinds = new Set(steps.map((x) => k.get(x.id)));
     const swatches = PALETTE.map((c) => `<button class="sw ${st.color === c.hex ? "on" : ""}" data-color="${c.hex}" title="${c.name}" style="background:${c.hex}"></button>`).join("");
@@ -1615,17 +1702,19 @@
     if (!host) return;
     const t = app.toolId;
     const m = app.markDefaults;
-    if (!["angle_mark", "segment_mark", "polygon"].includes(t)) {
+    const show = ["angle_mark", "segment_mark", "polygon"].includes(t) && app.mode === "edit";
+    host.classList.toggle("show", show);
+    if (!show) {
       host.innerHTML = "";
       return;
     }
     const key = t === "polygon" ? "polyColor" : "color";
-    let html = `<div class="tool-group-name">Ki\u1EC3u d\u1EA5u m\u1EDBi</div><div class="swatches">${PALETTE.map((c) => `<button class="sw ${m[key] === c.hex ? "on" : ""}" data-c="${c.hex}" style="background:${c.hex}" title="${c.name}"></button>`).join("")}</div>`;
+    let html = `<div class="tool-group-name">Ki\u1EC3u d\u1EA5u m\u1EDBi</div><div class="swatches"><button class="sw def ${!m[key] ? "on" : ""}" data-c="" title="M\xE0u m\u1EB7c \u0111\u1ECBnh c\u1EE7a b\u1ED9 ki\u1EC3u"></button>${PALETTE.map((c) => `<button class="sw ${m[key] === c.hex ? "on" : ""}" data-c="${c.hex}" style="background:${c.hex}" title="${c.name}"></button>`).join("")}</div>`;
     if (t === "angle_mark") html += `<div class="row">S\u1ED1 cung ${[1, 2, 3].map((n) => `<button class="mini ${m.arcs === n ? "on" : ""}" data-n="${n}">${n}</button>`).join("")}</div><div class="note">C\xE1c g\xF3c b\u1EB1ng nhau: d\xF9ng c\xF9ng m\xE0u v\xE0 c\xF9ng s\u1ED1 cung.</div>`;
     if (t === "segment_mark") html += `<div class="row">S\u1ED1 v\u1EA1ch ${[1, 2, 3].map((n) => `<button class="mini ${m.ticks === n ? "on" : ""}" data-n="${n}">${n}</button>`).join("")}</div>`;
     host.innerHTML = html;
     host.querySelectorAll("[data-c]").forEach((b) => b.onclick = () => {
-      m[key] = b.dataset.c;
+      m[key] = b.dataset.c || null;
       renderToolOptions(app);
     });
     host.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => {
@@ -1652,7 +1741,9 @@
       this.projector = false;
       this.grid = false;
       this.mouse = { x: 0, y: 0 };
-      this.markDefaults = { color: "#dc2626", arcs: 1, ticks: 1, polyColor: "#1d4ed8" };
+      this.markDefaults = { color: null, arcs: 1, ticks: 1, polyColor: null };
+      this.theme = loadPref("theme", "mono");
+      setTheme(this.theme);
       this.listeners = { change: [] };
     }
     // ================= khởi tạo =================
@@ -1752,7 +1843,7 @@
         const step = { id, type: sp.type, args };
         if (sp.params && Object.keys(sp.params).length) step.params = { ...sp.params };
         if (kind !== "mark") step.name = sp.name && !this.nameUsed(sp.name) ? sp.name : nextName(this.doc, kind, sp.name);
-        if (sp.style) step.style = { ...sp.style };
+        if (sp.style && Object.keys(sp.style).length) step.style = { ...sp.style };
         if (i > 0 && join) step.joinPrev = true;
         this.doc.steps.push(step);
         k.set(id, kind);
@@ -1776,6 +1867,7 @@
       this.renderer.scale = this.projector ? 1.9 : 1;
       this.renderer.grid = this.grid;
       this.renderer.setScene(this.doc, this.values, {
+        theme: this.theme,
         visible: this.visibleSet(),
         selected: this.mode === "present" ? /* @__PURE__ */ new Set() : this.selection,
         highlight: this.highlight
@@ -1794,8 +1886,14 @@
       renderStepList(this);
       renderProps(this);
       renderToolOptions(this);
-      document.getElementById("btn-undo").disabled = !this.undoStack.length;
-      document.getElementById("btn-redo").disabled = !this.redoStack.length;
+      for (const id of ["btn-undo", "menu-undo"]) {
+        const b = document.getElementById(id);
+        if (b) b.disabled = !this.undoStack.length;
+      }
+      for (const id of ["btn-redo", "menu-redo"]) {
+        const b = document.getElementById(id);
+        if (b) b.disabled = !this.redoStack.length;
+      }
       this.updatePresentBar();
     }
     // ================= toạ độ & chọn đối tượng =================
@@ -1915,7 +2013,7 @@
     setTool(id) {
       this.cancelTool();
       this.toolId = id;
-      document.querySelectorAll(".tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === id));
+      this.markActiveTool(id);
       this.stage.classList.toggle("tool-active", id !== "move");
       this.showHint();
       renderToolOptions(this);
@@ -2031,9 +2129,10 @@
     }
     markStyle(kind) {
       const m = this.markDefaults;
-      if (kind === "angle") return { color: m.color, arcs: m.arcs };
-      if (kind === "segment") return { color: m.color, ticks: m.ticks };
-      return { color: m.polyColor, fill: 0.12 };
+      const c = (x) => x ? { color: x } : {};
+      if (kind === "angle") return { ...c(m.color), arcs: m.arcs };
+      if (kind === "segment") return { ...c(m.color), ticks: m.ticks };
+      return { ...c(m.polyColor) };
     }
     startPreview(tool) {
       this.renderer.clearExtra();
@@ -2133,6 +2232,7 @@
       window.addEventListener("pointercancel", up, true);
     }
     onPointerDown(e) {
+      if (!e.target.closest("#board")) return;
       if (e.button !== void 0 && e.button !== 0) return;
       if (document.querySelector(".modal-back")) return;
       this.boardRect = null;
@@ -2249,7 +2349,7 @@
     async renameStep(id) {
       const s = stepById(this.doc, id);
       if (!s || !s.name) return;
-      const v = await promptDialog("\u0110\u1ED5i t\xEAn", s.name, "Ch\u1EEF s\u1ED1 \u1EDF cu\u1ED1i hi\u1EC3n th\u1ECB th\xE0nh ch\u1EC9 s\u1ED1 d\u01B0\u1EDBi (A1 \u2192 A\u2081). C\xF3 th\u1EC3 d\xF9ng d\u1EA5u ph\u1EA9y tr\xEAn: A'.");
+      const v = await promptDialog("\u0110\u1ED5i t\xEAn", s.name, "G\xF5 nh\u01B0 c\xF4ng th\u1EE9c: I_A \u2192 I v\u1EDBi ch\u1EC9 s\u1ED1 A, X_{AB} \u2192 ch\u1EC9 s\u1ED1 AB, B' \u2192 B ph\u1EA9y, A1 \u2192 A\u2081.");
       if (v == null) return;
       this.setName(id, v.trim());
     }
@@ -2348,10 +2448,32 @@
         this.refresh();
       }, 80);
     }
+    setThemeId(id) {
+      this.theme = setTheme(id);
+      savePref("theme", this.theme);
+      this.updateMenuChecks();
+      this.refresh();
+    }
+    /** Hiện/ẩn bảng các bước dựng (mặc định ẩn để dành chỗ cho bảng vẽ). */
+    togglePanel(show = !document.body.classList.contains("panel-open"), remember = true) {
+      document.body.classList.toggle("panel-open", !!show);
+      if (remember) savePref("panel", show ? "1" : "0");
+      this.updateMenuChecks();
+      setTimeout(() => {
+        this.view.resize();
+        this.boardRect = null;
+      }, 0);
+    }
+    updateMenuChecks() {
+      document.querySelectorAll("[data-theme]").forEach((b) => b.classList.toggle("on", b.dataset.theme === this.theme));
+      document.getElementById("btn-grid")?.classList.toggle("on", this.grid);
+      document.getElementById("menu-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
+      document.getElementById("btn-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
+    }
     toggleGrid() {
       this.grid = !this.grid;
       this.renderer.grid = this.grid;
-      document.getElementById("btn-grid").classList.toggle("on", this.grid);
+      this.updateMenuChecks();
       this.view.requestDraw();
     }
     zoomFit() {
@@ -2423,25 +2545,114 @@
     }
     buildToolbar() {
       const host = document.getElementById("tools");
-      const groups = [];
-      for (const t of TOOLS) {
-        let g = groups.find((x) => x.name === t.group);
-        if (!g) groups.push(g = { name: t.group, tools: [] });
-        g.tools.push(t);
-      }
-      host.innerHTML = groups.map((g) => `<div class="tool-group"><div class="tool-group-name">${g.name}</div><div class="tool-grid">${g.tools.map((t) => `<button class="tool" data-tool="${t.id}" title="${t.label}"><span class="ti">${t.icon}</span><span class="tl">${t.label}</span></button>`).join("")}</div></div>`).join("") + '<div id="tool-options"></div>';
-      host.addEventListener("click", (e) => {
-        const b = e.target.closest(".tool");
-        if (b) this.setTool(b.dataset.tool);
+      const groups = this.toolbarGroups || TOOLBAR;
+      this.groupCurrent = this.groupCurrent || {};
+      for (const g of groups) if (!this.groupCurrent[g.id]) this.groupCurrent[g.id] = g.tools[0];
+      host.innerHTML = groups.map((g) => {
+        const many = g.tools.length > 1 || g.menu;
+        const items = g.menu ? "" : g.tools.map((id) => {
+          const t = TOOL_BY_ID[id];
+          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t.label)}"><span class="ti">${t.icon}</span><span class="tl">${escapeHTML(t.label)}</span></button>`;
+        }).join("");
+        return `<div class="tb-group" data-group="${g.id}">
+          <button class="tb-btn" data-group="${g.id}" title="${escapeHTML(g.label)}">${ICONS[g.icon] || ""}${many ? '<span class="tb-more"></span>' : ""}</button>
+          ${many ? `<div class="flyout"><div class="flyout-title">${escapeHTML(g.label)}</div>${items}</div>` : ""}
+        </div>`;
+      }).join("");
+      const closeAll = () => host.querySelectorAll(".tb-group.open").forEach((x) => x.classList.remove("open"));
+      host.onclick = (e) => {
+        const tb = e.target.closest(".tb-btn");
+        const tl = e.target.closest(".tool");
+        if (tl) {
+          const g2 = tl.closest(".tb-group").dataset.group;
+          this.groupCurrent[g2] = tl.dataset.tool;
+          closeAll();
+          this.setTool(tl.dataset.tool);
+          return;
+        }
+        if (!tb) return;
+        const gEl = tb.closest(".tb-group");
+        const g = groups.find((x) => x.id === tb.dataset.group);
+        const wasOpen = gEl.classList.contains("open");
+        closeAll();
+        if (g.menu) {
+          if (!wasOpen) {
+            gEl.classList.add("open");
+            g.menu(gEl.querySelector(".flyout"), this, closeAll);
+          }
+          return;
+        }
+        this.setTool(this.groupCurrent[g.id]);
+        if (g.tools.length > 1 && !wasOpen) gEl.classList.add("open");
+      };
+      document.addEventListener("pointerdown", (e) => {
+        if (e.target.closest("#tools") || !host.querySelector(".tb-group.open")) return;
+        closeAll();
+        if (e.target.closest("#board")) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }, true);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeAll();
       });
+    }
+    /** Đánh dấu công cụ đang dùng trên thanh công cụ. */
+    markActiveTool(id) {
+      const groups = this.toolbarGroups || TOOLBAR;
+      document.querySelectorAll("#tools .tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === id));
+      for (const g of groups) {
+        const on = g.tools.includes(id) || !!(g.isActive && g.isActive(id));
+        if (g.tools.includes(id)) this.groupCurrent[g.id] = id;
+        document.querySelector(`#tools .tb-group[data-group="${g.id}"]`)?.classList.toggle("active", on);
+      }
     }
     bindButtons() {
       const on = (id, fn) => {
         const el = document.getElementById(id);
         if (el) el.addEventListener("click", fn);
       };
+      for (const [id, ic] of [["btn-undo", "undo"], ["btn-redo", "redo"], ["btn-explore", "explore"], ["btn-present", "present"], ["btn-projector", "projector"], ["btn-panel", "panel"]]) {
+        const b = document.getElementById(id);
+        if (b) b.innerHTML = ICONS[ic];
+      }
+      const menus = [...document.querySelectorAll("#topbar .menu")];
+      const closeMenus = () => menus.forEach((m) => m.classList.remove("open"));
+      for (const m of menus) {
+        m.querySelector(".menu-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          const open = m.classList.contains("open");
+          closeMenus();
+          if (!open) m.classList.add("open");
+        });
+        m.querySelector(".menu-pop").addEventListener("click", (e) => {
+          if (e.target.closest("button")) closeMenus();
+        });
+        m.addEventListener("mouseenter", () => {
+          if (menus.some((x) => x.classList.contains("open")) && !m.classList.contains("open")) {
+            closeMenus();
+            m.classList.add("open");
+          }
+        });
+      }
+      document.addEventListener("pointerdown", (e) => {
+        if (e.target.closest("#topbar .menu") || !menus.some((m) => m.classList.contains("open"))) return;
+        closeMenus();
+        if (e.target.closest("#board")) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }, true);
       on("btn-undo", () => this.undo());
       on("btn-redo", () => this.redo());
+      on("menu-undo", () => this.undo());
+      on("menu-redo", () => this.redo());
+      document.querySelectorAll("[data-theme]").forEach((b) => b.addEventListener("click", () => this.setThemeId(b.dataset.theme)));
+      on("btn-panel", () => this.togglePanel());
+      on("menu-panel", () => this.togglePanel());
+      on("btn-close-panel", () => this.togglePanel(false));
+      this.togglePanel(loadPref("panel", "0") === "1", false);
+      this.updateMenuChecks();
       on("btn-delete", () => this.deleteSteps([...this.selection]));
       on("btn-grid", () => this.toggleGrid());
       on("btn-fit", () => this.zoomFit());
@@ -2463,6 +2674,19 @@
       });
     }
   };
+  function loadPref(key, def) {
+    try {
+      return localStorage.getItem("hinh-hoc-dong:" + key) ?? def;
+    } catch {
+      return def;
+    }
+  }
+  function savePref(key, v) {
+    try {
+      localStorage.setItem("hinh-hoc-dong:" + key, v);
+    } catch {
+    }
+  }
   var round6 = (v) => Math.round(v * 1e6) / 1e6;
   var round9 = (v) => Math.round(v * 1e9) / 1e9;
   var round1 = (v) => Math.round(v * 10) / 10;
@@ -2917,7 +3141,7 @@
         if (!def || !def.facts) continue;
         let facts = [];
         try {
-          facts = def.facts(s, s.args.map((a) => k.get(a))) || [];
+          facts = def.facts(s, s.args.map((a) => k.get(a)), doc) || [];
         } catch {
           facts = [];
         }
@@ -3607,6 +3831,7 @@
         btn.disabled = true;
         btn.textContent = "\u0110ang kh\xE1m ph\xE1\u2026";
       }
+      app.togglePanel(true);
       document.querySelector('[data-tab="tab-explore"]').click();
       setTimeout(() => {
         try {
@@ -3680,17 +3905,13 @@
   }
 
   // src/export/tikz.js
-  var NAMED_COLORS = {
-    "#111827": "black",
-    "#1d4ed8": "xanhduong",
-    "#dc2626": "do",
-    "#15803d": "xanhla",
-    "#ea580c": "cam",
-    "#7e22ce": "tim",
-    "#0e7490": "xanhngoc",
-    "#6b7280": "xam"
-  };
-  var DEFAULT_COLOR = { circumcircle: "#1d4ed8", incircle: "#15803d", nine_point_circle: "#7e22ce", polygon: "#1d4ed8", angle_mark: "#dc2626", segment_mark: "#dc2626" };
+  var NAMED_COLORS = Object.fromEntries([
+    ["#000000", "black"],
+    ["#111827", "black"],
+    ["#1f2937", "black"],
+    ...PALETTE.slice(1).map((c) => [c.hex, c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/[^A-Za-z]/g, "").toLowerCase()])
+  ]);
+  var PT_PER_PX = 0.4;
   var f3 = (v) => {
     const s = (Math.round(v * 1e3) / 1e3).toFixed(3).replace(/\.?0+$/, "");
     return s === "-0" ? "0" : s;
@@ -3727,6 +3948,7 @@
   }
   function toTikZ(doc, opts = {}) {
     const width = opts.width || 12;
+    const theme = opts.theme || "mono";
     const vals = opts.values || evaluate(doc);
     const k = kinds(doc);
     const visible = doc.steps.filter((s) => !s.hidden && vals.get(s.id));
@@ -3745,8 +3967,9 @@
     const unit2 = width / (box.x2 - box.x1);
     const cm = (c) => c / unit2;
     const colorDefs = /* @__PURE__ */ new Map();
-    const col = (s) => {
-      const hex = (s.style && s.style.color || DEFAULT_COLOR[s.type] || "#111827").toLowerCase();
+    const full = (s) => styleOf(s, k.get(s.id), theme);
+    const hexName = (hex) => {
+      hex = hex.toLowerCase();
       if (NAMED_COLORS[hex]) {
         if (NAMED_COLORS[hex] !== "black") colorDefs.set(NAMED_COLORS[hex], hex);
         return NAMED_COLORS[hex];
@@ -3755,15 +3978,19 @@
       colorDefs.set(nm, hex);
       return nm;
     };
+    const col = (s) => hexName(full(s).color || "#000000");
+    const baseWidth = styleOf({ type: "line" }, "line", theme).width;
     const opt = (...xs) => {
       const o = xs.filter((x) => x && x !== "black");
       return o.length ? `[${o.join(", ")}]` : "";
     };
     const lineOpts = (s) => {
-      const st = s.style || {};
-      const w = st.width && Math.abs(st.width - 1.6) > 1e-9 ? `line width=${f3(st.width * 0.45)}pt` : "";
+      const st = full(s);
+      const w = st.width && Math.abs(st.width - baseWidth) > 1e-9 ? `line width=${f3(st.width * PT_PER_PX)}pt` : "";
       return opt(col(s), st.dash ? "dashed" : "", w);
     };
+    const centerOf = /* @__PURE__ */ new Map();
+    for (const s of doc.steps) if (s.type === "center" && !centerOf.has(s.args[0])) centerOf.set(s.args[0], s.id);
     const used = /* @__PURE__ */ new Set();
     const cname = /* @__PURE__ */ new Map();
     for (const s of visible) if (k.get(s.id) === "point") cname.set(s.id, coordName(s.name, used));
@@ -3776,10 +4003,12 @@
     for (const [id, n] of cname) out.coords.push(`\\coordinate (${n}) at ${xy(vals.get(id))};${stepById(doc, id)?.hidden ? " % \u0111i\u1EC3m \u1EA9n" : ""}`);
     for (const s of visible) {
       const v = vals.get(s.id);
-      const st = s.style || {};
+      const st = full(s);
       const kind = k.get(s.id);
       if (kind === "circle") {
-        const center = s.type === "circle" || s.type === "circle_radius" ? ref(s.args[0]) : xy(v.c);
+        const cId = s.type === "circle" || s.type === "circle_radius" ? s.args[0] : centerOf.get(s.id);
+        const cAt = cId && cname.has(cId) ? cId : [...cname.keys()].find((id) => dist(vals.get(id), v.c) < 1e-9 * (1 + v.r));
+        const center = cAt ? ref(cAt) : xy(v.c);
         const fill = st.fill || 0;
         if (fill > 0) out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(fill)}] ${center} circle (${f3(v.r)});`);
         out.circles.push(`\\draw${lineOpts(s)} ${center} circle (${f3(v.r)}); % ${s.name || ""}`);
@@ -3802,25 +4031,25 @@
         }
       } else if (s.type === "polygon") {
         const path = s.args.map(ref).join(" -- ") + " -- cycle";
-        out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.12)}] ${path};`);
+        out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.1)}] ${path};`);
         if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path};`);
       } else if (s.type === "angle_mark") {
         out.marks.push(...angleMark(v, s, col(s), cm, ref));
       } else if (s.type === "segment_mark") {
         out.marks.push(...segMark(v, s, col(s), cm));
       } else if (kind === "point") {
-        const r = ((st.size || 3) * 0.5).toFixed(1);
-        const pc = st.color && st.color.toLowerCase() !== "#111827" ? col(s) : "black";
-        out.points.push(`\\fill${opt(pc)} ${ref(s.id)} circle (${r}pt);`);
+        const r = f3((st.size || 3) * 0.5);
+        if (st.hollow) out.points.push(`\\filldraw[fill=white${col(s) === "black" ? "" : ", draw=" + col(s)}] ${ref(s.id)} circle (${r}pt);`);
+        else out.points.push(`\\fill${opt(hexName(st.fillColor || st.color))} ${ref(s.id)} circle (${r}pt);`);
         const dir = st.labelOffset || (autoDirs.get(s.id) ? [autoDirs.get(s.id).x, autoDirs.get(s.id).y] : [1, 1]);
-        if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}] at ${ref(s.id)} {${texLabel(s.name)}};`);
+        if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}, inner sep=1.5pt] at ${ref(s.id)} {${texLabel(s.name)}};`);
       }
     }
     const L = [];
     L.push(`% ${doc.title ? doc.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
     L.push("% C\u1EA7n trong ph\u1EA7n m\u1EDF \u0111\u1EA7u: \\usepackage{tikz}");
     L.push("% \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc h\xECnh: s\u1EEDa x=\u2026, y=\u2026 (\u0111\u01A1n v\u1ECB c\u1EE7a m\u1ED9t \xF4 to\u1EA1 \u0111\u1ED9).");
-    L.push(`\\begin{tikzpicture}[x=${f3(unit2)}cm, y=${f3(unit2)}cm, line width=0.6pt, line cap=round, line join=round]`);
+    L.push(`\\begin{tikzpicture}[x=${f3(unit2)}cm, y=${f3(unit2)}cm, line width=${f3(baseWidth * PT_PER_PX)}pt, line cap=round, line join=round]`);
     if (colorDefs.size) {
       L.push("  % M\xE0u");
       for (const [n, hex] of colorDefs) L.push(`  \\definecolor{${n}}{HTML}{${hex.slice(1).toUpperCase()}}`);
@@ -3893,19 +4122,20 @@
       document.querySelectorAll(".tabpane").forEach((p) => p.classList.toggle("active", p.id === t.dataset.tab));
     }));
     document.getElementById("exit-projector").onclick = () => app.setProjector(false);
-    const sel = document.getElementById("sel-example");
-    if (sel) {
-      sel.innerHTML = '<option value="">V\xED d\u1EE5\u2026</option>' + Object.entries(EXAMPLES).map(([k, e]) => `<option value="${k}">${e.title}</option>`).join("");
-      sel.onchange = () => {
-        const ex = EXAMPLES[sel.value];
-        sel.value = "";
-        if (!ex) return;
-        const doc = ex.build();
-        doc.title = ex.title;
-        app.loadDoc(doc, { keepHistory: true });
-        app.zoomFit();
-      };
-    }
+    const exList = document.getElementById("example-list");
+    exList.innerHTML = Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${e.title}</button>`).join("");
+    app.loadExample = (key) => {
+      const ex = EXAMPLES[key];
+      if (!ex) return;
+      const doc = ex.build();
+      doc.title = ex.title;
+      app.loadDoc(doc, { keepHistory: true });
+      app.zoomFit();
+    };
+    exList.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-example]");
+      if (b) app.loadExample(b.dataset.example);
+    });
     app.drawRelationOverlay = () => drawRelationOverlay(app);
     setupExplore(app);
     document.getElementById("btn-tikz").onclick = () => {
@@ -3913,8 +4143,8 @@
       const doc = vis ? { ...app.doc, steps: app.doc.steps.map((s) => vis.has(s.id) ? s : { ...s, hidden: true }) } : app.doc;
       textDialog(
         "M\xE3 TikZ",
-        toTikZ(doc, { values: app.values }),
-        '<div class="modal-body">D\xE1n v\xE0o t\xE0i li\u1EC7u LaTeX (ch\u1EC9 c\u1EA7n <code>\\usepackage{tikz}</code>). \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc b\u1EB1ng c\xE1ch s\u1EEDa <code>x=\u2026, y=\u2026</code>.</div>'
+        toTikZ(doc, { values: app.values, theme: app.theme }),
+        `<div class="modal-body">Theo b\u1ED9 ki\u1EC3u \u0111ang ch\u1ECDn (<b>${app.theme === "mono" ? "\u0110\u01A1n s\u1EAFc" : "S\xE1ch gi\xE1o khoa"}</b>). D\xE1n v\xE0o t\xE0i li\u1EC7u LaTeX (ch\u1EC9 c\u1EA7n <code>\\usepackage{tikz}</code>). \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc b\u1EB1ng c\xE1ch s\u1EEDa <code>x=\u2026, y=\u2026</code>.</div>`
       );
     };
     document.getElementById("btn-share").onclick = () => shareLink(app);

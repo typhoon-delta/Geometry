@@ -5,10 +5,12 @@
 import { kinds } from '../core/model.js';
 import { parseLabel, labelHTML } from '../core/names.js';
 import { autoLabelDirs } from '../core/labels.js';
-import { styleOf } from './styles.js';
+import { styleOf } from '../core/styles.js';
 
 export { labelHTML };
-export const LABEL_DIST = 13; // px từ tâm điểm tới tâm nhãn
+// Khoảng cách tâm điểm → tâm nhãn và cỡ chữ nhãn theo bộ kiểu (đơn sắc: nhãn nhỏ, đặt sát điểm)
+const LABEL = { mono: { dist: 11, font: 15 }, textbook: { dist: 13, font: 16 } };
+export const LABEL_DIST = 11;
 const HALO = 'rgba(96,165,250,0.45)';
 const RELATION = '#f59e0b';
 const LABEL_FONT = "'Times New Roman', 'Nimbus Roman', 'Liberation Serif', 'TeX Gyre Termes', Times, serif";
@@ -39,13 +41,15 @@ export class Renderer {
     const visible = opts.visible || null;
     const selected = opts.selected || new Set();
     const highlight = opts.highlight || new Set();
+    const theme = (this.theme = opts.theme || 'mono');
+    const L = LABEL[theme] || LABEL.mono;
     const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
     const layer = (s, kind) => order[s.type === 'polygon' ? 'polygon' : kind] ?? 3;
     this.items = doc.steps
       .filter((s) => !s.hidden && (!visible || visible.has(s.id)))
       .map((s) => {
         const kind = k.get(s.id);
-        return { s, kind, st: styleOf(s, kind), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
+        return { s, kind, st: styleOf(s, kind, theme), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
       })
       .sort((a, b) => a.layer - b.layer);
     // hướng nhãn tự động: việc tương đối nặng → chỉ làm ở đây (không làm khi đang kéo)
@@ -54,7 +58,7 @@ export class Renderer {
     for (const it of this.items) {
       if (it.kind !== 'point') continue;
       const d = dirs.get(it.s.id) || { x: 0.7, y: 0.7 };
-      this.labelOffsets.set(it.s.id, it.st.labelOffset || [Math.round(d.x * LABEL_DIST), Math.round(d.y * LABEL_DIST)]);
+      this.labelOffsets.set(it.s.id, it.st.labelOffset || [Math.round(d.x * L.dist), Math.round(d.y * L.dist)]);
     }
     this.view.requestDraw();
   }
@@ -98,7 +102,7 @@ export class Renderer {
       this.drawnIds.add(it.s.id);
       const { s, kind, st, sel, hl } = it;
       const color = hl ? RELATION : st.color;
-      const width = (st.width || 1.6) * sc * (hl ? 1.8 : 1);
+      const width = (st.width || 1) * sc * (hl ? 1.8 : 1);
       if (kind === 'line') {
         const sub = s.type === 'segment' ? 'segment' : s.type === 'ray' ? 'ray' : v.sub;
         if (sel) strokeLine(ctx, view, v, sub, HALO, width + 7 * sc, false);
@@ -128,12 +132,12 @@ export class Renderer {
         const p = view.toScreen(v);
         const size = (st.size || 3) * sc * (hl ? 1.4 : 1);
         if (sel) { ctx.beginPath(); ctx.arc(p.x, p.y, size + 6 * sc, 0, 2 * Math.PI); ctx.fillStyle = HALO; ctx.fill(); }
-        drawPoint(ctx, p, size, hl ? RELATION : st.color, hl ? RELATION : st.fillColor || st.color, sc, st.hollow);
+        drawPoint(ctx, p, size, hl ? RELATION : st.color, hl ? RELATION : st.fillColor || st.color, sc, st.hollow && !hl);
         if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: p, color: hl ? '#b45309' : st.labelColor || '#111827', off: this.labelOffsets.get(s.id) || [9, 9], point: true });
       }
     }
     for (const e of this.extra) drawExtra(ctx, view, e, sc);
-    const fontPx = 16 * sc;
+    const fontPx = (LABEL[this.theme] || LABEL.mono).font * sc;
     for (const L of labels) {
       const box = drawLabel(ctx, L.name, L.at.x + L.off[0] * sc, L.at.y - L.off[1] * sc, fontPx, L.color);
       if (L.point) this.labelBoxes.set(L.id, box);

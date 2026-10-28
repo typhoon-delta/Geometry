@@ -142,6 +142,18 @@ export const STEP_TYPES = {
     },
   },
 
+  center: {
+    // Tâm của một đường tròn (mọi công cụ vẽ đường tròn đều dựng kèm tâm).
+    kind: 'point', args: ['circle'], label: 'Tâm đường tròn',
+    compute: ([c]) => G.pt(c.c.x, c.c.y),
+    facts: (s, kinds, doc) => {
+      const c = doc && doc.steps.find((x) => x.id === s.args[0]);
+      if (!c || !['circle_3pts', 'circumcircle'].includes(c.type)) return [];
+      const [A, B, C] = c.args;
+      return [{ on: [s.id, { PB: [A, B] }] }, { on: [s.id, { PB: [B, C] }] }, { on: [s.id, { PB: [C, A] }] }];
+    },
+  },
+
   // ---------- ĐƯỜNG THẲNG ----------
   line: {
     kind: 'line', args: ['point', 'point'], label: 'Đường thẳng',

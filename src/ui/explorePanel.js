@@ -40,6 +40,7 @@ export function setupExplore(app) {
   const run = () => {
     const btn = pane.querySelector('#btn-run-explore');
     if (btn) { btn.disabled = true; btn.textContent = 'Đang khám phá…'; }
+    app.togglePanel(true);
     document.querySelector('[data-tab="tab-explore"]').click();
     setTimeout(() => {
       try {
