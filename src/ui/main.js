@@ -4,6 +4,8 @@ import { bindStepList } from './panels.js';
 import { EXAMPLES } from '../core/examples.js';
 import { Builder } from '../core/builder.js';
 import * as core from '../core/index.js';
+import { initShare, shareLink, saveFile, openFile } from './share.js';
+import * as codec from '../io/codec.js';
 
 function start() {
   const app = new App();
@@ -33,9 +35,22 @@ function start() {
     };
   }
 
+  // Lưu / mở / chia sẻ
+  document.getElementById('btn-share').onclick = () => shareLink(app);
+  document.getElementById('btn-save').onclick = () => saveFile(app);
+  document.getElementById('btn-open').onclick = () => openFile(app);
+  const title = document.getElementById('doc-title');
+  app.on('change', () => { if (document.activeElement !== title) title.value = app.doc.title || ''; });
+  title.onchange = () => app.commit((doc) => { doc.title = title.value.trim(); });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(app); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(app); }
+  });
+  initShare(app).then(() => { title.value = app.doc.title || ''; });
+
   // Cho phép dùng từ console / test tự động
   window.__app = app;
-  window.GeoCore = { ...core, Builder, EXAMPLES };
+  window.GeoCore = { ...core, Builder, EXAMPLES, codec };
   return app;
 }
 

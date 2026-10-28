@@ -1107,6 +1107,31 @@
       box.querySelector(".primary").onclick = () => close(inp.value);
     });
   }
+  function textDialog(title, text, extraHTML = "") {
+    return modal((box, close) => {
+      box.classList.add("wide");
+      box.innerHTML = `<h3>${esc(title)}</h3>${extraHTML}<textarea class="modal-text" readonly spellcheck="false"></textarea>
+      <div class="modal-actions"><span class="copied"></span><button class="copy">Sao ch\xE9p</button><button class="primary">\u0110\xF3ng</button></div>`;
+      const ta = box.querySelector("textarea");
+      ta.value = text;
+      box.querySelector(".copy").onclick = async () => {
+        ta.select();
+        let ok = false;
+        try {
+          await navigator.clipboard.writeText(text);
+          ok = true;
+        } catch {
+          try {
+            ok = document.execCommand("copy");
+          } catch {
+            ok = false;
+          }
+        }
+        box.querySelector(".copied").textContent = ok ? "\u0110\xE3 sao ch\xE9p \u2713" : "H\xE3y b\u1EA5m Ctrl+C \u0111\u1EC3 sao ch\xE9p";
+      };
+      box.querySelector(".primary").onclick = () => close(true);
+    });
+  }
   var toastTimer = null;
   function toast(msg, ms = 2600) {
     let t = document.getElementById("toast");
@@ -2213,6 +2238,181 @@
     validate: () => validate
   });
 
+  // src/io/codec.js
+  var codec_exports = {};
+  __export(codec_exports, {
+    compactDoc: () => compactDoc,
+    decodeDoc: () => decodeDoc,
+    encodeDoc: () => encodeDoc,
+    parseDocJSON: () => parseDocJSON
+  });
+  function toB64url(bytes) {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function fromB64url(s) {
+    const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function pipe(bytes, stream) {
+    const res = new Response(new Blob([bytes]).stream().pipeThrough(stream));
+    return new Uint8Array(await res.arrayBuffer());
+  }
+  function compactDoc(doc) {
+    const out = { format: doc.format, version: doc.version };
+    if (doc.title) out.title = doc.title;
+    if (doc.view) out.view = doc.view;
+    out.steps = doc.steps.map((s) => {
+      const t = { id: s.id, type: s.type, args: s.args };
+      for (const k of ["params", "name", "style", "hidden", "joinPrev"]) {
+        const v = s[k];
+        if (v === void 0 || v === false || typeof v === "object" && v && !Array.isArray(v) && !Object.keys(v).length) continue;
+        t[k] = v;
+      }
+      return t;
+    });
+    return out;
+  }
+  async function encodeDoc(doc) {
+    const json = JSON.stringify(compactDoc(doc));
+    const bytes = new TextEncoder().encode(json);
+    if (typeof CompressionStream !== "undefined") {
+      try {
+        return "z" + toB64url(await pipe(bytes, new CompressionStream("deflate-raw")));
+      } catch {
+      }
+    }
+    return "j" + toB64url(bytes);
+  }
+  async function decodeDoc(code) {
+    let bytes;
+    try {
+      if (code[0] === "z") bytes = await pipe(fromB64url(code.slice(1)), new DecompressionStream("deflate-raw"));
+      else if (code[0] === "j") bytes = fromB64url(code.slice(1));
+      else throw new Error();
+    } catch {
+      throw new Error("Link h\xECnh b\u1ECB h\u1ECFng ho\u1EB7c b\u1ECB c\u1EAFt c\u1EE5t.");
+    }
+    return parseDocJSON(new TextDecoder().decode(bytes));
+  }
+  function parseDocJSON(text) {
+    let doc;
+    try {
+      doc = JSON.parse(text);
+    } catch {
+      throw new Error("T\u1EC7p kh\xF4ng ph\u1EA3i JSON h\u1EE3p l\u1EC7.");
+    }
+    const errs = validate(doc);
+    if (errs.length) throw new Error("H\xECnh kh\xF4ng h\u1EE3p l\u1EC7:\n" + errs.slice(0, 6).join("\n"));
+    return doc;
+  }
+
+  // src/ui/share.js
+  var DRAFT_KEY = "hinh-hoc-dong:nhap";
+  function docWithView(app) {
+    const bb = app.board.getBoundingBox().map((v) => Math.round(v * 1e3) / 1e3);
+    return { ...app.doc, view: { bbox: bb } };
+  }
+  function saveDraft(app) {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(docWithView(app)));
+    } catch {
+    }
+  }
+  function loadDraft() {
+    try {
+      const t = localStorage.getItem(DRAFT_KEY);
+      return t ? parseDocJSON(t) : null;
+    } catch {
+      return null;
+    }
+  }
+  async function shareLink(app) {
+    const code = await encodeDoc(docWithView(app));
+    const base = location.href.split("#")[0];
+    const url = `${base}#h=${code}`;
+    try {
+      history.replaceState(null, "", "#h=" + code);
+    } catch {
+    }
+    const warn = location.protocol === "file:" ? '<div class="modal-body">\u26A0 Trang \u0111ang m\u1EDF t\u1EEB t\u1EC7p tr\xEAn m\xE1y (file://). Link ch\u1EC9 d\xF9ng \u0111\u01B0\u1EE3c tr\xEAn m\xE1y n\xE0y; h\xE3y d\xF9ng b\u1EA3n tr\xEAn GitHub Pages \u0111\u1EC3 g\u1EEDi cho ng\u01B0\u1EDDi kh\xE1c.</div>' : "";
+    await textDialog("Link chia s\u1EBB h\xECnh", url, `<div class="modal-body">G\u1EEDi link n\xE0y: ng\u01B0\u1EDDi nh\u1EADn m\u1EDF ra s\u1EBD th\u1EA5y \u0111\xFAng h\xECnh (to\xE0n b\u1ED9 h\xECnh n\u1EB1m trong link, kh\xF4ng c\u1EA7n m\xE1y ch\u1EE7). \u0110\u1ED9 d\xE0i: ${url.length} k\xFD t\u1EF1.</div>${warn}`);
+  }
+  function saveFile(app) {
+    const doc = compactDoc(docWithView(app));
+    const text = JSON.stringify(doc, null, 1);
+    const blob = new Blob([text], { type: "application/json" });
+    const a = document.createElement("a");
+    a.download = `${fileSafeName(app.doc.title || "hinh")}.json`;
+    a.href = URL.createObjectURL(blob);
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 1e3);
+  }
+  function openFile(app) {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".json,application/json";
+    inp.onchange = async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      try {
+        const doc = parseDocJSON(await f.text());
+        if (!doc.title) doc.title = f.name.replace(/\.json$/i, "");
+        app.loadDoc(doc, { keepHistory: true });
+        if (!doc.view) app.zoomFit();
+        toast(`\u0110\xE3 m\u1EDF "${f.name}"`);
+      } catch (e) {
+        await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c t\u1EC7p", escapeBr(e.message), "OK");
+      }
+    };
+    inp.click();
+  }
+  function fileSafeName(title) {
+    const t = title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    return t || "hinh";
+  }
+  var escapeBr = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
+  async function initShare(app) {
+    const m = /[#&]h=([A-Za-z0-9_-]+)/.exec(location.hash);
+    let loaded = false;
+    if (m) {
+      try {
+        const doc = await decodeDoc(m[1]);
+        app.loadDoc(doc);
+        if (!doc.view) app.zoomFit();
+        loaded = true;
+        toast("\u0110\xE3 m\u1EDF h\xECnh t\u1EEB link");
+      } catch (e) {
+        toast(e.message, 5e3);
+      }
+    }
+    if (!loaded) {
+      const d = loadDraft();
+      if (d && d.steps.length) {
+        app.loadDoc(d);
+        toast("\u0110\xE3 kh\xF4i ph\u1EE5c b\u1EA3n nh\xE1p l\u1EA7n tr\u01B0\u1EDBc");
+      }
+    }
+    let timer = null;
+    app.on("change", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => saveDraft(app), 300);
+    });
+    app.board.on("boundingbox", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => saveDraft(app), 600);
+    });
+    window.addEventListener("beforeunload", () => saveDraft(app));
+  }
+
   // src/ui/main.js
   function start() {
     const app = new App();
@@ -2236,8 +2436,31 @@
         app.zoomFit();
       };
     }
+    document.getElementById("btn-share").onclick = () => shareLink(app);
+    document.getElementById("btn-save").onclick = () => saveFile(app);
+    document.getElementById("btn-open").onclick = () => openFile(app);
+    const title = document.getElementById("doc-title");
+    app.on("change", () => {
+      if (document.activeElement !== title) title.value = app.doc.title || "";
+    });
+    title.onchange = () => app.commit((doc) => {
+      doc.title = title.value.trim();
+    });
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveFile(app);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        openFile(app);
+      }
+    });
+    initShare(app).then(() => {
+      title.value = app.doc.title || "";
+    });
     window.__app = app;
-    window.GeoCore = { ...core_exports, Builder, EXAMPLES };
+    window.GeoCore = { ...core_exports, Builder, EXAMPLES, codec: codec_exports };
     return app;
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

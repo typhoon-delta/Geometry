@@ -32,6 +32,7 @@ select { border: 1px solid #d1d5db; border-radius: 6px; padding: 3px 4px; backgr
 #topbar .group { display: flex; gap: 4px; align-items: center; padding-right: 8px; border-right: 1px solid var(--line); }
 #topbar .group:empty { display: none; }
 #topbar .group.right { margin-left: auto; border-right: 0; }
+#doc-title { border: 1px solid #d1d5db; border-radius: 6px; padding: 3px 6px; width: 130px; }
 #btn-explore { background: #fef3c7; border-color: #f59e0b; }
 
 /* ---------- bố cục ---------- */

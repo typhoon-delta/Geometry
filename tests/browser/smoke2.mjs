@@ -71,5 +71,40 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   await page.keyboard.press('Control+z');
   await page.keyboard.press('Control+z');
 
+  // ---------- Mốc 3: chia sẻ + lưu ----------
+  console.log('Mốc 3: chia sẻ link + lưu/mở JSON + bản nháp');
+  const ref = await page.evaluate(() => JSON.stringify(__app.doc.steps));
+  await page.click('#btn-share');
+  await page.waitForSelector('.modal textarea');
+  const url = await page.locator('.modal textarea').inputValue();
+  ok(/#h=z[A-Za-z0-9_-]+$/.test(url), `tạo link nén (${url.length} ký tự)`);
+  await shot('m3-chia-se');
+  await page.click('.modal .primary');
+  const p2 = await page.context().newPage();
+  await p2.goto(url);
+  await p2.waitForFunction(() => window.__app && __app.doc.steps.length > 0);
+  ok((await p2.evaluate(() => JSON.stringify(__app.doc.steps))) === ref, 'mở link ở tab mới cho đúng hình');
+  await p2.close();
+
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#btn-save')]);
+  const path = await dl.path();
+  const { readFileSync } = await import('node:fs');
+  const saved = JSON.parse(readFileSync(path, 'utf8'));
+  ok(saved.format === 'hinh-hoc-dong' && saved.steps.length === JSON.parse(ref).length, `lưu tệp JSON "${dl.suggestedFilename()}"`);
+
+  await page.click('#btn-new');
+  await page.click('.modal .primary');
+  ok((await state()).n === 0, 'hình mới rỗng');
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#btn-open')]);
+  await fc.setFiles(path);
+  await page.waitForFunction(() => __app.doc.steps.length > 0);
+  ok((await page.evaluate(() => JSON.stringify(__app.doc.steps))) === ref, 'mở lại tệp JSON đúng hình');
+
+  // bản nháp: tải lại trang (không có #h) vẫn còn hình
+  await page.goto(url.split('#')[0]);
+  await page.waitForFunction(() => window.__app);
+  await page.waitForTimeout(300);
+  ok((await page.evaluate(() => JSON.stringify(__app.doc.steps))) === ref, 'tải lại trang khôi phục bản nháp');
+
   if (globalThis.__smokeMore) await globalThis.__smokeMore({ page, ok, shot, state, tool, clickAt });
 }
