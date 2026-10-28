@@ -117,13 +117,13 @@ class FactPipeline:
         self.seed = seed
         self.known = []  # sự kiện đã tìm được trong vòng này (dạng Knowledge) – dùng làm kiến thức
         self.base_known = []  # sự kiện của cấu hình gốc (id cố định, dùng cho mọi vòng)
+        self.stats = {"ung_vien": 0, "da_gap": 0, "hien_nhien": 0, "khong_xac_nhan": 0, "su_kien": 0}
 
     def new_epoch(self):
         self.known = []
 
     def remember(self, rel_type, ids, base=False):
         (self.base_known if base else self.known).extend(relation_facts(rel_type, ids))
-        self.stats = {"ung_vien": 0, "da_gap": 0, "hien_nhien": 0, "khong_xac_nhan": 0, "su_kien": 0}
 
     def consider(self, U, rel, newest, extra_step=None):
         """rel = (loại, ids). Trả về danh sách sự kiện mới (dict)."""

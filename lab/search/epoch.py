@@ -70,7 +70,8 @@ class Epoch:
         self.stations = stations or {}
         self.log = log
         samples = make_samples(cfg["mau"], cfg["hat_giong_mau"])
-        self.U = Universe(base_with_stations(station_specs), samples, tol=cfg["dung_sai"], fp_samples=make_fp_samples(samples))
+        self.U = Universe(base_with_stations(station_specs), samples, tol=cfg["dung_sai"], fp_samples=make_fp_samples(samples),
+                          base_ids={s["id"] for s in build_base_doc()["steps"]})
         # các trạm được tính là lớp 0 của vòng này
         self.rnd = random.Random(seed)
         self.gen = CandidateGen(self.U, self.rnd, cfg["trong_so_phep_dung"], self.stations, cfg["do_sau"], cfg["so_buoc_toi_da"])
