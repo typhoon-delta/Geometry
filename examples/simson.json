@@ -1,0 +1,112 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Đường thẳng Simson",
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.6,
+    "y": 3.4
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.4,
+    "y": -1.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 3.6,
+    "y": -1.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "line",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "line",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d2"
+  },
+  {
+   "id": "s6",
+   "type": "line",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d3"
+  },
+  {
+   "id": "s7",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s8",
+   "type": "point_on",
+   "args": [
+    "s7"
+   ],
+   "params": {
+    "t": 2.2
+   },
+   "name": "P"
+  },
+  {
+   "id": "s9",
+   "type": "projection",
+   "args": [
+    "s8",
+    "s4"
+   ],
+   "name": "D"
+  },
+  {
+   "id": "s10",
+   "type": "projection",
+   "args": [
+    "s8",
+    "s5"
+   ],
+   "name": "E"
+  },
+  {
+   "id": "s11",
+   "type": "projection",
+   "args": [
+    "s8",
+    "s6"
+   ],
+   "name": "F"
+  }
+ ]
+}
