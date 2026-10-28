@@ -476,7 +476,7 @@ export class App {
         const hits = this.hitTest(sx, sy);
         let cursor = '';
         if (this.toolId === 'move' || this.mode === 'present') {
-          const h = hits[0];
+          const h = this.orderHitsForMove(hits)[0];
           if (h && h.kind === 'point' && isDraggableType(stepById(this.doc, h.id).type)) cursor = 'grab';
           else if (h && this.mode === 'edit') cursor = 'pointer';
           else if (this.mode === 'edit' && this.labelAt(ev)) cursor = 'move';
@@ -558,8 +558,8 @@ export class App {
 
     // --- công cụ chọn/kéo ---
     const hits = this.hitTest(sx, sy);
-    // nhãn được ưu tiên trừ khi bấm sát tâm điểm
-    const lab = this.mode === 'edit' && !(hits[0] && hits[0].kind === 'point' && hits[0].d < 5) ? this.labelAt(e) : null;
+    // nhãn được ưu tiên trừ khi bấm sát tâm một điểm
+    const lab = this.mode === 'edit' && !hits.some((x) => x.kind === 'point' && x.d < 5) ? this.labelAt(e) : null;
     if (lab) {
       e.stopPropagation();
       e.preventDefault();
@@ -568,19 +568,19 @@ export class App {
       this.startDrag(e, { kind: 'label', id: lab, start: JSON.stringify(this.doc), sx, sy, off: [...off] });
       return;
     }
-    const h = hits[0];
+    const h = this.pickForMove(hits, sx, sy);
     const step = h ? stepById(this.doc, h.id) : null;
     if (h && h.kind === 'point' && isDraggableType(step.type)) {
       e.stopPropagation();
       e.preventDefault();
       this.startDrag(e, { kind: 'point', id: h.id, start: JSON.stringify(this.doc) });
-      if (this.mode === 'edit') this.select(h.id, e.shiftKey, false);
+      if (this.mode === 'edit') this.select(h.id, e.shiftKey, false, true);
       return;
     }
     if (h) {
       e.stopPropagation();
       e.preventDefault();
-      if (this.mode === 'edit') this.select(h.id, e.shiftKey);
+      if (this.mode === 'edit') this.select(h.id, e.shiftKey, true, true);
       return;
     }
     // chỗ trống: bỏ chọn, dời hình
@@ -590,6 +590,73 @@ export class App {
       this.refresh();
     }
     this.startPan(e);
+  }
+
+  /**
+   * Thứ tự ưu tiên khi bấm bằng công cụ Chọn/kéo. Khi nhiều điểm gần như trùng nhau dưới con trỏ (cách nhau
+   * vài pixel, vd A và chân đường vuông góc E), ưu tiên: đối tượng ĐANG CHỌN → điểm KÉO ĐƯỢC → điểm dựng;
+   * điểm luôn trước đường. Điểm ở xa hơn hẳn (≥ 5 px so với điểm gần nhất) không được ưu tiên.
+   */
+  orderHitsForMove(hits) {
+    const pts = hits.filter((h) => h.kind === 'point');
+    const minD = pts.length ? Math.min(...pts.map((h) => h.d)) : 0;
+    const rank = (h) => {
+      const sel = this.mode === 'edit' && this.selection.has(h.id) ? 0 : 1;
+      if (h.kind === 'point') {
+        if (h.d > minD + 5) return 10;
+        const drag = isDraggableType(stepById(this.doc, h.id).type) ? 0 : 1;
+        return sel * 2 + drag; // 0: đang chọn & kéo được … 3: chưa chọn & không kéo được
+      }
+      return 20 + sel + (h.kind === 'mark' ? 5 : 0);
+    };
+    return hits.slice().sort((a, b) => rank(a) - rank(b) || a.d - b.d);
+  }
+
+  /**
+   * Chọn đối tượng cho lần nhấn chuột này. Nhấn lại đúng chỗ cũ thì lấy đối tượng hiện tại của vòng chuyển
+   * (để nhấn rồi kéo luôn kéo đúng đối tượng đang chọn); nếu thả ra mà không kéo – tức là một lần BẤM lại
+   * tại chỗ – thì chuyển sang đối tượng chồng nhau tiếp theo (finishPick). Thanh trạng thái cho biết đang chọn gì.
+   */
+  pickForMove(hits, sx, sy) {
+    let order = this.orderHitsForMove(hits);
+    if (!order.length) { this.cycle = null; return null; }
+    // bấm vào cụm điểm: chỉ chuyển giữa các điểm chồng nhau (đường thẳng/đường tròn bấm chỗ khác là chọn được)
+    const minD = Math.min(...order.filter((h) => h.kind === 'point').map((h) => h.d), Infinity);
+    if (minD < Infinity) order = order.filter((h) => h.kind === 'point' && h.d <= minD + 5);
+    const key = order.map((h) => h.id).sort().join(',');
+    const c = this.cycle;
+    let idx = 0;
+    let again = false;
+    if (c && !c.moved && c.key === key && Math.hypot(c.sx - sx, c.sy - sy) < 4) {
+      // giữ nguyên thứ tự của vòng chuyển (thứ tự ưu tiên thay đổi khi đối tượng được chọn thay đổi)
+      const byId = new Map(order.map((h) => [h.id, h]));
+      order = c.order.map((id) => byId.get(id));
+      idx = c.idx;
+      again = true;
+    }
+    this.cycle = { sx, sy, key, order: order.map((h) => h.id), idx, moved: false, again: again && order.length > 1 };
+    const finish = () => { window.removeEventListener('pointerup', finish, true); this.finishPick(); };
+    window.addEventListener('pointerup', finish, true);
+    const pts = order.filter((h) => h.kind === 'point' && h.d <= order[0].d + 6);
+    if (this.mode === 'edit' && order.length > 1 && (pts.length > 1 || idx > 0)) {
+      const nm = (h) => stepById(this.doc, h.id)?.name || describe(this.doc, h.id);
+      this.showHint(`Có ${order.length} điểm chồng nhau tại đây (${order.slice(0, 5).map(nm).join(', ')}): đang chọn ${nm(order[idx])} — bấm lại tại chỗ để chọn điểm tiếp theo`);
+      this.hintSticky = true;
+    } else if (this.hintSticky) { this.hintSticky = false; this.showHint(); }
+    return order[idx];
+  }
+
+  /** Thả chuột sau khi nhấn lại tại chỗ mà không kéo: chọn đối tượng chồng nhau tiếp theo. */
+  finishPick() {
+    const c = this.cycle;
+    if (!c || !c.again || c.moved || this.mode !== 'edit') return;
+    c.idx = (c.idx + 1) % c.order.length;
+    c.again = false;
+    const id = c.order[c.idx];
+    const nm = (x) => stepById(this.doc, x)?.name || describe(this.doc, x);
+    this.select(id, false, true, true);
+    this.showHint(`Có ${c.order.length} điểm chồng nhau tại đây (${c.order.map(nm).join(', ')}): đang chọn ${nm(id)} — bấm lại tại chỗ để chọn điểm tiếp theo`);
+    this.hintSticky = true;
   }
 
   /**
@@ -629,6 +696,7 @@ export class App {
     this.view.frameHooks.push(apply);
     const move = (ev) => {
       pending = this.eventPos(ev);
+      if (this.cycle && Math.hypot(pending.sx - this.cycle.sx, pending.sy - this.cycle.sy) > 3) this.cycle.moved = true;
       this.view.requestDraw();
     };
     const up = () => {
@@ -649,7 +717,8 @@ export class App {
     window.addEventListener('pointercancel', up, true);
   }
 
-  select(id, additive = false, rerender = true) {
+  select(id, additive = false, rerender = true, keepCycle = false) {
+    if (!keepCycle) this.cycle = null;
     if (additive) {
       if (this.selection.has(id)) this.selection.delete(id);
       else this.selection.add(id);

@@ -81,6 +81,9 @@ lưu trong trình duyệt; *Xuất/Nhập* để mang sang máy khác. Nút ✕ 
 
 * Công cụ **Chọn / kéo**: kéo điểm tự do hoặc điểm trên đối tượng; kéo **nhãn** để dời nhãn; kéo nền để dời cả
   hình; lăn chuột (hoặc chụm hai ngón trên màn hình cảm ứng) để phóng to/thu nhỏ.
+* **Điểm chồng nhau** (vd A gần như trùng một chân đường vuông góc): khi bấm, đối tượng đang chọn được ưu tiên,
+  rồi đến điểm kéo được – nên nhấn vào là kéo được A. **Bấm lại tại chỗ** (không kéo) để chọn lần lượt từng điểm
+  chồng nhau; thanh trạng thái cho biết đang chọn điểm nào.
 * Bấm vào đối tượng (trên hình hoặc trong bảng các bước) để chọn; giữ `Shift` để chọn nhiều. Thẻ thuộc tính
   cho đổi **tên**, **màu**, nét đứt, độ dày, tô nền nhạt, số cung/số vạch của dấu, ẩn đối tượng…
 * **Đổi tên**: nháy đúp vào điểm. Gõ như công thức: `I_A` → I với chỉ số A, `X_{AB}`, `B'` → B phẩy,
@@ -177,7 +180,7 @@ npm install
 ```
 
 ```bash
-npm run build          # đóng gói src/ → dist/app.js (nhớ chạy lại và commit dist/ sau khi sửa src/)
+npm run build          # đóng gói src/ → dist/app.js và gắn mã phiên bản vào index.html (commit cả hai sau khi sửa src/ hoặc css/)
 ```
 
 ```bash
@@ -201,7 +204,9 @@ npm run test:perf      # đo hiệu năng kéo điểm trên hình dày (CPU th�
 5. Đợi 1–2 phút, trang sẽ có tại `https://<tên-tài-khoản>.github.io/<tên-repo>/`
    (với repo này: `https://typhoon-delta.github.io/Geometry/`).
 
-Không cần bước build nào trên GitHub vì `dist/app.js` đã được commit sẵn. Tệp `.nojekyll` báo cho GitHub
+Không cần bước build nào trên GitHub vì `dist/app.js` đã được commit sẵn. `index.html` gọi CSS/JS kèm mã phiên bản
+(`style.css?v=…`) nên sau mỗi lần cập nhật trình duyệt luôn tải bản mới. Nếu vẫn thấy giao diện lạ ngay sau khi
+cập nhật (trình duyệt còn giữ `index.html` cũ), bấm `Ctrl+F5`. Tệp `.nojekyll` báo cho GitHub
 phục vụ nguyên trạng các tệp tĩnh.
 
 ## 5. Thư viện bên ngoài
