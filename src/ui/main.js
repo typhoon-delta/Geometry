@@ -6,6 +6,8 @@ import { Builder } from '../core/builder.js';
 import * as core from '../core/index.js';
 import { initShare, shareLink, saveFile, openFile } from './share.js';
 import * as codec from '../io/codec.js';
+import { setupExplore, drawRelationOverlay } from './explorePanel.js';
+import { explore } from '../explore/explorer.js';
 
 function start() {
   const app = new App();
@@ -35,6 +37,10 @@ function start() {
     };
   }
 
+  // Khám phá
+  app.drawRelationOverlay = () => drawRelationOverlay(app);
+  setupExplore(app);
+
   // Lưu / mở / chia sẻ
   document.getElementById('btn-share').onclick = () => shareLink(app);
   document.getElementById('btn-save').onclick = () => saveFile(app);
@@ -50,7 +56,7 @@ function start() {
 
   // Cho phép dùng từ console / test tự động
   window.__app = app;
-  window.GeoCore = { ...core, Builder, EXAMPLES, codec };
+  window.GeoCore = { ...core, Builder, EXAMPLES, codec, explore };
   return app;
 }
 

@@ -175,6 +175,11 @@ export function describe(doc, id) {
   const names = s.args.map(n).join('');
   switch (s.type) {
     case 'line': case 'segment': case 'ray': return names;
+    case 'perpendicular': return `${s.name} (⊥ ${describe(doc, s.args[1])} qua ${n(s.args[0])})`;
+    case 'parallel': return `${s.name} (∥ ${describe(doc, s.args[1])} qua ${n(s.args[0])})`;
+    case 'perp_bisector': return `${s.name} (trung trực ${names})`;
+    case 'angle_bisector': return `${s.name} (phân giác ${s.params?.external ? 'ngoài ' : ''}góc ${names})`;
+    case 'circle_radius': return `(${n(s.args[0])}, ${n(s.args[1])}${n(s.args[2])})`;
     case 'circle_3pts': case 'circumcircle': return `(${names})`;
     case 'circle': return `(${n(s.args[0])}, ${n(s.args[0])}${n(s.args[1])})`;
     case 'incircle': return `đường tròn nội tiếp ${names}`;

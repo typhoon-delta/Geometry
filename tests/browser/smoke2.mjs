@@ -106,5 +106,29 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   await page.waitForTimeout(300);
   ok((await page.evaluate(() => JSON.stringify(__app.doc.steps))) === ref, 'tải lại trang khôi phục bản nháp');
 
+  // ---------- Mốc 4: khám phá ----------
+  console.log('Mốc 4: khám phá bằng số');
+  await page.selectOption('#sel-example', 'nine_point');
+  await page.click('#btn-explore');
+  await page.waitForSelector('.rel');
+  const rels = await page.locator('.rel .rel-text').allTextContents();
+  ok(rels.length > 0 && /D, E, F, X, Y, Z nằm trên/.test(rels[0]), `quan hệ đầu tiên là 9 điểm Euler: "${rels[0]}"`);
+  await page.click('.rel[data-i="0"]');
+  const hl = await page.evaluate(() => __app.highlight.size);
+  ok(hl === 7, `bấm kết quả tô sáng đối tượng liên quan (${hl})`);
+  await shot('m4-kham-pha-9-diem');
+  const iCyc = rels.findIndex((t) => /đồng viên/.test(t));
+  await page.click(`.rel[data-i="${iCyc}"]`);
+  ok(await page.evaluate(() => __app.renderer.extra.some((e) => e.elType === 'circumcircle')), 'quan hệ đồng viên vẽ đường tròn phụ đứt nét');
+  await shot('m4-kham-pha-dong-vien');
+  await page.selectOption('#sel-example', 'simson');
+  ok(await page.locator('.stale').count() === 1, 'đổi hình → báo kết quả cũ');
+  await page.click('#btn-run-explore');
+  await page.waitForFunction(() => !document.querySelector('.stale') && document.querySelector('.rel'));
+  await page.click('.rel[data-i="0"]');
+  // kéo P trên đường tròn: đường Simson vẫn thẳng hàng (tô sáng đi theo)
+  await page.evaluate(() => { const s = __app.doc.steps.find((x) => x.name === 'P'); s.params.t = 0.4; __app.quickUpdate(); __app.refresh(); });
+  await shot('m4-simson');
+
   if (globalThis.__smokeMore) await globalThis.__smokeMore({ page, ok, shot, state, tool, clickAt });
 }

@@ -666,6 +666,13 @@ export class App {
     this.refresh();
   }
 
+  /** Tô sáng một quan hệ do bộ khám phá tìm ra (null để bỏ). */
+  setRelation(rel) {
+    this.relation = rel;
+    this.highlight = new Set(rel ? rel.ids : []);
+    this.refresh();
+  }
+
   // ================= trình bày / trình chiếu =================
   setMode(mode) {
     this.cancelTool();
@@ -750,7 +757,7 @@ export class App {
       if (e.key === 'Escape') {
         if (this.picks.length) this.cancelTool();
         else if (this.toolId !== 'move') this.setTool('move');
-        else { this.selection.clear(); this.highlight.clear(); this.refresh(); }
+        else { this.selection.clear(); this.setRelation(null); }
       } else if (e.key === 'Enter' && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === '...point') {
         this.completeTool(TOOL_BY_ID[this.toolId]);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && this.selection.size) {

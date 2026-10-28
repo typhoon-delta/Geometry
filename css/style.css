@@ -32,7 +32,8 @@ select { border: 1px solid #d1d5db; border-radius: 6px; padding: 3px 4px; backgr
 #topbar .group { display: flex; gap: 4px; align-items: center; padding-right: 8px; border-right: 1px solid var(--line); }
 #topbar .group:empty { display: none; }
 #topbar .group.right { margin-left: auto; border-right: 0; }
-#doc-title { border: 1px solid #d1d5db; border-radius: 6px; padding: 3px 6px; width: 130px; }
+#doc-title { border: 1px solid #d1d5db; border-radius: 6px; padding: 3px 6px; width: 120px; }
+#btn-undo, #btn-redo, #btn-delete { font-size: 15px; padding: 2px 9px; }
 #btn-explore { background: #fef3c7; border-color: #f59e0b; }
 
 /* ---------- bố cục ---------- */
@@ -142,3 +143,18 @@ body.projector #exit-projector { display: block; }
   .tool .tl { font-size: 11px; }
   #side { width: 250px; }
 }
+
+/* ---------- khám phá ---------- */
+#tab-explore { overflow-y: auto; }
+.explore-head { padding: 10px; border-bottom: 1px solid var(--line); }
+.explore-head button { width: 100%; padding: 7px; font-size: 14px; }
+.explore-stats { padding: 6px 10px; font-size: 12px; color: var(--muted); }
+.stale { color: #b45309; }
+.note.warn { color: #b45309; padding: 0 10px; }
+.rel { display: flex; gap: 8px; padding: 7px 10px; border-bottom: 1px solid #f3f4f6; cursor: pointer; align-items: flex-start; }
+.rel:hover { background: #f9fafb; }
+.rel.active { background: var(--hl); box-shadow: inset 3px 0 0 #f59e0b; }
+.rel-score { font-size: 11px; font-weight: 700; color: #92400e; background: #fef3c7; border-radius: 10px; padding: 1px 6px; flex: none; margin-top: 2px; }
+.rel-type { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.rel-text { font-size: 14px; }
+.rel-note { font-size: 12px; color: #6b7280; font-style: italic; }

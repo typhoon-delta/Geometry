@@ -702,6 +702,16 @@
       case "segment":
       case "ray":
         return names;
+      case "perpendicular":
+        return `${s.name} (\u22A5 ${describe(doc, s.args[1])} qua ${n(s.args[0])})`;
+      case "parallel":
+        return `${s.name} (\u2225 ${describe(doc, s.args[1])} qua ${n(s.args[0])})`;
+      case "perp_bisector":
+        return `${s.name} (trung tr\u1EF1c ${names})`;
+      case "angle_bisector":
+        return `${s.name} (ph\xE2n gi\xE1c ${s.params?.external ? "ngo\xE0i " : ""}g\xF3c ${names})`;
+      case "circle_radius":
+        return `(${n(s.args[0])}, ${n(s.args[1])}${n(s.args[2])})`;
       case "circle_3pts":
       case "circumcircle":
         return `(${names})`;
@@ -753,9 +763,9 @@
   var RELATION = "#f59e0b";
   function labelHTML(name) {
     if (!name) return "";
-    const esc3 = name.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    const m = /^(.*?)(\d+)('*)$/.exec(esc3);
-    return m && m[1] ? `${m[1]}<sub>${m[2]}</sub>${m[3]}` : esc3;
+    const esc4 = name.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const m = /^(.*?)(\d+)('*)$/.exec(esc4);
+    return m && m[1] ? `${m[1]}<sub>${m[2]}</sub>${m[3]}` : esc4;
   }
   var Renderer = class {
     constructor(board) {
@@ -1938,6 +1948,12 @@
       this.selection.clear();
       this.refresh();
     }
+    /** Tô sáng một quan hệ do bộ khám phá tìm ra (null để bỏ). */
+    setRelation(rel) {
+      this.relation = rel;
+      this.highlight = new Set(rel ? rel.ids : []);
+      this.refresh();
+    }
     // ================= trình bày / trình chiếu =================
     setMode(mode) {
       this.cancelTool();
@@ -2037,8 +2053,7 @@
           else if (this.toolId !== "move") this.setTool("move");
           else {
             this.selection.clear();
-            this.highlight.clear();
-            this.refresh();
+            this.setRelation(null);
           }
         } else if (e.key === "Enter" && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === "...point") {
           this.completeTool(TOOL_BY_ID[this.toolId]);
@@ -2413,6 +2428,814 @@
     window.addEventListener("beforeunload", () => saveDraft(app));
   }
 
+  // src/explore/knowledge.js
+  var UF = class {
+    constructor() {
+      this.p = /* @__PURE__ */ new Map();
+    }
+    find(x) {
+      if (!this.p.has(x)) this.p.set(x, x);
+      let r = x;
+      while (this.p.get(r) !== r) r = this.p.get(r);
+      while (this.p.get(x) !== r) {
+        const n = this.p.get(x);
+        this.p.set(x, r);
+        x = n;
+      }
+      return r;
+    }
+    union(a, b) {
+      const ra = this.find(a), rb = this.find(b);
+      if (ra !== rb) this.p.set(ra, rb);
+      return ra !== rb;
+    }
+  };
+  var Knowledge = class {
+    /**
+     * @param doc  tài liệu
+     * @param rep  hàm id điểm → id đại diện (các điểm luôn trùng nhau gộp làm một)
+     */
+    constructor(doc, rep = (x) => x) {
+      this.rep = rep;
+      this.lines = [];
+      this.circles = [];
+      this.dir = new UF();
+      this.perps = [];
+      this.tans = [];
+      const k = kinds(doc);
+      this.kind = k;
+      for (const s of doc.steps) {
+        const def = STEP_TYPES[s.type];
+        if (!def) continue;
+        const kind = k.get(s.id);
+        if (kind === "line") {
+          const i = this.newLine();
+          this.lines[i].objs.add(s.id);
+          if (s.type === "perp_bisector") this.addTag(i, "PB:" + sortKey(s.args.map(rep)));
+          if (s.type === "angle_bisector" && !(s.params && s.params.external)) this.addTag(i, abTag(s.args.map(rep)));
+        } else if (kind === "circle") {
+          const i = this.newCircle();
+          this.circles[i].objs.add(s.id);
+          if (s.type === "incircle") this.circles[i].tags.add("IC:" + sortKey(s.args.map(rep)));
+          if (s.type === "circumcircle" || s.type === "circle_3pts") for (const a of s.args) this.circles[i].pts.add(rep(a));
+        }
+      }
+      for (const s of doc.steps) {
+        const def = STEP_TYPES[s.type];
+        if (!def || !def.facts) continue;
+        let facts = [];
+        try {
+          facts = def.facts(s, s.args.map((a) => k.get(a))) || [];
+        } catch {
+          facts = [];
+        }
+        for (const f of facts) this.addFact(f);
+      }
+      this.saturate();
+    }
+    newLine() {
+      this.lines.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
+      return this.lines.length - 1;
+    }
+    newCircle() {
+      this.circles.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
+      return this.circles.length - 1;
+    }
+    addTag(i, tag) {
+      this.lines[i].tags.add(tag);
+    }
+    /** Chỉ số thực thể đường thẳng ứng với tham chiếu (id đối tượng hoặc tham chiếu ảo). */
+    lineOf(ref) {
+      const L = this.lines;
+      if (typeof ref === "string") return L.findIndex((e) => e.alive && e.objs.has(ref));
+      if (ref.L) {
+        const [a, b] = ref.L.map(this.rep);
+        if (a === b) return -1;
+        let i = L.findIndex((e) => e.alive && e.pts.has(a) && e.pts.has(b));
+        if (i < 0) {
+          i = this.newLine();
+          L[i].pts.add(a);
+          L[i].pts.add(b);
+        }
+        return i;
+      }
+      if (ref.PB) return this.tagged("PB:" + sortKey(ref.PB.map(this.rep)), () => {
+        const j = this.lineOf({ L: ref.PB });
+        return j;
+      });
+      if (ref.AB) return this.tagged(abTag(ref.AB.map(this.rep)), null, this.rep(ref.AB[1]));
+      return -1;
+    }
+    tagged(tag, perpTo, through) {
+      let i = this.lines.findIndex((e) => e.alive && e.tags.has(tag));
+      if (i < 0) {
+        i = this.newLine();
+        this.lines[i].tags.add(tag);
+        if (through) this.lines[i].pts.add(through);
+      }
+      if (perpTo) {
+        const j = perpTo();
+        if (j >= 0) this.perps.push([i, j]);
+      }
+      return i;
+    }
+    circleOf(ref) {
+      const C = this.circles;
+      if (typeof ref === "string") return C.findIndex((e) => e.alive && e.objs.has(ref));
+      if (ref.C) {
+        const ps = ref.C.map(this.rep);
+        if (new Set(ps).size < 3) return -1;
+        let i = C.findIndex((e) => e.alive && ps.every((p) => e.pts.has(p)));
+        if (i < 0) {
+          i = this.newCircle();
+          ps.forEach((p) => C[i].pts.add(p));
+        }
+        return i;
+      }
+      if (ref.IC) {
+        const tag = "IC:" + sortKey(ref.IC.map(this.rep));
+        let i = C.findIndex((e) => e.alive && e.tags.has(tag));
+        if (i < 0) {
+          i = this.newCircle();
+          C[i].tags.add(tag);
+        }
+        return i;
+      }
+      return -1;
+    }
+    curveOf(ref) {
+      if (typeof ref === "string") {
+        const kd = this.kind.get(ref);
+        if (kd === "line") return { t: "L", i: this.lineOf(ref) };
+        if (kd === "circle") return { t: "C", i: this.circleOf(ref) };
+        return null;
+      }
+      if (ref.C || ref.IC) return { t: "C", i: this.circleOf(ref) };
+      return { t: "L", i: this.lineOf(ref) };
+    }
+    addFact(f) {
+      if (f.on) {
+        const P2 = this.rep(f.on[0]);
+        const c = this.curveOf(f.on[1]);
+        if (!c || c.i < 0) return;
+        (c.t === "L" ? this.lines : this.circles)[c.i].pts.add(P2);
+      } else if (f.col) {
+        const ps = [...new Set(f.col.map(this.rep))];
+        if (ps.length < 2) return;
+        const i = this.lineOf({ L: [ps[0], ps[1]] });
+        ps.forEach((p) => this.lines[i].pts.add(p));
+      } else if (f.cyc) {
+        const ps = [...new Set(f.cyc.map(this.rep))];
+        if (ps.length < 3) return;
+        const i = this.circleOf({ C: ps.slice(0, 3) });
+        ps.forEach((p) => this.circles[i].pts.add(p));
+      } else if (f.par || f.perp) {
+        const [a, b] = (f.par || f.perp).map((r) => this.lineOf(r));
+        if (a < 0 || b < 0) return;
+        if (f.par) this.dir.union(a, b);
+        else this.perps.push([a, b]);
+      } else if (f.tan) {
+        const [a, b] = f.tan.map((r) => this.curveOf(r));
+        if (a && b && a.i >= 0 && b.i >= 0) this.tans.push([a, b]);
+      }
+    }
+    mergeLine(i, j) {
+      const a = this.lines[i], b = this.lines[j];
+      for (const p of b.pts) a.pts.add(p);
+      for (const o of b.objs) a.objs.add(o);
+      for (const t of b.tags) a.tags.add(t);
+      b.alive = false;
+      this.dir.union(i, j);
+      this.perps = this.perps.map(([x, y]) => [x === j ? i : x, y === j ? i : y]);
+      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "L" && c.i === j ? { t: "L", i } : c));
+      this.redirect = this.redirect || /* @__PURE__ */ new Map();
+      this.redirect.set(j, i);
+    }
+    mergeCircle(i, j) {
+      const a = this.circles[i], b = this.circles[j];
+      for (const p of b.pts) a.pts.add(p);
+      for (const o of b.objs) a.objs.add(o);
+      for (const t of b.tags) a.tags.add(t);
+      b.alive = false;
+      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "C" && c.i === j ? { t: "C", i } : c));
+    }
+    saturate() {
+      for (let round = 0; round < 20; round++) {
+        let changed = false;
+        const perpOf = /* @__PURE__ */ new Map();
+        for (const [x, y] of this.perps) {
+          const rx = this.dir.find(x), ry = this.dir.find(y);
+          if (perpOf.has(ry)) changed = this.dir.union(perpOf.get(ry), rx) || changed;
+          else perpOf.set(ry, rx);
+          if (perpOf.has(rx)) changed = this.dir.union(perpOf.get(rx), ry) || changed;
+          else perpOf.set(rx, ry);
+        }
+        const L = this.lines;
+        for (let i = 0; i < L.length; i++) {
+          if (!L[i].alive) continue;
+          for (let j = i + 1; j < L.length; j++) {
+            if (!L[j].alive) continue;
+            let common = 0;
+            for (const p of L[j].pts) if (L[i].pts.has(p)) common++;
+            const sameTag = [...L[j].tags].some((t) => L[i].tags.has(t));
+            if (common >= 2 || sameTag || common >= 1 && this.dir.find(i) === this.dir.find(j)) {
+              this.mergeLine(i, j);
+              changed = true;
+            }
+          }
+        }
+        const C = this.circles;
+        for (let i = 0; i < C.length; i++) {
+          if (!C[i].alive) continue;
+          for (let j = i + 1; j < C.length; j++) {
+            if (!C[j].alive) continue;
+            let common = 0;
+            for (const p of C[j].pts) if (C[i].pts.has(p)) common++;
+            const sameTag = [...C[j].tags].some((t) => C[i].tags.has(t));
+            if (common >= 3 || sameTag) {
+              this.mergeCircle(i, j);
+              changed = true;
+            }
+          }
+        }
+        if (!changed) break;
+      }
+    }
+    // ---------- truy vấn ----------
+    pointOnLineObj(P2, lineId) {
+      const i = this.lineOf(lineId);
+      return i >= 0 && this.lines[i].pts.has(this.rep(P2));
+    }
+    pointOnCircleObj(P2, cId) {
+      const i = this.circleOf(cId);
+      return i >= 0 && this.circles[i].pts.has(this.rep(P2));
+    }
+    collinear(ps) {
+      const r = ps.map(this.rep);
+      return this.lines.some((e) => e.alive && r.every((p) => e.pts.has(p)));
+    }
+    concyclic(ps) {
+      const r = ps.map(this.rep);
+      return this.circles.some((e) => e.alive && r.every((p) => e.pts.has(p)));
+    }
+    sameLine(a, b) {
+      const i = this.lineOf(a), j = this.lineOf(b);
+      return i >= 0 && i === j;
+    }
+    sameCircle(a, b) {
+      const i = this.circleOf(a), j = this.circleOf(b);
+      return i >= 0 && i === j;
+    }
+    parallel(a, b) {
+      const i = this.lineOf(a), j = this.lineOf(b);
+      return i >= 0 && j >= 0 && this.dir.find(i) === this.dir.find(j);
+    }
+    perpendicular(a, b) {
+      const i = this.lineOf(a), j = this.lineOf(b);
+      if (i < 0 || j < 0) return false;
+      const ri = this.dir.find(i), rj = this.dir.find(j);
+      return this.perps.some(([x, y]) => {
+        const rx = this.dir.find(x), ry = this.dir.find(y);
+        return rx === ri && ry === rj || rx === rj && ry === ri;
+      });
+    }
+    tangent(a, b) {
+      const ca = this.curveOf(a), cb = this.curveOf(b);
+      if (!ca || !cb) return false;
+      const eq = (u, v) => u.t === v.t && u.i === v.i;
+      return this.tans.some(([x, y]) => eq(x, ca) && eq(y, cb) || eq(x, cb) && eq(y, ca));
+    }
+  };
+  var sortKey = (arr) => [...arr].sort().join(",");
+  var abTag = ([A, V, C]) => `AB:${V}:${sortKey([A, C])}`;
+
+  // src/explore/explorer.js
+  var DEFAULTS = {
+    samples: 12,
+    // số cấu hình ngẫu nhiên hợp lệ cần có (ngoài cấu hình gốc)
+    maxAttempts: 150,
+    // số lần thử tối đa (cấu hình suy biến bị loại)
+    perturb: 0.3,
+    // biên độ xê dịch điểm tự do, tính theo kích thước hình
+    tol: 1e-6,
+    // dung sai TƯƠNG ĐỐI theo kích thước hình
+    minSep: 0.012,
+    // hai điểm (vốn khác nhau) gần hơn minSep·kích thước → cấu hình suy biến
+    minAngle: 4,
+    // tam giác có góc < minAngle độ → suy biến
+    maxRadius: 25,
+    // đường tròn bán kính > maxRadius·kích thước → gần suy biến (3 điểm gần thẳng hàng)
+    seed: 12345,
+    maxPoints: 90
+    // giới hạn để tránh bùng nổ tổ hợp
+  };
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = a + 1831565813 >>> 0;
+      let t = a;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function figureScale(vals, pointIds) {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const id of pointIds) {
+      const v = vals.get(id);
+      if (!v) continue;
+      x1 = Math.min(x1, v.x);
+      x2 = Math.max(x2, v.x);
+      y1 = Math.min(y1, v.y);
+      y2 = Math.max(y2, v.y);
+    }
+    const s = Math.hypot(x2 - x1, y2 - y1);
+    return Number.isFinite(s) && s > 1e-12 ? s : 1;
+  }
+  var TRIANGLE_TYPES = /* @__PURE__ */ new Set(["circumcenter", "orthocenter", "incenter", "centroid", "nine_point_center", "altitude_foot", "incircle_touch", "arc_midpoint", "circle_3pts", "circumcircle", "incircle", "nine_point_circle", "angle_bisector"]);
+  function randomOverrides(doc, base, scale, rand, perturb) {
+    const ov = /* @__PURE__ */ new Map();
+    for (const s of doc.steps) {
+      const p = paramsOf(s);
+      if (s.type === "free_point") {
+        const r = perturb * scale * Math.sqrt(rand()), a = 2 * Math.PI * rand();
+        ov.set(s.id, { x: p.x + r * Math.cos(a), y: p.y + r * Math.sin(a) });
+      } else if (s.type === "point_on") {
+        const host = base.get(s.args[0]);
+        if (!host) continue;
+        let t = p.t;
+        if (host.kind === "circle") t += (rand() * 2 - 1) * 0.9;
+        else if (host.sub === "segment") t = Math.min(0.92, Math.max(0.08, t + (rand() * 2 - 1) * 0.3));
+        else if (host.sub === "ray") t = Math.max(0.05, t * Math.exp((rand() * 2 - 1) * 0.5));
+        else t += (rand() * 2 - 1) * 0.4;
+        ov.set(s.id, { t });
+      }
+    }
+    return ov;
+  }
+  function degenerate(doc, vals, ctx) {
+    const { pointIds, curveIds, sameClassPairs, opts, kindOf } = ctx;
+    const scale = figureScale(vals, pointIds);
+    for (const id of [...pointIds, ...curveIds]) if (!vals.get(id)) return "kh\xF4ng x\xE1c \u0111\u1ECBnh";
+    const sep = opts.minSep * scale;
+    for (let i = 0; i < pointIds.length; i++) {
+      const a = vals.get(pointIds[i]);
+      for (let j = i + 1; j < pointIds.length; j++) {
+        if (sameClassPairs.has(pointIds[i] + "|" + pointIds[j])) continue;
+        if (dist(a, vals.get(pointIds[j])) < sep) return "\u0111i\u1EC3m g\u1EA7n tr\xF9ng";
+      }
+    }
+    const sinMin = Math.sin(opts.minAngle * Math.PI / 180);
+    for (const s of doc.steps) {
+      if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && s.args.every((a) => kindOf.get(a) === "point")) {
+        const [A, B, C] = s.args.map((a) => vals.get(a));
+        const ang = (P2, Q, R) => Math.abs(cross(sub(Q, P2), sub(R, P2))) / (dist(P2, Q) * dist(P2, R) + 1e-300);
+        if (Math.min(ang(A, B, C), ang(B, C, A), ang(C, A, B)) < sinMin) return "tam gi\xE1c d\u1EB9t";
+      }
+      const v = vals.get(s.id);
+      if (v && v.kind === "circle" && v.r > opts.maxRadius * scale) return "\u0111\u01B0\u1EDDng tr\xF2n qu\xE1 l\u1EDBn";
+      if (s.type === "intersection" || s.type === "intersection_other") {
+        const r = intersect(vals.get(s.args[0]), vals.get(s.args[1]));
+        if (r.length === 2 && dist(r[0], r[1]) < sep * 2) return "g\u1EA7n ti\u1EBFp x\xFAc";
+        if (r.length === 1 && kindOf.get(s.args[0]) === "line" && kindOf.get(s.args[1]) === "line") {
+          const l1 = vals.get(s.args[0]), l2 = vals.get(s.args[1]);
+          if (Math.abs(cross(unit(l1.d), unit(l2.d))) < sinMin) return "hai \u0111\u01B0\u1EDDng g\u1EA7n song song";
+        }
+      }
+    }
+    return null;
+  }
+  var T2 = {
+    coincide: (P2, Q, e) => dist(P2, Q) < e,
+    onLine: (P2, l, e) => distPointLine(P2, l) < e,
+    onCircle: (P2, c, e) => Math.abs(dist(P2, c.c) - c.r) < e,
+    collinear: (P2, Q, R, e) => distPointLine(R, lineThrough(P2, Q)) < e,
+    parallel: (l1, l2, e, s) => Math.abs(cross(unit(l1.d), unit(l2.d))) < e / s,
+    perpendicular: (l1, l2, e, s) => Math.abs(dot(unit(l1.d), unit(l2.d))) < e / s,
+    sameLine: (l1, l2, e, s) => T2.parallel(l1, l2, e, s) && distPointLine(l2.p, l1) < e,
+    sameCircle: (c1, c2, e) => dist(c1.c, c2.c) < e && Math.abs(c1.r - c2.r) < e,
+    tangentLC: (l, c, e) => Math.abs(distPointLine(c.c, l) - c.r) < e,
+    tangentCC: (c1, c2, e) => {
+      const d = dist(c1.c, c2.c);
+      if (d < e) return false;
+      return Math.abs(d - (c1.r + c2.r)) < e || Math.abs(d - Math.abs(c1.r - c2.r)) < e;
+    }
+  };
+  function explore(doc, options = {}) {
+    const opts = { ...DEFAULTS, ...options };
+    const t0 = Date.now();
+    const kindOf = kinds(doc);
+    const base = evaluate(doc);
+    const pointIds = [], lineIds = [], circleIds = [];
+    for (const s of doc.steps) {
+      if (!base.get(s.id)) continue;
+      const kd = kindOf.get(s.id);
+      if (kd === "point") pointIds.push(s.id);
+      else if (kd === "line") lineIds.push(s.id);
+      else if (kd === "circle") circleIds.push(s.id);
+    }
+    if (pointIds.length > opts.maxPoints) pointIds.length = opts.maxPoints;
+    const curveIds = [...lineIds, ...circleIds];
+    const scale0 = figureScale(base, pointIds);
+    const sameClassPairs = /* @__PURE__ */ new Set();
+    for (let i = 0; i < pointIds.length; i++)
+      for (let j = i + 1; j < pointIds.length; j++)
+        if (dist(base.get(pointIds[i]), base.get(pointIds[j])) < opts.tol * scale0) sameClassPairs.add(pointIds[i] + "|" + pointIds[j]);
+    const rand = rng(opts.seed);
+    const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf };
+    const samples = [{ vals: base, scale: scale0 }];
+    let attempts = 0;
+    const rejected = {};
+    const baseDegenerate = degenerate(doc, base, ctx);
+    while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
+      attempts++;
+      const ov = randomOverrides(doc, base, scale0, rand, opts.perturb);
+      const vals = evaluate(doc, ov);
+      const why = degenerate(doc, vals, ctx);
+      if (why) {
+        rejected[why] = (rejected[why] || 0) + 1;
+        continue;
+      }
+      samples.push({ vals, scale: figureScale(vals, pointIds) });
+    }
+    const all = (fn) => samples.every(({ vals, scale }) => fn(vals, opts.tol * scale, scale));
+    const repOf = new Map(pointIds.map((id) => [id, id]));
+    const classes = [];
+    for (const id of pointIds) {
+      if (repOf.get(id) !== id) continue;
+      const cls = [id];
+      for (const j of pointIds) {
+        if (j === id || repOf.get(j) !== j || !sameClassPairs.has(id + "|" + j)) continue;
+        if (all((v, e) => T2.coincide(v.get(id), v.get(j), e))) {
+          cls.push(j);
+          repOf.set(j, id);
+        }
+      }
+      if (cls.length > 1) classes.push(cls);
+    }
+    const rep = (id) => repOf.get(id) || id;
+    const reps = pointIds.filter((id) => rep(id) === id);
+    const know = new Knowledge(doc, rep);
+    const special = recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts);
+    const rel = [];
+    const name = (id) => stepById(doc, id)?.name || id;
+    const desc = (id) => describe(doc, id);
+    const list = (ids) => ids.map(name).join(", ");
+    for (const cls of classes) rel.push({ type: "coincide", ids: cls, text: `${cls.map(name).join(" \u2261 ")} (tr\xF9ng nhau)` });
+    const lineRep = new Map(lineIds.map((id) => [id, id]));
+    for (let i = 0; i < lineIds.length; i++) {
+      const a = lineIds[i];
+      if (lineRep.get(a) !== a) continue;
+      for (let j = i + 1; j < lineIds.length; j++) {
+        const b = lineIds[j];
+        if (lineRep.get(b) !== b) continue;
+        if (all((v, e, s) => T2.sameLine(v.get(a), v.get(b), e, s))) {
+          lineRep.set(b, a);
+          if (!know.sameLine(a, b)) rel.push({ type: "same_line", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
+        }
+      }
+    }
+    const circRep = new Map(circleIds.map((id) => [id, id]));
+    for (let i = 0; i < circleIds.length; i++) {
+      const a = circleIds[i];
+      if (circRep.get(a) !== a) continue;
+      for (let j = i + 1; j < circleIds.length; j++) {
+        const b = circleIds[j];
+        if (circRep.get(b) !== b) continue;
+        if (all((v, e) => T2.sameCircle(v.get(a), v.get(b), e))) {
+          circRep.set(b, a);
+          if (!know.sameCircle(a, b)) rel.push({ type: "same_circle", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
+        }
+      }
+    }
+    const lines = lineIds.filter((id) => lineRep.get(id) === id);
+    const circles = circleIds.filter((id) => circRep.get(id) === id);
+    const v0 = base, e0 = opts.tol * scale0;
+    const onLineSets = /* @__PURE__ */ new Map();
+    for (const l of lines) {
+      const on = reps.filter((P2) => T2.onLine(v0.get(P2), v0.get(l), e0) && all((v, e) => T2.onLine(v.get(P2), v.get(l), e)));
+      onLineSets.set(l, on);
+      const fresh = on.filter((P2) => !lineIdsSameAs(l, lineIds, lineRep).some((ll) => know.pointOnLineObj(P2, ll)));
+      if (fresh.length) rel.push({ type: "on_line", ids: [l, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(l)}` });
+    }
+    const onCircleSets = /* @__PURE__ */ new Map();
+    for (const c of circles) {
+      const on = reps.filter((P2) => T2.onCircle(v0.get(P2), v0.get(c), e0) && all((v, e) => T2.onCircle(v.get(P2), v.get(c), e)));
+      onCircleSets.set(c, on);
+      const fresh = on.filter((P2) => !lineIdsSameAs(c, circleIds, circRep).some((cc) => know.pointOnCircleObj(P2, cc)));
+      if (fresh.length) rel.push({ type: "on_circle", ids: [c, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(c)}` });
+    }
+    const seenCol = /* @__PURE__ */ new Set();
+    for (let i = 0; i < reps.length; i++)
+      for (let j = i + 1; j < reps.length; j++) {
+        const A = reps[i], B = reps[j];
+        const pa = v0.get(A), pb = v0.get(B);
+        const set = [A, B];
+        for (let k = 0; k < reps.length; k++) {
+          if (k === i || k === j) continue;
+          if (T2.collinear(pa, pb, v0.get(reps[k]), e0)) set.push(reps[k]);
+        }
+        if (set.length < 3) continue;
+        const verified = [A, B, ...set.slice(2).filter((C) => all((v, e) => T2.collinear(v.get(A), v.get(B), v.get(C), e)))];
+        if (verified.length < 3) continue;
+        const key = [...verified].sort().join(",");
+        if (seenCol.has(key)) continue;
+        seenCol.add(key);
+        if ([...onLineSets.values()].some((on) => verified.every((P2) => on.includes(P2)))) continue;
+        if (know.collinear(verified)) continue;
+        rel.push({ type: "collinear", ids: sortByDoc(doc, verified), text: `${list(sortByDoc(doc, verified))} th\u1EB3ng h\xE0ng` });
+      }
+    const seenCyc = /* @__PURE__ */ new Set();
+    const nR = reps.length;
+    for (let i = 0; i < nR; i++)
+      for (let j = i + 1; j < nR; j++)
+        for (let k = j + 1; k < nR; k++) {
+          const A = reps[i], B = reps[j], C = reps[k];
+          const circ = circleThrough(v0.get(A), v0.get(B), v0.get(C));
+          if (!circ || circ.r > opts.maxRadius * scale0) continue;
+          const set = [A, B, C];
+          for (let m = k + 1; m < nR; m++) if (T2.onCircle(v0.get(reps[m]), circ, e0)) set.push(reps[m]);
+          if (set.length < 4) continue;
+          const key0 = set.join(",");
+          if (seenCyc.has("raw:" + key0)) continue;
+          const full = reps.filter((P2) => T2.onCircle(v0.get(P2), circ, e0));
+          const ok = full.filter((P2, idx) => idx < 3 || all((v, e) => {
+            const c = circleThrough(v.get(full[0]), v.get(full[1]), v.get(full[2]));
+            return c && T2.onCircle(v.get(P2), c, e);
+          }));
+          const key = [...ok].sort().join(",");
+          seenCyc.add("raw:" + key0);
+          if (ok.length < 4 || seenCyc.has(key)) continue;
+          seenCyc.add(key);
+          if ([...onCircleSets.values()].some((on) => ok.every((P2) => on.includes(P2)))) continue;
+          if (know.concyclic(ok)) continue;
+          const ids = sortByDoc(doc, ok);
+          rel.push({ type: "concyclic", ids, text: `${list(ids)} \u0111\u1ED3ng vi\xEAn` });
+        }
+    for (let i = 0; i < lines.length; i++)
+      for (let j = i + 1; j < lines.length; j++) {
+        const a = lines[i], b = lines[j];
+        if (T2.parallel(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T2.parallel(v.get(a), v.get(b), e, s)) && !know.parallel(a, b))
+          rel.push({ type: "parallel", ids: [a, b], text: `${desc(a)} \u2225 ${desc(b)}` });
+        if (T2.perpendicular(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T2.perpendicular(v.get(a), v.get(b), e, s)) && !know.perpendicular(a, b))
+          rel.push({ type: "perpendicular", ids: [a, b], text: `${desc(a)} \u22A5 ${desc(b)}` });
+      }
+    for (const l of lines)
+      for (const c of circles)
+        if (T2.tangentLC(v0.get(l), v0.get(c), e0) && all((v, e) => T2.tangentLC(v.get(l), v.get(c), e)) && !know.tangent(l, c))
+          rel.push({ type: "tangent", ids: [l, c], text: `${desc(l)} ti\u1EBFp x\xFAc ${desc(c)}` });
+    for (let i = 0; i < circles.length; i++)
+      for (let j = i + 1; j < circles.length; j++) {
+        const a = circles[i], b = circles[j];
+        if (T2.tangentCC(v0.get(a), v0.get(b), e0) && all((v, e) => T2.tangentCC(v.get(a), v.get(b), e)) && !know.tangent(a, b))
+          rel.push({ type: "tangent", ids: [a, b], text: `${desc(a)} ti\u1EBFp x\xFAc ${desc(b)}` });
+      }
+    const curves = [...lines, ...circles];
+    const seenConc = /* @__PURE__ */ new Set();
+    for (let i = 0; i < curves.length; i++)
+      for (let j = i + 1; j < curves.length; j++) {
+        const a = curves[i], b = curves[j];
+        for (const X of intersect(v0.get(a), v0.get(b))) {
+          if (dist(X, { x: 0, y: 0 }) > 1e6 || reps.some((P2) => dist(v0.get(P2), X) < 1e3 * e0)) continue;
+          if (pointIds.length && minDistToPoints(X, v0, pointIds) > 20 * scale0) continue;
+          const through = curves.filter((c) => c !== a && c !== b && onCurve(X, v0.get(c), e0));
+          if (!through.length) continue;
+          const set = [a, b, ...through];
+          const key = [...set].sort().join(",");
+          if (seenConc.has(key)) continue;
+          seenConc.add(key);
+          const ok = all((v, e) => intersect(v.get(a), v.get(b)).some((Y) => through.every((c) => onCurve(Y, v.get(c), e))));
+          if (!ok) continue;
+          const allLines = set.every((c) => kindOf.get(c) === "line");
+          rel.push({ type: "concurrent", ids: set, text: allLines ? `${set.map(desc).join(", ")} \u0111\u1ED3ng quy` : `${set.map(desc).join(", ")} c\xF9ng \u0111i qua m\u1ED9t \u0111i\u1EC3m` });
+        }
+      }
+    const final = rel.filter((r) => !((r.type === "collinear" || r.type === "concyclic") && rel.some((o) => o !== r && o.type === r.type && o.ids.length > r.ids.length && r.ids.every((x) => o.ids.includes(x)))));
+    for (const r of final) {
+      r.score = scoreOf(r, doc, kindOf, special);
+      const notes = [...new Set(r.ids.filter((id) => special.has(id)).map((id) => `${describe(doc, id)} l\xE0 ${special.get(id).label}`))];
+      if (notes.length) r.note = notes.join("; ");
+    }
+    final.sort((a, b) => b.score - a.score || a.ids.length - b.ids.length);
+    return {
+      relations: final,
+      stats: {
+        samples: samples.length - 1,
+        attempts,
+        rejected,
+        baseDegenerate,
+        points: reps.length,
+        lines: lines.length,
+        circles: circles.length,
+        ms: Date.now() - t0
+      }
+    };
+  }
+  function lineIdsSameAs(id, ids, repMap) {
+    return ids.filter((x) => repMap.get(x) === id);
+  }
+  function onCurve(P2, c, e) {
+    return c.kind === "line" ? T2.onLine(P2, c, e) : T2.onCircle(P2, c, e);
+  }
+  function minDistToPoints(X, vals, ids) {
+    let m = Infinity;
+    for (const id of ids) m = Math.min(m, dist(vals.get(id), X));
+    return m;
+  }
+  function sortByDoc(doc, ids) {
+    const idx = new Map(doc.steps.map((s, i) => [s.id, i]));
+    return [...ids].sort((a, b) => idx.get(a) - idx.get(b));
+  }
+  var BASE_SCORE = { tangent: 6, concurrent: 5, concyclic: 5, on_circle: 5, collinear: 5, on_line: 3.5, perpendicular: 3, parallel: 3, coincide: 3, same_line: 3, same_circle: 3 };
+  var SPECIAL_NAMES = /* @__PURE__ */ new Set(["O", "I", "H"]);
+  function specialWeight(step) {
+    const tag = STEP_TYPES[step.type]?.tag;
+    if (tag === "circumcircle" || tag === "incircle" || tag === "ninepoint") return 3;
+    if (tag === "O" || tag === "I" || tag === "H") return 3;
+    if (SPECIAL_NAMES.has(step.name)) return 2.5;
+    if (tag === "G" || tag === "N") return 2;
+    return 0;
+  }
+  function scoreOf(r, doc, kindOf, recognized) {
+    let s = BASE_SCORE[r.type] || 2;
+    let special = 0;
+    for (const id of r.ids) special += Math.max(specialWeight(stepById(doc, id) || {}), recognized.get(id)?.weight || 0);
+    s += Math.min(special, 7);
+    if (r.ids.some((id) => kindOf.get(id) === "circle")) s += 0.5;
+    return Math.round(s * 10) / 10;
+  }
+  function recognizeSpecial(doc, samples, reps, circleIds, kindOf, opts) {
+    const tri2 = /* @__PURE__ */ new Map();
+    const addTri = (ids) => {
+      if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === "point")) return;
+      const key = [...ids].sort().join(",");
+      if (!tri2.has(key)) tri2.set(key, ids);
+    };
+    for (const s of doc.steps) if (TRIANGLE_TYPES.has(s.type) && s.type !== "angle_bisector" && s.args.length === 3) addTri(s.args);
+    const adj = /* @__PURE__ */ new Map();
+    const link = (a, b) => {
+      (adj.get(a) || adj.set(a, /* @__PURE__ */ new Set()).get(a)).add(b);
+      (adj.get(b) || adj.set(b, /* @__PURE__ */ new Set()).get(b)).add(a);
+    };
+    for (const s of doc.steps) if (["line", "segment", "ray"].includes(s.type)) link(s.args[0], s.args[1]);
+    for (const [a, nb] of adj) for (const b of nb) for (const c of nb) if (a < b && b < c && adj.get(b)?.has(c)) addTri([a, b, c]);
+    const out = /* @__PURE__ */ new Map();
+    const name = (id) => stepById(doc, id)?.name || id;
+    let count = 0;
+    for (const [A, B, C] of tri2.values()) {
+      if (++count > 12) break;
+      const triName = name(A) + name(B) + name(C);
+      const at = (v) => [v.get(A), v.get(B), v.get(C)];
+      const PTS = [
+        ["O", 3, "t\xE2m ngo\u1EA1i ti\u1EBFp", circumcenter],
+        ["H", 3, "tr\u1EF1c t\xE2m", orthocenter],
+        ["I", 3, "t\xE2m n\u1ED9i ti\u1EBFp", incenter],
+        ["G", 2, "tr\u1ECDng t\xE2m", centroid],
+        ["N", 2, "t\xE2m \u0111\u01B0\u1EDDng tr\xF2n Euler", ninePointCenter]
+      ];
+      for (const [, w, label, f] of PTS)
+        for (const P2 of reps) {
+          if (out.has(P2) && out.get(P2).weight >= w) continue;
+          if (samples.every(({ vals, scale }) => {
+            const X = f(...at(vals));
+            return X && dist(X, vals.get(P2)) < opts.tol * scale;
+          }))
+            out.set(P2, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
+        }
+      const CIRC = [
+        [3, "\u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", (a, b, c) => circleThrough(a, b, c)],
+        [3, "\u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp", (a, b, c) => circle(incenter(a, b, c), inradius(a, b, c))],
+        [3, "\u0111\u01B0\u1EDDng tr\xF2n Euler", (a, b, c) => circleThrough(mid(a, b), mid(b, c), mid(c, a))]
+      ];
+      for (const [w, label, f] of CIRC)
+        for (const c of circleIds) {
+          if (out.has(c)) continue;
+          if (samples.every(({ vals, scale }) => {
+            const X = f(...at(vals));
+            const Y = vals.get(c);
+            return X && Y && T2.sameCircle(X, Y, opts.tol * scale);
+          }))
+            out.set(c, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
+        }
+    }
+    return out;
+  }
+
+  // src/ui/explorePanel.js
+  var TYPE_LABEL = {
+    collinear: "Th\u1EB3ng h\xE0ng",
+    concyclic: "\u0110\u1ED3ng vi\xEAn",
+    concurrent: "\u0110\u1ED3ng quy",
+    parallel: "Song song",
+    perpendicular: "Vu\xF4ng g\xF3c",
+    tangent: "Ti\u1EBFp x\xFAc",
+    on_circle: "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n",
+    on_line: "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng",
+    coincide: "Tr\xF9ng nhau",
+    same_line: "Tr\xF9ng nhau",
+    same_circle: "Tr\xF9ng nhau"
+  };
+  var esc3 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  function setupExplore(app) {
+    const pane = document.getElementById("tab-explore");
+    let result = null;
+    let stale = false;
+    let active = -1;
+    const render = () => {
+      let html = `<div class="explore-head">
+      <button id="btn-run-explore" class="primary">\u{1F50D} Kh\xE1m ph\xE1 h\xECnh n\xE0y</button>
+      <div class="note">X\xEA d\u1ECBch ng\u1EABu nhi\xEAn c\xE1c \u0111i\u1EC3m t\u1EF1 do nhi\u1EC1u l\u1EA7n, ch\u1EC9 gi\u1EEF quan h\u1EC7 \u0111\xFAng tr\xEAn <b>m\u1ECDi</b> m\u1EABu, b\u1ECF quan h\u1EC7 hi\u1EC3n nhi\xEAn t\u1EEB c\xE1ch d\u1EF1ng.</div>
+    </div>`;
+      if (result) {
+        const st = result.stats;
+        html += `<div class="explore-stats">${result.relations.length} quan h\u1EC7 \xB7 ${st.samples} m\u1EABu ng\u1EABu nhi\xEAn (${st.attempts} l\u1EA7n th\u1EED) \xB7 ${st.ms} ms${stale ? ' \xB7 <b class="stale">h\xECnh \u0111\xE3 thay \u0111\u1ED5i, h\xE3y kh\xE1m ph\xE1 l\u1EA1i</b>' : ""}</div>`;
+        if (st.samples < 5) html += `<div class="note warn">\xCDt m\u1EABu h\u1EE3p l\u1EC7 \u2013 h\xECnh c\xF3 th\u1EC3 g\u1EA7n suy bi\u1EBFn; k\u1EBFt qu\u1EA3 k\xE9m tin c\u1EADy.</div>`;
+        if (!result.relations.length) html += '<div class="empty">Kh\xF4ng t\xECm th\u1EA5y quan h\u1EC7 n\xE0o ngo\xE0i c\xE1c quan h\u1EC7 hi\u1EC3n nhi\xEAn.</div>';
+        html += '<div class="rel-list">' + result.relations.map((r, i) => `<div class="rel ${i === active ? "active" : ""}" data-i="${i}">
+          <span class="rel-score" title="\u0110i\u1EC3m x\u1EBFp h\u1EA1ng">${r.score}</span>
+          <div class="rel-body"><div class="rel-type">${TYPE_LABEL[r.type] || r.type}</div><div class="rel-text">${esc3(r.text)}</div>${r.note ? `<div class="rel-note">${esc3(r.note)}</div>` : ""}</div>
+        </div>`).join("") + "</div>";
+      }
+      pane.innerHTML = html;
+      pane.querySelector("#btn-run-explore").onclick = run;
+      pane.querySelectorAll(".rel").forEach((el) => el.onclick = () => select(+el.dataset.i));
+    };
+    const run = () => {
+      const btn = pane.querySelector("#btn-run-explore");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "\u0110ang kh\xE1m ph\xE1\u2026";
+      }
+      document.querySelector('[data-tab="tab-explore"]').click();
+      setTimeout(() => {
+        try {
+          result = explore(app.doc);
+          stale = false;
+          active = -1;
+          app.setRelation(null);
+          toast(`T\xECm th\u1EA5y ${result.relations.length} quan h\u1EC7`);
+        } catch (e) {
+          console.error(e);
+          toast("L\u1ED7i khi kh\xE1m ph\xE1: " + e.message, 5e3);
+        }
+        render();
+      }, 30);
+    };
+    const select = (i) => {
+      active = active === i ? -1 : i;
+      app.setRelation(active >= 0 ? result.relations[active] : null);
+      render();
+    };
+    app.on("change", () => {
+      if (result && !stale) {
+        stale = true;
+        render();
+      }
+    });
+    const top = document.getElementById("btn-explore");
+    if (top) top.onclick = run;
+    render();
+  }
+  function drawRelationOverlay(app) {
+    const r = app.relation;
+    if (!r) return;
+    const R = app.renderer;
+    const V = (id) => app.values.get(id);
+    const st = { strokeColor: "#f59e0b", strokeWidth: 2.2 * (app.projector ? 1.9 : 1), dash: 2 };
+    const pt2 = (id) => R.addExtra("point", [() => V(id)?.x ?? NaN, () => V(id)?.y ?? NaN], { visible: false });
+    if (r.type === "collinear") {
+      const ids = r.ids;
+      let best = [ids[0], ids[1]], bd = -1;
+      for (const a of ids) for (const b of ids) {
+        const d = V(a) && V(b) ? dist(V(a), V(b)) : 0;
+        if (d > bd) {
+          bd = d;
+          best = [a, b];
+        }
+      }
+      R.addExtra("line", best.map(pt2), st);
+    } else if (r.type === "concyclic") {
+      R.addExtra("circumcircle", r.ids.slice(0, 3).map(pt2), { ...st, center: { visible: false } });
+    } else if (r.type === "concurrent") {
+      const common = () => {
+        const [a, b, ...rest] = r.ids.map(V);
+        if (!a || !b) return null;
+        const roots = intersect(a, b);
+        let best = null, bd = Infinity;
+        for (const X of roots) {
+          const d = rest.reduce((s, c) => s + (c ? distToObject(c, X) : 1e9), 0);
+          if (d < bd) {
+            bd = d;
+            best = X;
+          }
+        }
+        return best;
+      };
+      R.addExtra("point", [() => common()?.x ?? NaN, () => common()?.y ?? NaN], { size: 7 * (app.projector ? 1.9 : 1), strokeColor: "#f59e0b", fillColor: "#fde68a", strokeWidth: 2 });
+    }
+    app.board.update();
+  }
+
   // src/ui/main.js
   function start() {
     const app = new App();
@@ -2436,6 +3259,8 @@
         app.zoomFit();
       };
     }
+    app.drawRelationOverlay = () => drawRelationOverlay(app);
+    setupExplore(app);
     document.getElementById("btn-share").onclick = () => shareLink(app);
     document.getElementById("btn-save").onclick = () => saveFile(app);
     document.getElementById("btn-open").onclick = () => openFile(app);
@@ -2460,7 +3285,7 @@
       title.value = app.doc.title || "";
     });
     window.__app = app;
-    window.GeoCore = { ...core_exports, Builder, EXAMPLES, codec: codec_exports };
+    window.GeoCore = { ...core_exports, Builder, EXAMPLES, codec: codec_exports, explore };
     return app;
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
