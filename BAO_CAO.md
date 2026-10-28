@@ -333,8 +333,8 @@ Làm theo mốc, mỗi mốc một commit trên nhánh riêng.
   liệu con tối thiểu** (bao đóng phụ thuộc) → lọc "hiển nhiên" → **bộ quét đầy đủ** trên 12 cấu hình ngẫu nhiên MỚI
   của tài liệu con (đúng thuật toán bản JS, loại suy biến) – chỉ giữ quan hệ có chứa đối tượng mới nhất.
 * **Loại quan hệ hiển nhiên** (`KnowledgePlus`): luật của bản JS + Thales (hai góc vuông theo cách dựng nhìn cùng một
-  đoạn → đồng viên), đường trung bình, phép vị tự (trung điểm/đối xứng với cùng một tâm), và **các sự kiện đã tìm
-  được** (vd khi đã biết O, G, H, N thẳng hàng thì điểm dựng từ hai điểm trên đường Euler không còn "mới").
+  đoạn → đồng viên), tâm ngoại tiếp tam giác vuông nằm trên cạnh huyền, IT ⊥ cạnh với T là tiếp điểm, đường trung
+  bình, phép vị tự (trung điểm/đối xứng với cùng một tâm), và **các sự kiện đã tìm được** (vd khi đã biết O, G, H, N thẳng hàng thì điểm dựng từ hai điểm trên đường Euler không còn "mới").
 * **Trạm**: đầu mỗi vòng, chọn ngẫu nhiên vài sự kiện điểm cao (ưu tiên sự kiện được khen); bước dựng ra đối tượng
   mới nhất của chúng được thêm vào cấu hình gốc của vòng (tính là lớp 0) → vòng sau đào sâu quanh chúng.
 
@@ -383,6 +383,23 @@ sau: Δw = 0,15 × Σ(±1 × đặc trưng) (kẹp), sự kiện bị chê khôn
 * `test_chay` – chạy 36 giây, giả lập bị tắt rồi **chạy tiếp đúng lần chạy dở**, sinh báo cáo có link giải mã được,
   học trọng số từ phản hồi.
 * CI: thêm job "Phòng thí nghiệm (Python)" (Python 3.12 + Newclid 2.0.2) vào `.github/workflows/test.yml`.
+
+### Kết quả chạy thử (máy phát triển Linux, 4 nhân, 2 tiến trình Newclid)
+
+Lần chạy 20 phút (`python -m lab chay --phut 20`, sau các bản sửa): 17 vòng, 44 042 ứng viên quan hệ → 16 211 bị
+loại vì hiển nhiên, 8 311 đã gặp, chỉ 336 không qua được kiểm chứng đầy đủ, **19 858 sự kiện** xác nhận (giữ 4 000
+điểm cao nhất). Newclid kiểm 136 sự kiện điểm cao nhất (~7 sự kiện/phút): 55 tầm thường, 12 một phần, **63 ứng viên
+sâu** (14 bão hoà không chứng minh được, 49 hết giờ), 6 lỗi/chưa dịch được. Vài sự kiện đứng đầu:
+
+* Cho tam giác ABC nội tiếp (O), tâm nội tiếp I, S_b là điểm chính giữa cung CA không chứa B. Gọi P là trực tâm tam
+  giác BOI. Chứng minh rằng O, I, S_b, P cùng nằm trên một đường tròn. *(Newclid: không chứng minh được)*
+* … E là chân đường cao kẻ từ B, P là tâm nội tiếp tam giác BEO. Chứng minh B, I, S_b, P thẳng hàng. *(không chứng
+  minh được – thực ra là "hai tâm nội tiếp cùng nằm trên một phân giác", xem hạn chế bên dưới)*
+* … D chân đường cao từ A, M_c trung điểm AB, P là trực tâm tam giác HDM_c. Chứng minh A, H, M_c, P đồng viên.
+* … P là trung điểm S_bI. Chứng minh O, I, M_b, P đồng viên.
+
+Lần chạy liền 30 phút trước khi sửa lỗi trạm cũng chạy trọn không lỗi (18 vòng, Newclid kiểm 187 sự kiện).
+Toàn bộ test (23 test) đạt: `python -m unittest discover -s lab/tests -t .` (~3 phút).
 
 ### Phong cách hình
 

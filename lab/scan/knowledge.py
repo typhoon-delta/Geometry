@@ -309,6 +309,7 @@ class KnowledgePlus(Knowledge):
     """Kiến thức hiển nhiên MỞ RỘNG cho phòng thí nghiệm (không có trong bản JS): coi thêm là "dễ suy ra"
       T1  (Thales) X nhìn PQ dưới góc vuông theo cách dựng (XP ⊥ XQ) → X thuộc đường tròn đường kính PQ;
       T2  (đường trung bình) M, N là trung điểm PQ, PR → MN ∥ QR;
+      T4  tâm đường tròn ngoại tiếp tam giác vuông (vuông theo cách dựng) nằm trên cạnh huyền;
       T3  (phép vị tự) các trung điểm XP (hoặc điểm đối xứng của X qua P) với cùng P là ảnh của X qua một phép
           vị tự tâm P → ảnh của các điểm thẳng hàng/đồng viên cũng thẳng hàng/đồng viên, ảnh song song với gốc;
       (phép đối xứng tâm M biến P thành P' được coi như M là trung điểm PP').
@@ -329,6 +330,12 @@ class KnowledgePlus(Knowledge):
             refs = [x for v in f.values() for x in v if isinstance(x, str)]
             if all(r in known_ids for r in refs):
                 self.add_fact(f)
+        # tiếp điểm của đường tròn nội tiếp: IT ⊥ cạnh (bản JS không khai báo vì I không phải đối số)
+        inc = {frozenset(x["args"]): x["id"] for x in doc["steps"] if x["type"] == "incenter"}
+        for x in doc["steps"]:
+            if x["type"] == "incircle_touch" and frozenset(x["args"]) in inc:
+                A, B, C = x["args"]
+                self.add_fact({"perp": [{"L": [inc[frozenset(x["args"])], x["id"]]}, {"L": [B, C]}]})
         mids = []  # (M, P, Q): M trung điểm PQ
         for s in doc["steps"]:
             if s["type"] == "midpoint":
@@ -346,6 +353,7 @@ class KnowledgePlus(Knowledge):
         self.saturate()
         self._thales()
         self.saturate()
+        self._right_circumcenter(doc, rep)
         groups = {}
         for s in doc["steps"]:
             t, a = s["type"], s["args"]
@@ -377,6 +385,36 @@ class KnowledgePlus(Knowledge):
                     src = [x for x in e["pts"] if x in m]
                     if len(src) >= 3:
                         self.add_fact({"cyc": [m[x] for x in src]})
+            self.saturate()
+
+    def _perp_idx(self, i, j):
+        ri, rj = self.dir.find(i), self.dir.find(j)
+        return any({self.dir.find(x), self.dir.find(y)} == {ri, rj} for x, y in self.perps)
+
+    def _right_circumcenter(self, doc, rep):
+        by = {s["id"]: s for s in doc["steps"]}
+        added = False
+        for s in doc["steps"]:
+            tri, center = None, None
+            if s["type"] == "circumcenter":
+                tri, center = s["args"], s["id"]
+            elif s["type"] == "center":
+                c = by.get(s["args"][0])
+                if c and c["type"] in ("circle_3pts", "circumcircle"):
+                    tri, center = c["args"], s["id"]
+            if not tri:
+                continue
+            t = [rep(x) for x in tri]
+            for k in range(3):
+                v, a, b = t[k], t[(k + 1) % 3], t[(k + 2) % 3]
+                if len({v, a, b}) < 3:
+                    continue
+                la = next((i for i, e in enumerate(self.lines) if e["alive"] and v in e["pts"] and a in e["pts"]), -1)
+                lb = next((i for i, e in enumerate(self.lines) if e["alive"] and v in e["pts"] and b in e["pts"]), -1)
+                if la >= 0 and lb >= 0 and self._perp_idx(la, lb):
+                    self.add_fact({"col": [rep(center), a, b]})
+                    added = True
+        if added:
             self.saturate()
 
     def _thales(self):
