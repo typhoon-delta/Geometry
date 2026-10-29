@@ -908,3 +908,15 @@ bảng lệnh "dtnt"/"duong tron ngoai" + Enter dựng ngay trên A, B, C, gán 
 vẽ đủ rộng).
 Dựng thử lại 23 bài qua giao diện: 23/23 đúng. `npm run test:perf`: ×1 6,67 ms/khung, ×4 31,6 ms, p95 16,7–16,8 ms – đạt
 ngưỡng, như trước (phím tắt không chạy gì khi kéo).
+
+## 4. Bổ sung sau góp ý: bấm vào chỗ cắt, phím tắt cho điểm đặc biệt
+
+* **Công cụ Chọn: bấm vào chỗ hai đường cắt nhau là có giao điểm** (như Sketchpad; `App.crossingAt`): trong bán kính 9 px
+  quanh chỗ cắt mà chưa có điểm. Rê chuột tới thì hiện trước một chấm xanh, con trỏ đổi, dòng gợi ý *"Bấm để lấy giao
+  điểm của d1 và d2"* – không bấm nhầm. Giữ `Shift` thì vẫn là chọn đường (chọn nhiều). Bấm lại chỗ đó thì chọn điểm vừa
+  có, không tạo trùng. (Công cụ Điểm và mọi công cụ cần chọn điểm vốn đã dùng giao điểm khi bấm vào chỗ cắt.)
+* **Phím tắt cho điểm đặc biệt**, theo quy tắc `Shift` + phím của đường tạo ra nó: `Ctrl+Shift+U` trực tâm, `Ctrl+Shift+B`
+  tâm nội tiếp, `Ctrl+Shift+G` trọng tâm, `Ctrl+Shift+O` đường tròn ngoại tiếp (kèm tâm O). Chọn sẵn ba đỉnh là dựng ngay.
+* Công cụ không dựng gì mới vì điểm đã có (trực tâm H có sẵn): chọn lại điểm đó, báo *Đã có sẵn trên hình: H*.
+* smoke8 thêm 5 kiểm tra (trực tâm có sẵn, Ctrl+M với đoạn đang chọn, rê chuột báo trước, bấm chỗ cắt ra giao điểm, bấm
+  lại không trùng). Dựng thử 23/23 đúng, số thao tác không đổi (1027); hiệu năng ×1 6,65 ms/khung.

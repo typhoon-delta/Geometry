@@ -101,6 +101,50 @@ export async function run({ page, ok, shot, errors }) {
   await page.evaluate(() => localStorage.removeItem('hinh-hoc-dong:phim-tat'));
   await page.keyboard.press('Escape');
 
+  // ---- điểm đặc biệt: Shift + phím của đường tạo ra nó ----
+  await page.evaluate(() => __app.setTool('move'));
+  await sel('A', 'B', 'C');
+  n = await count();
+  await page.keyboard.press('Control+Shift+U');
+  ok((await page.evaluate(() => __app.toolId)) === 'orthocenter' && (await count()) === n && (await page.evaluate(() => [...__app.selection].join())) === (await S('H')),
+    'chọn A, B, C rồi Ctrl+Shift+U (trực tâm): hình đã có H nên chọn lại H, không dựng trùng');
+  await page.keyboard.press('Escape');
+  await sel('d2');
+  n = await count();
+  await page.keyboard.press('Control+m');
+  ok((await count()) === n + 1 && (await page.evaluate(() => __app.doc.steps[__app.doc.steps.length - 1].type)) === 'midpoint', 'chọn đoạn BC rồi Ctrl+M: trung điểm');
+  await page.keyboard.press('Escape');
+
+  // ---- công cụ Chọn: bấm vào chỗ hai đường cắt nhau là có giao điểm ----
+  await page.evaluate(() => {
+    __app.newTab({ format: 'hinh-hoc-dong', version: 1, steps: [
+      { id: 'a', type: 'free_point', args: [], params: { x: -3, y: 0 }, name: 'A' }, { id: 'b', type: 'free_point', args: [], params: { x: 3, y: 0.5 }, name: 'B' },
+      { id: 'c', type: 'free_point', args: [], params: { x: -1, y: -3 }, name: 'C' }, { id: 'd', type: 'free_point', args: [], params: { x: 1, y: 3 }, name: 'D' },
+      { id: 'ab', type: 'segment', args: ['a', 'b'], name: 'd1' }, { id: 'cd', type: 'segment', args: ['c', 'd'], name: 'd2' },
+      { id: 'o', type: 'circle', args: ['a', 'c'], name: 'ω' }] });
+    __app.zoomFit();
+    __app.setTool('move');
+  });
+  const X = await page.evaluate(() => { // giao của AB và CD (dò số), bấm lệch 3 px như tay người
+    const r = __app.view.canvas.getBoundingClientRect();
+    let P = null;
+    for (let k = 0; k <= 200 && !P; k++) { const x = -1 + k * 0.01; const yab = (x + 3) / 12; const xcd = (yab + 3) / 3 - 1; if (Math.abs(xcd - x) < 0.006) P = { x, y: yab }; }
+    const q = __app.toScreen(P);
+    return { x: r.left + q.x + 3, y: r.top + q.y - 2 };
+  });
+  await page.mouse.move(X.x, X.y);
+  await page.waitForTimeout(120);
+  ok(/Bấm để lấy giao điểm của d1 và d2/.test(await page.evaluate(() => document.getElementById('hint').textContent)), 'rê chuột tới chỗ AB cắt CD: báo trước "Bấm để lấy giao điểm"');
+  n = await count();
+  await page.mouse.click(X.x, X.y);
+  const got = await page.evaluate(() => { const s = __app.doc.steps[__app.doc.steps.length - 1]; return { type: s.type, sel: __app.selection.has(s.id), args: s.args.join() }; });
+  ok((await count()) === n + 1 && got.type === 'intersection' && got.args === 'ab,cd' && got.sel, 'công cụ Chọn: bấm vào chỗ cắt → giao điểm, chọn sẵn để gõ tên');
+  await page.mouse.click(X.x, X.y);
+  ok((await count()) === n + 1, 'bấm lại chỗ đó: chọn điểm vừa có, không tạo trùng');
+  await page.evaluate(() => { __app.closeTab(__app.tabIdx); }); // không chờ: có thể đang hỏi xác nhận
+  await page.waitForTimeout(100);
+  if (await page.$('.modal-back')) await page.click('.modal .primary');
+
   // ---- \widehat, \overrightarrow ----
   await page.evaluate(() => __app.textBoxes.newBox('ghichu', { fx: 0.3, fy: 0.3, w: 420, text: '$\\widehat{BAC} = \\widehat{BHC}$ và\n$\\overrightarrow{AB} + \\overrightarrow{BC}$' }));
   await page.waitForTimeout(200);

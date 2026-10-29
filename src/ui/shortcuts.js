@@ -7,8 +7,8 @@ import { modal } from './dialog.js';
 
 const KEY = 'hinh-hoc-dong:phim-tat';
 
-// mặc định: chữ gợi nhớ (P point, G giao, M midpoint, D đoạn, L line, Q / Shift+O hình tròn, U ⊥, I ∥, J chân đường
-// vuông góc, B bisector, E đối xứng). Tránh các tổ hợp trình duyệt không cho trang chặn (Ctrl+N/T/W, Ctrl+Shift+Q…).
+// mặc định: chữ gợi nhớ (P point, G giao, M midpoint, D đoạn, L line, Q hình tròn, Shift+O đường tròn ngoại tiếp, U ⊥,
+// I ∥, J chân đường vuông góc, B bisector, E đối xứng; điểm đặc biệt = Shift + phím của đường tạo ra nó). Tránh các tổ hợp trình duyệt không cho trang chặn (Ctrl+N/T/W, Ctrl+Shift+Q…).
 export const DEFAULT_KEYS = {
   'Ctrl+P': 'point',
   'Ctrl+G': 'intersect',
@@ -17,7 +17,11 @@ export const DEFAULT_KEYS = {
   'Ctrl+L': 'line',
   'Ctrl+Shift+L': 'ray',
   'Ctrl+Q': 'circle',
-  'Ctrl+Shift+O': 'circle_3pts',
+  'Ctrl+Shift+O': 'circumcircle', // đường tròn ngoại tiếp + tâm O
+  // điểm đặc biệt: Shift + phím của đường tạo ra nó (giao 3 đường cao, 3 phân giác…)
+  'Ctrl+Shift+U': 'orthocenter',
+  'Ctrl+Shift+B': 'incenter',
+  'Ctrl+Shift+G': 'centroid',
   'Ctrl+U': 'perpendicular',
   'Ctrl+I': 'parallel',
   'Ctrl+J': 'projection',

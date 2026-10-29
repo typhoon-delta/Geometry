@@ -63,10 +63,25 @@ Trình duyệt khuyên dùng: Chrome, Edge, Firefox hoặc Safari bản mới.
 
 Chọn công cụ rồi bấm lên bảng vẽ; dòng gợi ý cho biết cần chọn gì tiếp.
 
-**Phím tắt công cụ (bản 1.6)** – khỏi mở menu: `Ctrl+P` điểm, `Ctrl+G` giao điểm, `Ctrl+M` trung điểm, `Ctrl+D` đoạn
-thẳng, `Ctrl+L` đường thẳng, `Ctrl+Shift+L` tia, `Ctrl+Q` đường tròn, `Ctrl+Shift+O` đường tròn qua 3 điểm, `Ctrl+U` đường
-vuông góc, `Ctrl+I` đường song song, `Ctrl+J` chân đường vuông góc (hình chiếu), `Ctrl+B` phân giác, `Ctrl+Shift+M` trung
-trực, `Ctrl+E` đối xứng. Phím tắt hiện cạnh tên công cụ trên thanh công cụ; **sửa hay thêm** phím cho bất kỳ công cụ nào
+**Lấy giao điểm**: với công cụ **Chọn** (mặc định), rê chuột tới chỗ hai đường cắt nhau mà chưa có điểm thì hiện một
+chấm xanh và dòng gợi ý *"Bấm để lấy giao điểm của …"* – bấm là có giao điểm, chọn sẵn để gõ tên luôn. Công cụ Điểm
+và mọi công cụ cần chọn điểm cũng vậy: bấm vào chỗ cắt là dùng giao điểm.
+
+**Phím tắt công cụ (bản 1.6)** – khỏi mở menu:
+
+| Phím | Công cụ | Phím | Công cụ |
+|---|---|---|---|
+| `Ctrl+G` | Giao điểm | `Ctrl+P` | Điểm |
+| `Ctrl+M` | Trung điểm (chọn sẵn một đoạn: dựng ngay) | `Ctrl+Shift+M` | Trung trực |
+| `Ctrl+U` | Đường vuông góc | `Ctrl+Shift+U` | Trực tâm |
+| `Ctrl+B` | Phân giác | `Ctrl+Shift+B` | Tâm nội tiếp |
+| `Ctrl+I` | Đường song song | `Ctrl+Shift+G` | Trọng tâm |
+| `Ctrl+J` | Chân đường vuông góc (hình chiếu) | `Ctrl+Shift+O` | Đường tròn ngoại tiếp (kèm tâm O) |
+| `Ctrl+D` | Đoạn thẳng | `Ctrl+Q` | Đường tròn (tâm, điểm) |
+| `Ctrl+L` / `Ctrl+Shift+L` | Đường thẳng / tia | `Ctrl+E` | Đối xứng |
+
+Điểm đặc biệt = `Shift` + phím của đường tạo ra nó (trực tâm – đường vuông góc, tâm nội tiếp – phân giác…). Gọi công cụ mà
+điểm cần dựng đã có (vd trực tâm H) thì chương trình chọn lại điểm đó và báo *Đã có sẵn*, không dựng trùng. Phím tắt hiện cạnh tên công cụ trên thanh công cụ; **sửa hay thêm** phím cho bất kỳ công cụ nào
 (kể cả công cụ trong menu *Công cụ*) ở *Sửa › Phím tắt…* (`Ctrl+/`).
 
 * **Chọn trước, dựng sau**: đang chọn sẵn đối tượng (công cụ Chọn, giữ `Shift` để chọn nhiều) thì phím tắt dựng ngay trên

@@ -497,6 +497,53 @@ export class App {
   }
 
   /** Lấy (hoặc tạo) một điểm tại vị trí bấm: điểm có sẵn / giao điểm / điểm trên đường / điểm tự do. */
+  /**
+   * Chỗ hai đường cắt nhau ngay dưới con trỏ mà CHƯA có điểm (bản 1.6): {a, b, P} hoặc null. Dùng cho công cụ Chọn:
+   * bấm vào chỗ cắt là có giao điểm (như Sketchpad), rê chuột tới thì hiện trước một dấu.
+   */
+  crossingAt(sx, sy, hits = this.hitTest(sx, sy), radius = 9) {
+    if (hits.some((h) => h.kind === 'point' && h.d < radius + 3)) return null;
+    const curves = hits.filter((h) => h.kind === 'line' || h.kind === 'circle').slice(0, 4);
+    if (curves.length < 2) return null;
+    const P = this.toUser(sx, sy);
+    const px = 1 / this.view.scale;
+    let best = null;
+    for (let i = 0; i < curves.length; i++)
+      for (let j = i + 1; j < curves.length; j++)
+        for (const r of G.intersect(this.values.get(curves[i].id), this.values.get(curves[j].id))) {
+          const d = G.dist(r, P) / px;
+          // a là đường dựng trước (gợi ý đọc "giao điểm của d1 và d2")
+          const [u, w] = (curves[i].order || 0) <= (curves[j].order || 0) ? [curves[i], curves[j]] : [curves[j], curves[i]];
+          if (d < radius && (!best || d < best.d)) best = { d, a: u.id, b: w.id, P: r };
+        }
+    if (!best) return null;
+    // đã có điểm trùng chỗ cắt (vd điểm bị ẩn nhãn, hay nằm ngoài vùng bấm điểm) → không tạo trùng
+    if (this.existingPointAt(best.P, 0.01)) return null;
+    return best;
+  }
+
+  /** Dấu báo trước "bấm để lấy giao điểm" khi rê chuột tới chỗ cắt (công cụ Chọn). */
+  showCrossMark(cross) {
+    const key = cross ? `${cross.a}|${cross.b}` : null;
+    if (key === this.crossKey) return;
+    this.clearCrossMark();
+    if (!cross) return;
+    this.crossKey = key;
+    const P = cross.P;
+    this.crossMark = this.renderer.addExtra({ type: 'point', pts: [() => P], style: { color: '#3150d6', fill: '#dfe6ff', size: 7 } });
+    const nm = (id) => stepById(this.doc, id)?.name || '';
+    this.showHint(`Bấm để lấy giao điểm của ${nm(cross.a)} và ${nm(cross.b)}`);
+  }
+
+  clearCrossMark() {
+    if (!this.crossMark) return;
+    this.renderer.extra = this.renderer.extra.filter((x) => x !== this.crossMark);
+    this.crossMark = null;
+    this.crossKey = null;
+    this.view.requestDraw();
+    this.showHint();
+  }
+
   resolvePoint(sx, sy, hits) {
     const pHit = hits.find((h) => h.kind === 'point');
     if (pHit) return pHit.id;
@@ -760,6 +807,11 @@ export class App {
     const k = kinds(this.doc);
     const pts = ids.filter((id) => k.get(id) === 'point' && !stepById(this.doc, id).hidden);
     this.selection = new Set(pts.length === 1 ? pts : ids.slice(0, 1));
+    // không dựng gì mới vì điểm cần dựng đã có (vd trực tâm H): chọn lại điểm đó và báo
+    if (!ids.length && specs.reused && specs.reused.length) {
+      this.selection = new Set([specs.reused[specs.reused.length - 1]]);
+      toast(`Đã có sẵn trên hình: ${this.name(specs.reused[specs.reused.length - 1])}`);
+    }
     this.finishTool();
   }
 
@@ -821,7 +873,10 @@ export class App {
         if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
         const hits = this.hitTest(sx, sy);
         let cursor = '';
-        if (this.toolId === 'move' || this.mode === 'present') {
+        const cross = this.toolId === 'move' && this.mode === 'edit' && !ev.shiftKey ? this.crossingAt(sx, sy, hits) : null;
+        this.showCrossMark(cross);
+        if (cross) cursor = 'copy';
+        else if (this.toolId === 'move' || this.mode === 'present') {
           const h = hits[0];
           if (h && h.kind === 'point' && isDraggableType(stepById(this.doc, h.id).type)) cursor = 'grab';
           else if (h && this.mode === 'edit') cursor = 'pointer';
@@ -936,6 +991,19 @@ export class App {
       e.preventDefault();
       this.startDrag(e, { kind: 'point', id: h.id, start: JSON.stringify(this.doc) });
       if (this.mode === 'edit') this.select(h.id, e.shiftKey, false);
+      return;
+    }
+    // bấm đúng chỗ hai đường cắt nhau (chưa có điểm): lấy giao điểm luôn, chọn sẵn để gõ tên
+    const cross = this.mode === 'edit' && !e.shiftKey ? this.crossingAt(sx, sy, hits) : null;
+    if (cross) {
+      e.stopPropagation();
+      e.preventDefault();
+      this.beginTx();
+      const ids = this.createIntersections(cross.a, cross.b, this.toUser(sx, sy));
+      this.endTx();
+      this.clearCrossMark();
+      this.selection = new Set(ids.length ? [ids[0]] : []);
+      this.afterChange();
       return;
     }
     if (h) {

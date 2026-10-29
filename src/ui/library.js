@@ -19,6 +19,7 @@ class Specs {
   constructor(ctx) {
     this.ctx = ctx;
     this.list = [];
+    this.reused = []; // điểm đã có trên hình được dùng lại (không dựng trùng)
     this.vals = new Map(); // '$k' → giá trị (để tính tiếp các bước sau và kiểm tra trùng)
   }
 
@@ -49,7 +50,7 @@ class Specs {
       // trùng một điểm vừa dựng trong cùng công cụ, hoặc một điểm đã có trên hình → dùng lại
       for (const [ref, w] of this.vals) if (w && w.kind === 'point' && G.dist(w, v) < 1e-9 * (1 + Math.hypot(v.x, v.y))) return ref;
       const ex = this.ctx.existingPointAt(v, 0.01);
-      if (ex) return ex;
+      if (ex) { this.reused.push(ex); return ex; }
     }
     return this.add(type, args, opts);
   }
@@ -75,6 +76,7 @@ const T = (menu, id, label, inputs, hints, make, extra = {}) => ({ id, label, me
 const run = (fn) => (picks, ctx) => {
   const S = new Specs(ctx);
   fn(S, picks, ctx);
+  S.list.reused = S.reused; // để công cụ chọn lại điểm đã có khi không dựng gì mới
   return S.list;
 };
 const poly = (S, pts) => pts.forEach((p, i) => S.seg(p, pts[(i + 1) % pts.length]));
