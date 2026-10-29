@@ -7,6 +7,7 @@ import * as core from '../core/index.js';
 import { initShare, shareLink, saveFile, saveAllFiles, openFile, restoreDialog } from './share.js';
 import { initDownloads, downloadTex } from './download.js';
 import { setupKho } from '../kho/ui.js';
+import { setupShortcuts } from './shortcuts.js';
 import * as codec from '../io/codec.js';
 import { setupExplore, drawRelationOverlay } from './explorePanel.js';
 import { explore } from '../explore/explorer.js';
@@ -88,6 +89,7 @@ function start() {
   setupImages(app);
   const tb = setupTextBoxes(app);
   const kho = setupKho(app);
+  setupShortcuts(app);
   const onClick = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   for (const role of ['loigiai', 'de', 'ghichu']) onClick('btn-box-' + role, () => { const id = role === 'loigiai' ? null : tb.newBox(role); if (id) { tb.render(); tb.edit(id); } else tb.editSolution(); });
   onClick('btn-rules', () => tb.editRules());

@@ -8,14 +8,14 @@ export const DEFAULT_AUTO = [
   ['iff', '\\Leftrightarrow '], ['<->', '\\leftrightarrow '], ['=>', '\\Rightarrow '], ['->', '\\to '],
   ['<=', '\\le '], ['>=', '\\ge '], ['!=', '\\ne '], ['~=', '\\cong '], ['~~', '\\sim '], ['+-', '\\pm '],
   ['^o', '^\\circ'], ['//', '\\parallel '], ['_|_', '\\perp '], ['...', '\\dots '], ['xx', '\\times '], ['**', '\\cdot '],
-  ['ff', '\\frac{${}}{${}}'], ['sqrt', '\\sqrt{${}}'], ['vec', '\\overrightarrow{${}}'], ['bar', '\\overline{${}}'],
+  ['ff', '\\frac{${}}{${}}'], ['sqrt', '\\sqrt{${}}'], ['vec', '\\overrightarrow{${}}'], ['bar', '\\overline{${}}'], ['hat', '\\widehat{${}}'],
   ['goc', '\\angle '], ['tgiac', '\\triangle '], ['inf', '\\infty '], ['sum', '\\sum_{${}}^{${}}'],
   ['al', '\\alpha '], ['be', '\\beta '], ['ga', '\\gamma '], ['de', '\\delta '], ['ph', '\\varphi '], ['om', '\\omega '], ['pi', '\\pi '],
 ];
 
 export const DEFAULT_SHORT = [
   [';g', '\\angle '], [';tg', '\\triangle '], [';ss', '\\parallel '], [';vg', '\\perp '], [';bn', '\\cong '], [';dd', '\\sim '],
-  [';fr', '\\frac{${}}{${}}'], [';vt', '\\overrightarrow{${}}'], [';cung', '\\overset{\\frown}{${}}'],
+  [';fr', '\\frac{${}}{${}}'], [';gh', '\\widehat{${}}'], [';vt', '\\overrightarrow{${}}'], [';cung', '\\overset{\\frown}{${}}'],
   [';dt', '$$\n${}\n$$'], [';he', '\\begin{cases} ${} \\\\ ${} \\end{cases}'], [';ho', '\\left[\\begin{array}{l} ${} \\\\ ${} \\end{array}\\right.'],
   [';cm', '**Chứng minh.** '], [';dpcm', '(đpcm)'], [';gs', 'Giả sử '], [';ta', 'Ta có '], [';suyra', 'Suy ra '], [';vay', 'Vậy '],
   [';tgnt', 'tứ giác nội tiếp'], [';dtnt', 'đường tròn ngoại tiếp'], [';buoc', '\n---\n'],

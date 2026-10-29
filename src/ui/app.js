@@ -16,6 +16,7 @@ import { renderStepList, renderProps, renderToolOptions } from './panels.js';
 import { renameInText } from '../text/markup.js';
 import { tabDirty, tabDoc, isEmptyDoc } from './share.js';
 import { downloadFile } from './download.js';
+import { keyOf } from './shortcuts.js';
 
 const HISTORY_MAX = 200;
 
@@ -578,6 +579,55 @@ export class App {
     renderProps(this);
   }
 
+  /**
+   * Gọi công cụ bằng phím tắt / bảng lệnh (bản 1.6). Đang chọn sẵn các đối tượng hợp với công cụ thì DỰNG NGAY trên
+   * chúng (chọn trước, dựng sau – như Sketchpad); chọn mới đủ một phần thì dùng làm các lần chọn đầu.
+   */
+  activateTool(id) {
+    const sel = [...this.selection].filter((x) => stepById(this.doc, x));
+    this.setTool(id);
+    const tool = TOOL_BY_ID[id];
+    if (!sel.length || !tool || this.mode !== 'edit') return;
+    const k = kinds(this.doc);
+    if (tool.id === 'point') return;
+    if (tool.id === 'intersect') {
+      const cs = sel.filter((x) => k.get(x) === 'line' || k.get(x) === 'circle');
+      if (cs.length !== 2 || sel.length !== 2) return;
+      this.beginTx();
+      const n0 = this.doc.steps.length;
+      this.createIntersections(cs[0], cs[1], null);
+      this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
+      return this.finishTool();
+    }
+    if (tool.segmentShortcut && sel.length === 1 && stepById(this.doc, sel[0]).type === 'segment') {
+      this.beginTx();
+      this.picks = [...stepById(this.doc, sel[0]).args];
+      return this.completeTool(tool);
+    }
+    if (tool.inputs[0] === '...point') {
+      const pts = sel.filter((x) => k.get(x) === 'point');
+      if (pts.length < 3 || pts.length !== sel.length) return;
+      this.beginTx();
+      this.picks = pts;
+      return this.completeTool(tool);
+    }
+    // ghép theo kiểu đối tượng, giữ thứ tự đã chọn; chọn thừa hoặc không hợp thì thôi (dùng công cụ như thường)
+    const rest = [...sel], picks = [];
+    for (const t of tool.inputs) {
+      const j = rest.findIndex((x) => argAccepts(t, k.get(x)));
+      if (j < 0) break;
+      picks.push(rest.splice(j, 1)[0]);
+    }
+    if (rest.length || !picks.length) return;
+    this.beginTx();
+    this.picks = picks;
+    if (picks.length === tool.inputs.length) return this.completeTool(tool);
+    this.selection = new Set(picks);
+    this.refresh();
+    this.startPreview(tool);
+    this.showHint();
+  }
+
   cancelTool() {
     this.picks = [];
     this.renderer?.clearExtra();
@@ -844,6 +894,20 @@ export class App {
     if (sx < 0 || sy < 0 || sx > this.view.W || sy > this.view.H) return;
     if (this.panning) { this.startPan(e); return; } // ngón thứ hai: chụm để phóng
     this.mouse = this.toUser(sx, sy);
+
+    // Alt + bấm: ẩn ngay đối tượng được bấm (đường phụ sau khi đã lấy giao điểm…), công cụ nào cũng được
+    if (e.altKey && this.mode === 'edit' && !this.picks.length) {
+      const h = this.hitTest(sx, sy)[0];
+      if (h) {
+        e.stopPropagation();
+        e.preventDefault();
+        const s = stepById(this.doc, h.id);
+        this.selection.delete(h.id);
+        this.setStepProp(h.id, 'hidden', true);
+        toast(`Đã ẩn ${s.name || 'đối tượng'} – Ctrl+Z để hiện lại`);
+        return;
+      }
+    }
 
     if (this.toolId !== 'move' && this.mode === 'edit') {
       e.stopPropagation();
@@ -1324,7 +1388,8 @@ export class App {
         const many = g.tools.length > 1 || g.menu;
         const btn = (id) => {
           const t = TOOL_BY_ID[id];
-          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t.label)}"><span class="ti">${t.icon}</span><span class="tl">${escapeHTML(t.label)}</span></button>`;
+          const kb = keyOf(id);
+          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t.label)}${kb ? ` (${kb})` : ''}"><span class="ti">${t.icon}</span><span class="tl">${escapeHTML(t.label)}</span>${kb ? `<kbd>${kb}</kbd>` : ''}</button>`;
         };
         // nhóm có menu con (thư viện "Công cụ"): mỗi mục menu mở ra danh sách công cụ bên phải
         const items = g.submenus

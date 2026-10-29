@@ -854,3 +854,57 @@ Chi tiết cài đặt, cách dùng, cấu trúc repo: [`docs/KHO_BAI.md`](docs/
 * Token nằm trong trình duyệt của máy (chỉ nên dùng máy riêng); token hết hạn thì tạo token mới và dán lại.
 * Trang artifact của claude.ai chặn gọi GitHub – kho chỉ dùng được trên GitHub Pages hoặc khi mở `index.html` trên máy.
 * Chưa có phần cho học sinh (đã hoãn theo yêu cầu); kho thiết kế sẵn để sau này làm một trang chỉ đọc đề và hình.
+
+# Bản 1.6 – Bớt thao tác: phím tắt công cụ, chọn trước dựng sau; LaTeX chuẩn
+
+Góp ý sau khi dùng: "ít phím tắt, mấy cái dùng nhiều cứ phải bấm 2–3 lần mới tới". Việc làm nhiều nhất: **lấy giao
+điểm, vuông góc, song song… rồi ẩn đường**. Thứ hai: **mã LaTeX thiếu, compile ra không chuẩn** (`\overrightarrow`,
+`\widehat`). Thầy/cô muốn phím tắt có `Ctrl`.
+
+## 1. Phím tắt và bớt số lần bấm
+
+Trước bản này không có phím tắt nào cho công cụ dựng hình; giao điểm, vuông góc, song song cần 2 lần bấm (mở nhóm, chọn
+công cụ), các công cụ trong menu *Công cụ* cần 3.
+
+* **Ctrl + chữ** cho 14 công cụ cơ bản (`src/ui/shortcuts.js`): `Ctrl+P` điểm, `G` giao điểm, `M` trung điểm, `D` đoạn,
+  `L` đường thẳng, `Shift+L` tia, `Q` đường tròn, `Shift+O` đường tròn qua 3 điểm, `U` vuông góc, `I` song song (∥),
+  `J` chân đường vuông góc, `B` phân giác, `Shift+M` trung trực, `E` đối xứng. Không dùng phím một chữ vì chữ đang dùng
+  để gõ tên điểm vừa dựng. Tránh các tổ hợp trình duyệt không cho trang chặn (`Ctrl+N/T/W`, `Ctrl+Shift+Q` – thoát
+  Chrome trên Windows) và các phím đã dùng (`Ctrl+S/O/K/H/Z/Y/C/V/X/A`…).
+* **Sửa được** (`Ctrl+/`, *Sửa › Phím tắt…*): gán phím cho bất kỳ công cụ nào (cả công cụ trong menu *Công cụ*, công cụ tự
+  tạo), bỏ phím, về mặc định; chặn tổ hợp đã dùng; lưu trong trình duyệt. Phím hiện cạnh tên công cụ trên thanh công cụ.
+* **Chọn trước, dựng sau** (`App.activateTool`): có đối tượng đang chọn hợp với công cụ thì dựng ngay (hai đường +
+  `Ctrl+G`; điểm + đường + `Ctrl+U/I/J`; một đoạn + trung điểm/trung trực; ba đỉnh + tâm nội tiếp…); chọn mới đủ một phần
+  thì thành các lần chọn đầu.
+* **Tìm công cụ theo tên** (`Space`): không dấu, khớp đầu từ hoặc chữ đầu (`dtnt` → đường tròn nội tiếp), công cụ vừa
+  dùng lên trước; `Enter` dùng ngay (cũng áp "chọn trước, dựng sau").
+* **Alt + bấm** vào đối tượng: ẩn ngay (một thao tác thay cho chọn rồi `Ctrl+H`).
+* Ví dụ "hạ đường cao từ A xuống BC rồi ẩn": trước kia mở nhóm *Dựng* → *Đường vuông góc* → bấm A → bấm BC → mở nhóm
+  *Điểm* → *Giao điểm* → bấm chỗ cắt → chọn đường → tích *Ẩn* (≈ 9 thao tác); nay chọn A, BC rồi `Ctrl+J` (chân đường vuông
+  góc, không cần đường phụ) – 3 thao tác.
+
+## 2. LaTeX
+
+* **Lỗi `\widehat`, `\overrightarrow` hiển thị sai** (mũ chỉ trùm chữ cuối, mũi tên mất đầu): khi đổi xuống dòng thành
+  `<br>`, chương trình đổi cả ký tự xuống dòng trong dữ liệu SVG của KaTeX (dấu mũ, mũi tên là hình SVG). Nay chỉ đổi trong
+  chữ thường. Test kiểm tra không có `<br>` trong SVG và độ rộng thật của dấu mũ trên trang.
+* **Viết như trong tệp .tex**: `\(…\)`, `\begin{align*}` (và `equation*`, `gather*`…) ngoài `$`, `\textbf`, `\emph`,
+  `\underline`, `\\`, `~`, `--`, `\begin{itemize}/{enumerate}` + `\item`, `\%`… – trước đây hiện nguyên chữ thô.
+* **Xuất .tex compile được**: trước đây mọi `\` trong chữ bị đổi thành `\textbackslash{}` và xuống dòng trong `$$…$$` bị
+  chèn `\\`. Nay chữ được giữ nguyên là LaTeX (chỉ thoát `%`, `&`, `#`, `_`, `^` chưa có `\` để "50%" vẫn đúng), không
+  chèn `\\` vào công thức hay quanh `\begin`, `\item`; lời mở đầu thêm `\ssong`, `\vgoc`, `\wideparen` (dự phòng).
+  Test mới **biên dịch thật bằng pdflatex** phiếu một bài và phiếu cả buổi có `\widehat`, `\overrightarrow`,
+  `\wideparen`, `align*`, `itemize`, `\backsim`, `\measuredangle`, `\nparallel`, tiếng Việt (máy phát triển đã cài
+  TeX Live + vntex).
+* Gợi ý lệnh khi gõ `\` thêm ~40 lệnh (`widehat`, `overrightarrow`, `wideparen`, `measuredangle`, `backsim`, `textbf`,
+  `begin{align*}`…), lệnh có `{}` đặt con trỏ vào trong ngoặc. Tự đổi `hat` → `\widehat{}`; gõ tắt `;gh`.
+
+## 3. Kiểm thử
+
+`npm test` 146 test (thêm 4 test chữ/LaTeX, trong đó 1 test biên dịch bằng pdflatex; test TikZ biên dịch bằng pdflatex
+trước đây bị bỏ qua nay chạy được); `npm run test:browser` đạt, thêm `tests/browser/smoke8.mjs` (19 kiểm tra: phím tắt,
+chọn trước dựng sau với giao điểm/vuông góc/chân đường vuông góc/song song/chọn một phần, Alt + bấm ẩn và Ctrl+Z,
+bảng lệnh "dtnt"/"duong tron ngoai" + Enter dựng ngay trên A, B, C, gán phím mới và chặn phím đã dùng, dấu mũ/mũi tên
+vẽ đủ rộng).
+Dựng thử lại 23 bài qua giao diện: 23/23 đúng. `npm run test:perf`: ×1 6,67 ms/khung, ×4 31,6 ms, p95 16,7–16,8 ms – đạt
+ngưỡng, như trước (phím tắt không chạy gì khi kéo).

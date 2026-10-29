@@ -426,6 +426,7 @@ body code, body .modal-text, body .tb-editor .cm-editor, body .cm-tooltip { font
 .k-dk button { padding: 0 3px; font-size: 17px; color: var(--line-2); }
 .k-dk button.on { color: #e0922f; }
 .k-msg { color: var(--danger); min-height: 1em; }
+.k-msg.ok { color: var(--ok); }
 .kho-help ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 5px; }
 .kho-help a { color: var(--accent); }
 .modal input[type=text], .modal input[type=password], .modal input[type=date], .modal input[type=search] { border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 5px 8px; flex: 1; min-width: 0; }
@@ -507,3 +508,30 @@ body code, body .modal-text, body .tb-editor .cm-editor, body .cm-tooltip { font
 .i-row input[type=text] { flex: 1; }
 .i-row .note { margin: 0; white-space: nowrap; }
 @media (max-width: 800px) { .kw-filter { display: none; } .kb-row { flex-direction: column; } .kb-act { max-width: none; justify-content: flex-start; } }
+
+/* ---------- phím tắt, bảng lệnh (bản 1.6) ---------- */
+.tool kbd { margin-left: auto; padding-left: 5px; }
+.modal.palette { width: min(620px, 94vw); padding: 10px; align-self: flex-start; margin-top: 12vh; }
+.pal-q { width: 100%; font-size: 16px !important; padding: 9px 12px !important; border-radius: 9px !important; border: 1px solid var(--line-2); }
+.pal-list { display: flex; flex-direction: column; gap: 1px; margin: 8px 0 4px; max-height: 52vh; overflow-y: auto; }
+.pal-row { display: flex; align-items: center; gap: 10px; text-align: left; padding: 7px 10px; border-radius: 8px; }
+.pal-row.on, .pal-row.on:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-2); }
+.pal-ti { width: 24px; text-align: center; font: italic 600 14px var(--serif); color: var(--muted); flex: none; }
+.pal-l { font-size: 14px; }
+.pal-g { font-size: 11.5px; color: var(--faint); margin-left: 4px; }
+.pal-row kbd { margin-left: auto; }
+.pal-foot { font-size: 11.5px; color: var(--faint); padding: 4px 4px 0; }
+.keys-win .keys-q { width: 100%; margin-bottom: 8px; }
+.keys-list { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--line); border-radius: var(--r); padding: 4px; }
+.key-row { display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 10px; border-radius: 6px; }
+.key-row:hover { background: var(--chrome); }
+.kr-l { font-size: 13px; }
+.kr-g { font-size: 11px; color: var(--faint); flex: 1; }
+.kr-k { min-width: 120px; text-align: center; font: 500 12px var(--mono); border: 1px solid var(--line-2); background: var(--paper); padding: 3px 8px; }
+.kr-k i { color: var(--faint); font-style: normal; }
+.kr-k.wait { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.keys-fixed { margin-top: 10px; font-size: 13px; }
+.keys-fixed summary { cursor: pointer; color: var(--muted); }
+.keys-grid { display: grid; grid-template-columns: max-content 1fr; gap: 5px 12px; margin-top: 8px; align-items: center; }
+.keys-grid kbd { margin: 0; justify-self: start; }
+.tb-body .tb-h { display: block; margin: .2em 0; }

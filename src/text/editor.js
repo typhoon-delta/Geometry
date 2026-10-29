@@ -10,11 +10,14 @@ import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { autocompletion, snippet, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
 import { inMath, matchAuto, matchShort } from './snippets.js';
 
-const COMMANDS = ['angle', 'triangle', 'parallel', 'perp', 'cong', 'sim', 'frac', 'dfrac', 'sqrt', 'overline', 'overrightarrow', 'overset{\\frown}',
-  'circ', 'cdot', 'times', 'le', 'ge', 'ne', 'Rightarrow', 'Leftrightarrow', 'iff', 'implies', 'in', 'notin', 'cap', 'cup', 'subset', 'equiv',
-  'alpha', 'beta', 'gamma', 'delta', 'varphi', 'omega', 'Omega', 'pi', 'theta', 'lambda', 'mu', 'sin', 'cos', 'tan', 'cot', 'log', 'ln',
-  'text{}', 'left(', 'right)', 'begin{cases}', 'end{cases}', 'begin{aligned}', 'end{aligned}', 'quad', 'qquad', 'dots', 'cdots', 'infty', 'pm',
-  'goc', 'tamgiac', 'cung{}', 'vecto{}'];
+const COMMANDS = ['angle', 'widehat{}', 'overrightarrow{}', 'vec{}', 'overline{}', 'wideparen{}', 'overset{\\frown}{}', 'triangle', 'vartriangle', 'measuredangle',
+  'parallel', 'nparallel', 'perp', 'cong', 'sim', 'backsim', 'equiv', 'odot', 'circ', 'cdot', 'times', 'pm', 'le', 'ge', 'ne', 'approx',
+  'frac{}{}', 'dfrac{}{}', 'sqrt{}', 'Rightarrow', 'Leftarrow', 'Leftrightarrow', 'iff', 'implies', 'mapsto', 'to', 'longrightarrow',
+  'in', 'notin', 'cap', 'cup', 'subset', 'emptyset', 'therefore', 'because', 'infty', 'dots', 'cdots', 'quad', 'qquad',
+  'alpha', 'beta', 'gamma', 'delta', 'varphi', 'omega', 'Omega', 'pi', 'theta', 'lambda', 'mu', 'Delta', 'sin', 'cos', 'tan', 'cot', 'log', 'ln',
+  'text{}', 'textbf{}', 'textit{}', 'emph{}', 'underline{}', 'boxed{}', 'left(', 'right)', 'left[', 'right]', 'overbrace{}', 'underbrace{}',
+  'begin{cases}', 'end{cases}', 'begin{aligned}', 'end{aligned}', 'begin{align*}', 'end{align*}', 'begin{itemize}', 'begin{enumerate}', 'item', 'end{itemize}', 'end{enumerate}',
+  'goc', 'tamgiac', 'cung{}', 'vecto{}', 'ssong', 'vgoc'];
 
 /**
  * Tạo bộ soạn trong `parent`. opts: {text, rules: () => {auto, short}, names: () => [tên điểm], onChange(text), onDone(save)}.
@@ -73,7 +76,9 @@ export function createEditor(parent, opts) {
   const complete = (ctx) => {
     const b = before(ctx.state, ctx.pos);
     const cmd = /\\([A-Za-z]*)$/.exec(b);
-    if (cmd) return { from: ctx.pos - cmd[1].length, options: COMMANDS.map((c) => ({ label: c, type: 'keyword', apply: c })), validFor: /^[A-Za-z]*$/ };
+    // lệnh có {}: con trỏ vào trong ngoặc (Tab sang ngoặc sau)
+    const opt = (c) => ({ label: c, type: 'keyword', apply: c.includes('{}') ? (view, _c, from, to) => snippet(c.replace(/\{\}/g, '{${}}'))(view, null, from, to) : c });
+    if (cmd) return { from: ctx.pos - cmd[1].length, options: COMMANDS.map(opt), validFor: /^[A-Za-z]*$/ };
     if (!inMath(b)) return null;
     // tên điểm: chỉ gợi ý khi gọi (Ctrl+Space) hoặc đang gõ tên có chỉ số (I_…) – gõ nhanh "BAC" không bị bảng gợi ý chặn Enter
     const w = /[A-Z][A-Za-z0-9_{}']*$/.exec(b);

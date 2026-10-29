@@ -61,7 +61,20 @@ Trình duyệt khuyên dùng: Chrome, Edge, Firefox hoặc Safari bản mới.
 
 ### Dựng hình
 
-Chọn công cụ rồi bấm lên bảng vẽ; thanh trạng thái cho biết cần chọn gì tiếp.
+Chọn công cụ rồi bấm lên bảng vẽ; dòng gợi ý cho biết cần chọn gì tiếp.
+
+**Phím tắt công cụ (bản 1.6)** – khỏi mở menu: `Ctrl+P` điểm, `Ctrl+G` giao điểm, `Ctrl+M` trung điểm, `Ctrl+D` đoạn
+thẳng, `Ctrl+L` đường thẳng, `Ctrl+Shift+L` tia, `Ctrl+Q` đường tròn, `Ctrl+Shift+O` đường tròn qua 3 điểm, `Ctrl+U` đường
+vuông góc, `Ctrl+I` đường song song, `Ctrl+J` chân đường vuông góc (hình chiếu), `Ctrl+B` phân giác, `Ctrl+Shift+M` trung
+trực, `Ctrl+E` đối xứng. Phím tắt hiện cạnh tên công cụ trên thanh công cụ; **sửa hay thêm** phím cho bất kỳ công cụ nào
+(kể cả công cụ trong menu *Công cụ*) ở *Sửa › Phím tắt…* (`Ctrl+/`).
+
+* **Chọn trước, dựng sau**: đang chọn sẵn đối tượng (công cụ Chọn, giữ `Shift` để chọn nhiều) thì phím tắt dựng ngay trên
+  chúng – chọn hai đường rồi `Ctrl+G` là có giao điểm; chọn điểm và đường rồi `Ctrl+U` / `Ctrl+I` / `Ctrl+J`; chọn ba
+  đỉnh rồi gọi *Tâm nội tiếp*. Chọn mới đủ một phần thì đó là các lần chọn đầu, bấm nốt phần còn lại.
+* **Tìm công cụ theo tên** (`Space`): gõ vài chữ không dấu – `giao`, `vuong goc`, `duong tron ngoai`, hay chữ đầu `dtnt`
+  (đường tròn nội tiếp) – rồi `Enter`. Tìm được mọi công cụ, kể cả công cụ tự tạo.
+* **Alt + bấm** vào một đối tượng: ẩn ngay (vd đường phụ sau khi đã lấy giao điểm). `Ctrl+Z` để hiện lại.
 
 * **Bấm vào chỗ trống** khi công cụ cần một điểm: tạo **điểm tự do**. Giữ **`Shift`** khi bấm thì hướng từ điểm vừa
   chọn tới điểm mới được bắt về bội số của 15° – vd dựng tam giác: chọn B, giữ Shift chọn C → cạnh BC nằm ngang
@@ -191,14 +204,17 @@ hình), **gắn điểm** (bám theo điểm gần nhất, vd ghi chú cạnh đ
 * **Lời giải**: `Ctrl+Enter` mở khung lời giải (tạo ở cột phải nếu chưa có) và đặt con trỏ ở cuối để gõ tiếp.
 * **Ghi chú**: *Chèn › Khung ghi chú*.
 
-Nháy đúp vào nội dung khung để soạn: bên trên là bộ soạn, bên dưới là bản xem trước cập nhật khi gõ. Cú pháp gần với
-LaTeX/markdown: `$…$` công thức trong dòng, `$$…$$` công thức riêng dòng, `**đậm**`, `*nghiêng*`, dòng bắt đầu `- `
-là gạch đầu dòng, `1. ` là đánh số. Có sẵn `\goc`, `\tamgiac`, `\cung{AB}`, `\vecto{AB}`. Đang soạn mà dán ảnh thì ảnh
-chèn vào chữ.
+Nháy đúp vào nội dung khung để soạn: bên trên là bộ soạn, bên dưới là bản xem trước cập nhật khi gõ. Viết như trong
+tệp `.tex` (bản 1.6): `$…$` hoặc `\(…\)` công thức trong dòng; `$$…$$`, `\[…\]` hoặc `\begin{align*}…\end{align*}` (cả
+`equation*`, `gather*`…) công thức riêng dòng; `\textbf{…}`, `\emph{…}`, `\underline{…}`, `\\` xuống dòng, `~`, `--`,
+`\begin{itemize}`/`\begin{enumerate}` với `\item`. Kiểu markdown cũng được: `**đậm**`, `*nghiêng*`, dòng bắt đầu `- ` là gạch
+đầu dòng, `1. ` là đánh số. Mọi lệnh công thức thường dùng: `\widehat{ABC}`, `\overrightarrow{AB}`, `\wideparen{AB}`,
+`\measuredangle`, `\backsim`, `\nparallel`, `\odot`…; có sẵn `\goc`, `\tamgiac`, `\cung{AB}`, `\vecto{AB}`. Đang soạn mà dán
+ảnh thì ảnh chèn vào chữ.
 
 **Gõ nhanh** (sửa được ở *Chèn › Gõ tắt và tự đổi…*):
 
-* *Tự đổi trong công thức* – gõ xong là đổi, không cần phím nào: `goc` → `\angle`, `tgiac` → `\triangle`, `^o` → `^\circ`,
+* *Tự đổi trong công thức* – gõ xong là đổi, không cần phím nào: `goc` → `\angle`, `hat` → `\widehat{}`, `vec` → `\overrightarrow{}`, `tgiac` → `\triangle`, `^o` → `^\circ`,
   `<=` `>=` `!=` → ≤ ≥ ≠, `=>` → ⇒, `iff` → ⇔, `//` → ∥, `_|_` → ⊥, `~=` → ≅, `~~` → ∼, `ff` → `\frac{}{}`,
   `sqrt`, `vec`, `bar`, chữ Hy Lạp `al be ga de ph om pi`…
 * *Gõ tắt* – gõ rồi nhấn `Tab` (ở đâu cũng được): `;g` ∠, `;tg` △, `;ss` ∥, `;vg` ⊥, `;fr` phân số, `;he` hệ, `;ho`
@@ -259,6 +275,10 @@ LaTeX. Chỉ cần `\usepackage{tikz}`. Đổi kích thước bằng cách sửa
 | Phím | Tác dụng |
 |---|---|
 | `Ctrl+Z` / `Ctrl+Y` | Hoàn tác / làm lại |
+| `Ctrl` + chữ | Gọi công cụ (xem *Dựng hình*; sửa ở `Ctrl+/`), dựng ngay trên các đối tượng đang chọn nếu hợp |
+| `Space` | Tìm công cụ theo tên |
+| `Alt` + bấm | Ẩn ngay đối tượng được bấm |
+| `Ctrl+/` | Bảng phím tắt (xem và sửa) |
 | gõ chữ / `F2` | Đặt tên điểm đang chọn (vd điểm vừa dựng) |
 | `Ctrl+V` | Dán ảnh: thành khung Đề bài (đang soạn chữ: chèn vào chữ) |
 | `Alt+1`…`Alt+9`, `Alt+PageUp`/`PageDown` | Sang tab hình thứ n / tab trước, tab sau |
