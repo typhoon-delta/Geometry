@@ -152,6 +152,14 @@ export async function run({ page, ok, shot, state, clickAt, errors }) {
   await page.keyboard.press('Control+z');
   ok((await nt()).endsWith('$H$') && (await page.evaluate(() => __app.doc.steps.some((x) => x.name === 'H'))), 'một lần hoàn tác trả lại cả tên điểm lẫn chữ');
 
+  // ---- Ctrl+H ẩn đối tượng đang chọn, Ctrl+Shift+H hiện lại ----
+  await page.mouse.click(300, 700);
+  const lid = await page.evaluate(() => { const s = __app.doc.steps.find((x) => x.type === 'segment'); __app.select(s.id); return s.id; });
+  await page.keyboard.press('Control+h');
+  ok(await page.evaluate((id) => __app.doc.steps.find((x) => x.id === id).hidden === true && __app.selection.size === 0, lid), 'Ctrl+H ẩn đường đang chọn');
+  await page.keyboard.press('Control+Shift+h');
+  ok(await page.evaluate(() => !__app.doc.steps.some((x) => x.hidden)), 'Ctrl+Shift+H hiện lại mọi đối tượng đã ẩn');
+
   // ---- chuyển tab bằng bàn phím ----
   await page.mouse.click(300, 700);
   const n = await page.evaluate(() => __app.tabs.length);

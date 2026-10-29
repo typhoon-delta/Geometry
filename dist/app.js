@@ -19067,6 +19067,26 @@
       if (other) toast(`\u0110\xE3 \u0111\u1ED5i ch\u1ED7 t\xEAn: ${name2} \u2194 ${old}`);
       return true;
     }
+    /** Ctrl+H: ẩn các đối tượng đang chọn (vẫn tính, vẫn dùng để dựng tiếp; hiện lại ở menu Sửa hoặc bảng các bước). */
+    hideSelected() {
+      const ids = [...this.selection].filter((id) => stepById(this.doc, id));
+      if (!ids.length) return toast("Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n \u1EA9n tr\u01B0\u1EDBc (c\xF4ng c\u1EE5 Ch\u1ECDn, b\u1EA5m v\xE0o \u0111\u1ED1i t\u01B0\u1EE3ng; gi\u1EEF Shift \u0111\u1EC3 ch\u1ECDn nhi\u1EC1u)");
+      this.commit((doc2) => {
+        for (const id of ids) stepById(doc2, id).hidden = true;
+      });
+      this.selection.clear();
+      this.refresh();
+      toast(`\u0110\xE3 \u1EA9n ${ids.length} \u0111\u1ED1i t\u01B0\u1EE3ng \u2013 hi\u1EC7n l\u1EA1i: S\u1EEDa \u203A Hi\u1EC7n c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng \u0111\xE3 \u1EA9n (Ctrl+Shift+H), ho\u1EB7c n\xFAt \u25CF trong b\u1EA3ng c\xE1c b\u01B0\u1EDBc`, 4500);
+    }
+    /** Hiện lại mọi đối tượng đã ẩn. */
+    showHidden() {
+      const n = this.doc.steps.filter((s) => s.hidden).length;
+      if (!n) return toast("Kh\xF4ng c\xF3 \u0111\u1ED1i t\u01B0\u1EE3ng n\xE0o \u0111ang \u1EA9n");
+      this.commit((doc2) => {
+        for (const s of doc2.steps) delete s.hidden;
+      });
+      toast(`\u0110\xE3 hi\u1EC7n l\u1EA1i ${n} \u0111\u1ED1i t\u01B0\u1EE3ng (Ctrl+Z \u0111\u1EC3 \u1EA9n l\u1EA1i)`);
+    }
     setStyle(ids, patch) {
       this.commit((doc2) => {
         for (const id of ids) {
@@ -19272,6 +19292,12 @@
           }
         } else if (e.key === "Enter" && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === "...point") {
           this.completeTool(TOOL_BY_ID[this.toolId]);
+        } else if (ctrl && (e.key === "h" || e.key === "H") && e.shiftKey) {
+          e.preventDefault();
+          this.showHidden();
+        } else if (ctrl && (e.key === "h" || e.key === "H") && !e.shiftKey) {
+          e.preventDefault();
+          this.hideSelected();
         } else if ((e.key === "Delete" || e.key === "Backspace") && this.selection.size) {
           e.preventDefault();
           this.deleteSteps([...this.selection]);
@@ -19525,6 +19551,8 @@
       this.togglePanel(loadPref("panel", "0") === "1", false);
       this.updateMenuChecks();
       on("btn-delete", () => this.deleteSteps([...this.selection]));
+      on("btn-hide", () => this.hideSelected());
+      on("btn-show-hidden", () => this.showHidden());
       on("btn-grid", () => this.toggleGrid());
       on("btn-trim", () => {
         this.renderer.trimLines = !this.renderer.trimLines;

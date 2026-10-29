@@ -1018,6 +1018,24 @@ export class App {
     return true;
   }
 
+  /** Ctrl+H: ẩn các đối tượng đang chọn (vẫn tính, vẫn dùng để dựng tiếp; hiện lại ở menu Sửa hoặc bảng các bước). */
+  hideSelected() {
+    const ids = [...this.selection].filter((id) => stepById(this.doc, id));
+    if (!ids.length) return toast('Chọn đối tượng cần ẩn trước (công cụ Chọn, bấm vào đối tượng; giữ Shift để chọn nhiều)');
+    this.commit((doc) => { for (const id of ids) stepById(doc, id).hidden = true; });
+    this.selection.clear();
+    this.refresh();
+    toast(`Đã ẩn ${ids.length} đối tượng – hiện lại: Sửa › Hiện các đối tượng đã ẩn (Ctrl+Shift+H), hoặc nút ● trong bảng các bước`, 4500);
+  }
+
+  /** Hiện lại mọi đối tượng đã ẩn. */
+  showHidden() {
+    const n = this.doc.steps.filter((s) => s.hidden).length;
+    if (!n) return toast('Không có đối tượng nào đang ẩn');
+    this.commit((doc) => { for (const s of doc.steps) delete s.hidden; });
+    toast(`Đã hiện lại ${n} đối tượng (Ctrl+Z để ẩn lại)`);
+  }
+
   setStyle(ids, patch) {
     this.commit((doc) => {
       for (const id of ids) {
@@ -1201,6 +1219,12 @@ export class App {
         else { this.selection.clear(); this.imageSel = null; this.setRelation(null); }
       } else if (e.key === 'Enter' && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === '...point') {
         this.completeTool(TOOL_BY_ID[this.toolId]);
+      } else if (ctrl && (e.key === 'h' || e.key === 'H') && e.shiftKey) {
+        e.preventDefault();
+        this.showHidden();
+      } else if (ctrl && (e.key === 'h' || e.key === 'H') && !e.shiftKey) {
+        e.preventDefault();
+        this.hideSelected();
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && this.selection.size) {
         e.preventDefault();
         this.deleteSteps([...this.selection]);
@@ -1429,6 +1453,8 @@ export class App {
     this.togglePanel(loadPref('panel', '0') === '1', false);
     this.updateMenuChecks();
     on('btn-delete', () => this.deleteSteps([...this.selection]));
+    on('btn-hide', () => this.hideSelected());
+    on('btn-show-hidden', () => this.showHidden());
     on('btn-grid', () => this.toggleGrid());
     on('btn-trim', () => { this.renderer.trimLines = !this.renderer.trimLines; savePref('trim', this.renderer.trimLines ? '1' : '0'); this.updateMenuChecks(); this.refresh(); });
     on('btn-fit', () => this.zoomFit());

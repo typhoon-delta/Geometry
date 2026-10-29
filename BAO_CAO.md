@@ -759,6 +759,8 @@ Viết lại `css/style.css` thành một hệ thống thống nhất dựa trê
 * Menu *Ví dụ* nhiều cột không còn tràn khỏi màn hình; menu không bị xuống dòng khi mở nhiều tab.
 * **Chuyển tab bằng phím**: `Alt+1`…`Alt+9`, `Alt+PageUp`/`Alt+PageDown` (bù hạn chế của bản 1.3: `Ctrl+Tab` bị trình duyệt
   giữ). Rê chuột lên tab thấy phím tắt.
+* **Ẩn nhanh**: `Ctrl+H` ẩn các đối tượng đang chọn (như Sketchpad), `Ctrl+Shift+H` hiện lại tất cả; có trong menu *Sửa*.
+  Trước đó phải chọn rồi tích *Ẩn* trong thẻ thuộc tính hoặc mở bảng các bước – người dùng thử hỏi "ẩn đường thẳng kiểu gì".
 * `index.html` gắn số phiên bản vào đường dẫn (`dist/app.js?v=1.4`…): khi dùng thử, trình duyệt từng giữ `app.js`/`style.css`
   cũ trong bộ nhớ đệm trong khi `index.html` đã mới → mất dải tab, giao diện lẫn cũ mới. Mỗi bản sau cần tăng số này.
 

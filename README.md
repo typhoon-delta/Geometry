@@ -43,7 +43,7 @@ Trình duyệt khuyên dùng: Chrome, Edge, Firefox hoặc Safari bản mới.
 ### Giao diện
 
 * Thanh menu trên cùng: **Tệp** (hình mới, mở, lưu, chia sẻ link, xuất TikZ, xuất phiếu LaTeX), **Sửa** (hoàn tác,
-  làm lại, xoá, mở khoá ảnh nền), **Hiển thị** (bộ kiểu *Đơn sắc* / *Sách giáo khoa*, lưới, đường thẳng vừa đủ, thu phóng vừa hình,
+  làm lại, xoá, ẩn/hiện đối tượng, mở khoá ảnh nền), **Hiển thị** (bộ kiểu *Đơn sắc* / *Sách giáo khoa*, lưới, đường thẳng vừa đủ, thu phóng vừa hình,
   bảng các bước), **Chèn** (khung lời giải, khung đề bài, khung ghi chú, ảnh đề bài, ảnh nền để đồ hình, bộ gõ tắt), **Ví dụ** (thư viện bài dựng sẵn theo nhóm và các hình mẫu). Bên cạnh là **dải tab** các hình
   đang mở: bấm để đổi hình (hoặc `Alt+1`…`Alt+9`, `Alt+PageUp`/`Alt+PageDown`), nháy đúp vào tab đang mở để đặt tên hình, ✕ để đóng, ＋ để mở hình mới. *Hình mới*, mở
   tệp, mở ví dụ, mở link đều mở ở tab mới (nếu tab đang mở còn trống thì dùng luôn tab đó).
@@ -238,6 +238,7 @@ LaTeX. Chỉ cần `\usepackage{tikz}`. Đổi kích thước bằng cách sửa
 | giữ `Shift` khi bấm / kéo điểm | Căn hướng: đường nằm ngang, thẳng đứng, bước 15° |
 | `Home` | Thu phóng vừa hình |
 | `Delete` | Xoá đối tượng đang chọn |
+| `Ctrl+H` / `Ctrl+Shift+H` | Ẩn đối tượng đang chọn / hiện lại mọi đối tượng đã ẩn |
 | `Esc` | Huỷ thao tác / bỏ chọn / thoát trình chiếu |
 | `Enter` | Kết thúc miền đa giác |
 | `Ctrl+S` / `Ctrl+O` | Lưu / mở tệp |
