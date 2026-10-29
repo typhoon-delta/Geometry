@@ -694,3 +694,84 @@ tải lại trang); `npm run test:perf` đạt (6,44 ms/khung ×1, p95 16,8 ms �
 
 Hạn chế: ảnh không có trong link chia sẻ; ảnh rất lớn có thể vượt dung lượng lưu nháp của trình duyệt (khoảng 5 MB,
 có nhắc lưu tệp); chưa có phím tắt chuyển tab (Ctrl+Tab bị trình duyệt giữ).
+
+# Bản 1.4 – Chữ trên bảng vẽ (đề bài, lời giải) và giao diện mới
+
+Bản này làm theo buổi trao đổi sau bản 1.3: khi dạy, ngoài hình còn phải viết. Các điều đã thống nhất: viết bằng **bàn
+phím** (trình duyệt trên Windows), cú pháp **gần LaTeX** nhưng gõ **nhanh hơn Overleaf**; phần chữ **không cố định**
+mà kéo đi được; đề bài thường là **ảnh cắt** dán vào; thường một chuỗi lời giải. Cuối cùng là yêu cầu **thiết kế lại
+giao diện cho đẹp hơn**.
+
+## 1. Khung chữ
+
+* `doc.boxes` (trường tuỳ chọn, tệp cũ không đổi): khung *Đề bài*, *Lời giải*, *Ghi chú* nổi trên bảng vẽ. Kéo thanh
+  tiêu đề để dời (hít vào mép), kéo góc để đổi cỡ, đổi cỡ chữ, thu gọn, xoá (có hỏi, hoàn tác được). Ba cách gắn:
+  màn hình / hình / điểm. Khung gắn màn hình luôn được giữ trong khung vẽ (mở bảng bên không che mất khung).
+* **Ảnh đề**: `Ctrl+V` (hoặc kéo thả, *Chèn › Ảnh đề bài từ tệp…*) tạo khung *Đề bài* chứa ảnh – vì đề thường là ảnh
+  cắt. Ảnh nền để đồ hình (bản 1.3) chuyển sang *Chèn › Ảnh nền để đồ hình…*. Dữ liệu ảnh trong khung dùng chung
+  `imageData` với ảnh nền (lưu trong tệp và bản nháp, không trong link).
+* **Hiển thị công thức** bằng KaTeX, đóng gói sẵn, phông nhúng trong `css/katex.css` → vẫn chạy offline từ `file://`.
+  Macro tiếng Việt `\goc`, `\tamgiac`, `\cung{}`, `\vecto{}`. Công thức sai cú pháp hiện đỏ tại chỗ, không làm hỏng khung.
+* **Bước**: dòng `---` (tuỳ chọn `@k`) chia lời giải; khi trình bày bước *k* hiện ở khung *k* (cùng nhịp với các bước
+  dựng), bước mới hiện có hiệu ứng nhẹ; số khung trình bày kéo dài theo lời giải.
+* **Tên điểm trong công thức** được bọc `\htmlData{p=id}` khi hiển thị: rê chuột lên tên thì đối tượng sáng lên.
+* **Xuất phiếu LaTeX** (`src/export/latex.js`): đề + hình TikZ + lời giải đánh số theo bước + ảnh đề tải kèm.
+
+## 2. Bộ soạn gõ nhanh (CodeMirror 6, soạn ngay trong khung, xem trước bên dưới)
+
+Thiết kế để số phím gõ ít nhất mà không đụng Unikey/EVKey:
+
+* **Tự đổi trong công thức** (chỉ khi con trỏ đang ở trong `$…$`, kiểu Obsidian LaTeX Suite): `goc` → `\angle `,
+  `^o` → `^\circ`, `<=` → `\le`, `ff` → `\frac{|}{}`… Quy tắc toàn chữ chỉ khớp khi đứng trước không phải chữ cái hay
+  `\` (không đổi nhầm trong `\diff` hay một từ). Dấu cách gõ ngay sau lệnh vừa đổi được nuốt (không thành hai dấu cách).
+* **Gõ tắt** bắt đầu bằng `;` + `Tab`: các chữ Telex/VNI dùng (s f r x j w z, dd, số) không bao giờ đứng sau `;` nên
+  không xung đột với bộ gõ tiếng Việt. `;cm` → **Chứng minh.**, `;dpcm` → (đpcm), `;tgnt` → tứ giác nội tiếp…
+* Ô nhảy `${}` (Tab sang ô sau); `Tab` nhảy ra khỏi `}` `$` `)`; tự đóng `( [ { $` nhưng **không** đóng dấu `'` (tên B′).
+* Gợi ý tên điểm chỉ khi gọi (`Ctrl+Space`) hoặc khi đang gõ tên có chỉ số (`I_`) – để gõ nhanh "BAC" không bị bảng gợi
+  ý chặn Enter. **Bấm điểm trên hình** khi đang soạn thì chèn tên điểm (không tạo điểm mới).
+* Bộ quy tắc sửa được dạng văn bản (*Chèn › Gõ tắt và tự đổi…*), lưu trong trình duyệt.
+
+Ví dụ (đúng câu dùng trong test trình duyệt): phần công thức của "Ta có $\angle BHC + \angle A = 180^\circ$ và
+$\frac{A_1A_2}{2}$" gõ `goc` `goc` `^o` `ff…Tab…Tab` = 19 phím thay vì 36 phím `\angle ` `\angle ` `^\circ` `\frac{A_1A_2}{2}`,
+và không phải với tới `\` `{` `}`.
+
+## 3. Giao diện mới
+
+Viết lại `css/style.css` thành một hệ thống thống nhất dựa trên biến màu (`--chrome`, `--line`, `--ink`, `--muted`,
+`--accent`…), thay cho các màu viết rải rác:
+
+* Ý tưởng "bàn vẽ": tờ giấy trắng mực đen ở giữa (bảng vẽ **giữ nguyên** kiểu nét Sketchpad), khung bàn xám lạnh rất
+  nhạt, **một** màu nhấn xanh mực. Chữ toán và tên thương hiệu dùng chữ có chân nghiêng như trong sách.
+* Thanh trên cao hơn (42 px), có biểu tượng tam giác nội tiếp đường tròn + tên; tab hình dạng thẻ nổi; menu và các
+  bảng xổ có bóng nhiều lớp, mục rê chuột tô xanh nhạt, phím tắt hiện như phím thật.
+* Thanh công cụ dọc rộng hơn (52 px), công cụ đang dùng tô **đặc** màu nhấn – nhìn từ cuối lớp vẫn biết đang ở công cụ nào.
+* Dòng gợi ý thành một nhãn nổi nhỏ ở góc dưới bảng vẽ (không chiếm cả một dải đáy, trả lại diện tích cho hình).
+* Thẻ thuộc tính, hộp thoại, thông báo, thanh trình bày (dạng viên thuốc tối, kính mờ) cùng một kiểu bo góc/bóng.
+* Khung chữ: thanh tiêu đề có nhãn vai trò màu riêng (đề – xanh mực, lời giải – xanh lục, ghi chú – hổ phách), các nút
+  biểu tượng SVG chỉ hiện khi rê chuột, thân khung chữ có chân; bộ soạn chữ đơn cách **không ghép ký tự** (`=>` hiện đúng
+  hai ký tự đã gõ).
+* Menu *Ví dụ* nhiều cột không còn tràn khỏi màn hình; menu không bị xuống dòng khi mở nhiều tab.
+
+## 4. Kiểm thử
+
+* `npm test`: 134 test (133 đạt, 1 bỏ qua vì máy không có pdflatex), thêm `tests/van-ban.test.mjs` (chia bước, khung
+  trình bày, gắn tên điểm, tự đổi/gõ tắt, xuất LaTeX).
+* `npm run test:browser`: đạt, thêm `tests/browser/smoke5.mjs` – 26 kiểm tra: `Ctrl+Enter` tạo khung, gõ thật với tự đổi
+  và gõ tắt, bấm điểm chèn tên, công thức không lỗi, tên gắn hình, rê chuột tô sáng, kéo/đổi cỡ chữ/đổi cách gắn (khung
+  gắn hình đi theo khi phóng), `Ctrl+V` ảnh thành khung Đề bài, trình bày hiện dần từng bước, lưu/mở tệp có khung và
+  ảnh, xuất `.tex` (có TikZ, `\includegraphics`, `\item`), xoá/hoàn tác. `smoke4` đổi sang chèn ảnh nền qua menu.
+* `npm run test:perf`: ×1 6,38 ms/khung, ×4 30,0 ms, p95 16,8 ms – như bản 1.3. Thêm `--khung` (3 khung chữ có công
+  thức, gắn màn hình/hình/điểm): ×1 6,65 ms, p95 16,8 ms. Vị trí khung cập nhật mỗi khung hình nhưng đọc kích thước
+  trước rồi mới ghi để không ép trình duyệt tính lại bố cục giữa chừng.
+* Dựng thử lại 23 bài qua giao diện mới (`tests/browser/dung-thu/chay.mjs`): 23/23 đúng, không lỗi trang; 1027 thao tác
+  (bản 1.2: 1031 – bớt 4 lần đặt tên nhờ tên phẩy A′ của bản 1.3), số lần bấm như cũ (1200).
+* Lab Python: 23 test đạt sau khi sinh lại `lab/tests/fixtures/js_doi_chieu.json` (tệp đối chiếu đã cũ từ bản 1.3 vì
+  tên phẩy A′ của công cụ đối xứng).
+
+## 5. Hạn chế
+
+* `dist/app.js` lớn lên (~1,6 MB) và `css/katex.css` ~370 KB vì đóng gói KaTeX + CodeMirror để chạy offline.
+* KaTeX chỉ hỗ trợ phần công thức (không có môi trường `tikzpicture`, `\usepackage`…); xuất `.tex` cần gói `vietnam`.
+* Khung gắn hình có thể ra ngoài khung nhìn khi phóng to (như mọi đối tượng hình) – `Home` đưa hình về.
+* Ảnh (cả ảnh đề) không có trong link chia sẻ; chữ trong khung thì có.
+* Phông Inter/STIX Two dùng nếu máy có, không thì dùng phông hệ thống (không nhúng để giữ dung lượng).

@@ -105,6 +105,7 @@ export class CanvasView {
       ctx.setTransform(this.dpr || 1, 0, 0, this.dpr || 1, 0, 0);
       ctx.clearRect(0, 0, this.W, this.H);
       if (this.painter) this.painter(ctx, this);
+      if (this.afterPaint) this.afterPaint(); // vd đặt lại các khung chữ gắn điểm khi đang kéo
     } finally {
       this.drawing = false;
     }

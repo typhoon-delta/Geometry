@@ -5,12 +5,20 @@
   "description": "Công cụ hình học động chạy trên trình duyệt cho giáo viên Olympic Toán",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/ui/main.js --bundle --format=iife --target=es2020 --outfile=dist/app.js",
+    "build": "node scripts/katex-css.mjs && esbuild src/ui/main.js --bundle --format=iife --target=es2020 --outfile=dist/app.js",
     "test": "node --test tests/*.test.mjs",
     "test:browser": "node tests/browser/smoke.mjs",
     "test:perf": "node tests/browser/perf.mjs --assert"
   },
   "devDependencies": {
-    "esbuild": "^0.25.10"
+    "@codemirror/autocomplete": "^6.20.4",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/legacy-modes": "^6.5.5",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "codemirror": "^6.0.1",
+    "esbuild": "^0.25.10",
+    "katex": "^0.16.11"
   }
 }

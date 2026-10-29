@@ -11,7 +11,8 @@ export function setupImages(app) {
     const item = [...(e.clipboardData?.items || [])].find((it) => it.kind === 'file' && it.type.startsWith('image/'));
     if (!item) return;
     e.preventDefault();
-    insertImageFile(app, item.getAsFile());
+    // bản 1.4: ảnh dán vào thành khung Đề bài (gắn màn hình) – hoặc chèn vào khung chữ đang soạn
+    insertImageFile(app, item.getAsFile(), null, app.textBoxes ? 'box' : 'background');
   });
   const stage = document.getElementById('stage');
   stage.addEventListener('dragover', (e) => {
@@ -22,14 +23,22 @@ export function setupImages(app) {
     if (!files.length) return;
     e.preventDefault();
     const r = app.view.canvas.getBoundingClientRect();
-    files.forEach((f, i) => insertImageFile(app, f, { sx: e.clientX - r.left + 24 * i, sy: e.clientY - r.top + 24 * i }));
+    files.forEach((f, i) => insertImageFile(app, f, { sx: e.clientX - r.left + 24 * i, sy: e.clientY - r.top + 24 * i }, app.textBoxes ? 'box' : 'background'));
   });
   const btn = document.getElementById('btn-image');
   if (btn) btn.onclick = () => {
     const inp = document.createElement('input');
     inp.type = 'file';
     inp.accept = 'image/*';
-    inp.onchange = () => { if (inp.files[0]) insertImageFile(app, inp.files[0]); };
+    inp.onchange = () => { if (inp.files[0]) insertImageFile(app, inp.files[0], null, 'box'); };
+    inp.click();
+  };
+  const bg = document.getElementById('btn-image-bg');
+  if (bg) bg.onclick = () => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    inp.onchange = () => { if (inp.files[0]) insertImageFile(app, inp.files[0], null, 'background'); };
     inp.click();
   };
 }
@@ -37,8 +46,11 @@ export function setupImages(app) {
 const readURL = (file) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
 const loadImg = (src) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('Không đọc được ảnh')); im.src = src; });
 
-/** Chèn một tệp ảnh; at = vị trí màn hình của tâm ảnh (mặc định giữa khung nhìn). Trả về id ảnh. */
-export async function insertImageFile(app, file, at = null) {
+/**
+ * Chèn một tệp ảnh. as = 'box': thành khung Đề bài/khung ảnh nổi (bản 1.4); 'background': ảnh nằm dưới hình, theo toạ
+ * độ hình (để đồ hình). at = vị trí màn hình của tâm ảnh nền (mặc định giữa khung nhìn).
+ */
+export async function insertImageFile(app, file, at = null, as = 'background') {
   let src, img;
   try {
     src = await readURL(file);
@@ -58,6 +70,7 @@ export async function insertImageFile(app, file, at = null) {
     cv.getContext('2d').drawImage(img, 0, 0, w, h);
     src = file.type === 'image/png' ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', 0.9);
   }
+  if (as === 'box' && app.textBoxes) return app.textBoxes.pasteImage(src, w);
   return insertImageData(app, src, w, h, at);
 }
 

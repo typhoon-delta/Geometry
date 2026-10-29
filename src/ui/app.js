@@ -105,9 +105,11 @@ export class App {
   }
 
   withImageData(doc) {
-    if (!doc.images || !doc.images.length) return doc;
+    const ids = (doc.images || []).map((im) => im.id);
+    for (const b of doc.boxes || []) for (const m of String(b.text || '').matchAll(/!\[\]\(img:([A-Za-z0-9_-]+)\)/g)) ids.push(m[1]);
+    if (!ids.length) return doc;
     const data = {};
-    for (const im of doc.images) { const r = this.images.get(im.id); if (r) data[im.id] = r.src; }
+    for (const id of ids) { const r = this.images.get(id); if (r) data[id] = r.src; }
     return { ...doc, imageData: data };
   }
 
@@ -337,6 +339,18 @@ export class App {
     this.renderer.clearExtra();
     this.drawRelationOverlay?.();
     this.renderPanels();
+    this.emit('refresh');
+  }
+
+  /** Tô sáng tạm (rê chuột lên tên điểm trong khung chữ); null: trở lại quan hệ đang tô (nếu có). */
+  setHover(ids) {
+    this.highlight = new Set(ids || (this.relation ? this.relation.ids : []));
+    this.refresh();
+  }
+
+  /** Số khung trình bày: khung của hình, kéo dài thêm nếu lời giải còn bước ở các khung sau. */
+  frameCount() {
+    return Math.max(frames(this.doc).length, this.textBoxes ? this.textBoxes.lastFrame() + 1 : 0);
   }
 
   /** Cập nhật nhanh khi kéo: chỉ tính lại các bước phụ thuộc (nếu có bộ cập nhật), rồi vẽ lại. */
@@ -1060,7 +1074,7 @@ export class App {
   }
 
   gotoFrame(i) {
-    const n = frames(this.doc).length;
+    const n = this.frameCount();
     this.frameIdx = Math.max(0, Math.min(n - 1, i));
     this.refresh();
   }
@@ -1068,7 +1082,7 @@ export class App {
   updatePresentBar() {
     const lab = document.getElementById('frame-label');
     if (!lab) return;
-    const n = frames(this.doc).length;
+    const n = this.frameCount();
     lab.textContent = n ? `Khung ${Math.min(this.frameIdx + 1, n)} / ${n}` : 'Chưa có bước nào';
     document.getElementById('btn-prev').disabled = this.frameIdx <= 0;
     document.getElementById('btn-next').disabled = this.frameIdx >= n - 1;
@@ -1142,8 +1156,10 @@ export class App {
     document.addEventListener('keydown', (e) => {
       if (document.querySelector('.modal-back')) return;
       const tag = (e.target.tagName || '').toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
       const ctrl = e.ctrlKey || e.metaKey;
+      // Ctrl+Enter: soạn lời giải (khung chữ), con trỏ ở cuối
+      if (ctrl && e.key === 'Enter' && this.mode === 'edit' && this.textBoxes) { e.preventDefault(); this.textBoxes.editSolution(); return; }
       if (ctrl && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); this.undo(); return; }
       if (ctrl && (e.key === 'y' || e.key === 'Y' || ((e.key === 'z' || e.key === 'Z') && e.shiftKey))) { e.preventDefault(); this.redo(); return; }
       if (this.mode === 'present') {

@@ -13,6 +13,9 @@ import { textDialog, toast } from './dialog.js';
 import { THU_VIEN } from '../core/thu-vien.js';
 import { setupTabBar } from './tabbar.js';
 import { setupImages } from './images.js';
+import { setupTextBoxes } from './textboxes.js';
+import { toLatexHandout } from '../export/latex.js';
+import { fileSafeName } from './share.js';
 
 function start() {
   const app = new App();
@@ -78,6 +81,11 @@ function start() {
   document.getElementById('btn-open').onclick = () => openFile(app);
   setupTabBar(app);
   setupImages(app);
+  const tb = setupTextBoxes(app);
+  const onClick = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  for (const role of ['loigiai', 'de', 'ghichu']) onClick('btn-box-' + role, () => { const id = role === 'loigiai' ? null : tb.newBox(role); if (id) { tb.render(); tb.edit(id); } else tb.editSolution(); });
+  onClick('btn-rules', () => tb.editRules());
+  onClick('btn-latex', () => exportLatex(app));
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(app); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(app); }
@@ -88,6 +96,20 @@ function start() {
   window.__app = app;
   window.GeoCore = { ...core, Builder, EXAMPLES, THU_VIEN, codec, explore, toTikZ };
   return app;
+}
+
+/** Tệp › Xuất phiếu LaTeX: tải tệp .tex (đề + hình TikZ + lời giải) và các ảnh trong khung chữ. */
+function exportLatex(app) {
+  const vis = app.visibleSet();
+  const doc = vis ? { ...app.doc, steps: app.doc.steps.map((s) => (vis.has(s.id) ? s : { ...s, hidden: true })) } : app.doc;
+  const { tex, files } = toLatexHandout(doc, { values: app.values, theme: app.theme, trimLines: app.renderer.trimLines, imageSrc: (id) => app.images.get(id)?.src });
+  const base = fileSafeName(app.doc.title || 'phieu');
+  const download = (name, href) => { const a = document.createElement('a'); a.download = name; a.href = href; document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 500); };
+  const url = URL.createObjectURL(new Blob([tex], { type: 'application/x-tex' }));
+  download(base + '.tex', url);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  files.forEach((f, i) => setTimeout(() => download(f.name, f.dataURL), 300 * (i + 1)));
+  toast(files.length ? `Đã tải ${base}.tex và ${files.length} ảnh (để cùng thư mục rồi biên dịch bằng pdflatex)` : `Đã tải ${base}.tex (biên dịch bằng pdflatex)`, 6000);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

@@ -63,22 +63,21 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   ok((await page.evaluate(() => [__app.tabs.length, __app.doc.title])).join() === '3,Tứ giác nội tiếp – định lý Brocard', 'mở ví dụ ở tab mới');
   await shot('v13-tab');
 
-  // ---- dán ảnh (Ctrl+V với ảnh trong clipboard) ----
+  // ---- ảnh nền để đồ hình (Chèn › Ảnh nền…; bản 1.4: Ctrl+V tạo khung Đề bài – xem smoke5) ----
   await page.click('#tab-new');
-  await page.evaluate(async () => {
+  const png = await page.evaluate(() => {
     const cv = document.createElement('canvas');
     cv.width = 300; cv.height = 120;
     const c = cv.getContext('2d');
     c.fillStyle = '#fde68a'; c.fillRect(0, 0, 300, 120);
-    c.fillStyle = '#000'; c.font = '28px serif'; c.fillText('Đề bài: ảnh dán vào', 14, 70);
-    const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
-    const dt = new DataTransfer();
-    dt.items.add(new File([blob], 'de.png', { type: 'image/png' }));
-    document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }));
+    c.fillStyle = '#000'; c.font = '28px serif'; c.fillText('Hình để đồ lại', 14, 70);
+    return cv.toDataURL('image/png').split(',')[1];
   });
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.evaluate(() => document.getElementById('btn-image-bg').click())]);
+  await chooser.setFiles({ name: 'hinh.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
   await page.waitForFunction(() => (__app.doc.images || []).length === 1);
   const im = await page.evaluate(() => ({ ...__app.doc.images[0], sel: __app.imageSel, data: __app.withImageData(__app.doc).imageData }));
-  ok(im.sel === im.id && im.data && im.data[im.id].startsWith('data:image/png'), 'Ctrl+V dán ảnh vào hình, ảnh được chọn');
+  ok(im.sel === im.id && im.data && im.data[im.id].startsWith('data:image/png'), 'chèn ảnh nền vào hình, ảnh được chọn');
   const undoLen = await page.evaluate(() => __app.undoStack[__app.undoStack.length - 1].length);
   ok(undoLen < 2000, `lịch sử hoàn tác không chứa dữ liệu ảnh (${undoLen} ký tự)`);
   // kéo ảnh

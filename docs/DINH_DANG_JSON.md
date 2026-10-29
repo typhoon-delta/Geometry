@@ -34,6 +34,7 @@ khám phá, xuất TikZ, và các công cụ dòng lệnh trong `scripts/`.
 | `view.bbox` | Khung nhìn `[xTrái, yTrên, xPhải, yDưới]` (tuỳ chọn, chỉ để hiển thị). |
 | `images` | *(bản 1.3, tuỳ chọn)* Ảnh dán vào hình: `[{id, x, y, w, h, opacity?, locked?}]` – (x, y) là góc trên-trái theo toạ độ hình (y hướng lên), w × h theo đơn vị hình. Chỉ để hiển thị, không tham gia tính toán. |
 | `imageData` | *(bản 1.3, tuỳ chọn)* Dữ liệu ảnh `{id: "data:image/…;base64,…"}`. Có trong tệp `.json` và bản nháp, không có trong link chia sẻ. |
+| `boxes` | *(bản 1.4, tuỳ chọn)* Khung chữ nổi trên bảng vẽ: `[{id, role, title?, text, anchor, …}]`. `role`: `"de"` (đề bài), `"loigiai"`, `"ghichu"`. `text`: chữ + công thức LaTeX (`$…$`, `$$…$$`, `**đậm**`, `- ` gạch đầu dòng, `![](img:ID)` ảnh có dữ liệu trong `imageData`); dòng `---` (hoặc `--- @k`) chia bước để hiện dần khi trình bày. `anchor`: `"screen"` – `fx, fy` là góc trên-trái theo tỉ lệ khung vẽ (0–1); `"figure"` – `x, y` theo toạ độ hình; `"point"` – `pt` (id điểm), `dx, dy` độ lệch pixel. Thêm: `w`, `h` (px, `h` thiếu = tự cao), `font` (hệ số cỡ chữ), `collapsed`, `from` (khung trình bày 1-based bắt đầu hiện). Chỉ để hiển thị, không tham gia tính toán; bản Python bỏ qua. |
 | `steps[].id` | Mã định danh **bất biến** (không đổi khi đổi tên). Ứng dụng sinh dạng `s1, s2, …`. |
 | `steps[].type` | Loại bước (bảng dưới). |
 | `steps[].args` | Danh sách `id` của các bước trước, đúng kiểu yêu cầu. |

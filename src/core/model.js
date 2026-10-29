@@ -137,6 +137,11 @@ export function validate(doc) {
   if (!doc || typeof doc !== 'object') return ['Không phải đối tượng JSON'];
   if (doc.format !== FORMAT) errs.push(`Thiếu "format": "${FORMAT}"`);
   if (!Array.isArray(doc.steps)) return [...errs, 'Thiếu danh sách "steps"'];
+  // bản 1.4: khung chữ (tuỳ chọn) – đề bài, lời giải, ghi chú
+  if (doc.boxes !== undefined) {
+    if (!Array.isArray(doc.boxes)) errs.push('"boxes" phải là danh sách');
+    else doc.boxes.forEach((b, i) => { if (!b || typeof b.id !== 'string' || typeof (b.text ?? '') !== 'string') errs.push(`Khung chữ ${i + 1}: thiếu id hoặc nội dung`); });
+  }
   // bản 1.3: ảnh dán vào hình (tuỳ chọn) – chỉ là trang trí, không tham gia tính toán
   if (doc.images !== undefined) {
     if (!Array.isArray(doc.images)) errs.push('"images" phải là danh sách');
