@@ -7,6 +7,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { NguoiDung } from './nguoi-dung.mjs';
 import { BAI } from './bai.mjs';
+import { compactDoc } from '../../../src/io/codec.js';
+import { existsSync, readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -22,6 +24,7 @@ const TOL = 1e-7;
 
 const browser = await chromium.launch();
 const results = [];
+const saved = [];
 for (const bai of BAI) {
   if (CHI && !CHI.includes(bai.id)) continue;
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 850 } });
@@ -58,7 +61,7 @@ for (const bai of BAI) {
     return c;
   });
   r.nhan = await page.evaluate(() => __T.labelReport());
-  await page.locator('#stage').screenshot({ path: `${ANH}/${bai.id}.png` });
+  await snap(page, `${ANH}/${bai.id}.png`);
   // kiểm chứng kết luận bằng số: cấu hình hiện tại + 30 cấu hình xê dịch
   r.kiemChung = await page.evaluate(([c, p, refs]) => __T.verify(c, p, refs), [bai.check.toString(), bai.pre ? bai.pre.toString() : null, u.refs]);
   r.kiemChung.dung = typeof r.kiemChung.base === 'number' && r.kiemChung.base < TOL && r.kiemChung.max < TOL && r.kiemChung.samples >= 10;
@@ -66,11 +69,12 @@ for (const bai of BAI) {
   const doc = await page.evaluate(() => JSON.parse(JSON.stringify(__app.doc)));
   mkdirSync(resolve(OUT, 'hinh-' + NHAN), { recursive: true });
   writeFileSync(resolve(OUT, 'hinh-' + NHAN, bai.id + '.json'), JSON.stringify(doc));
-  if (LUU && r.ok) {
+  if (LUU && r.ok && r.kiemChung.dung) {
     mkdirSync(resolve('examples/thu-vien'), { recursive: true });
     doc.title = bai.ten;
     doc.view = { bbox: await page.evaluate(() => __app.view.getBoundingBox().map((v) => Math.round(v * 1000) / 1000)) };
-    writeFileSync(resolve('examples/thu-vien', bai.id + '.json'), JSON.stringify(doc, null, 1) + '\n');
+    writeFileSync(resolve('examples/thu-vien', bai.id + '.json'), JSON.stringify(compactDoc(doc), null, 1) + '\n');
+    saved.push(bai);
   }
   // kéo thử: nhấn vào điểm, kéo một vòng 36 bước; đo nhảy nghiệm, đối tượng mất, thời gian mỗi khung
   r.keo = [];
@@ -138,6 +142,7 @@ for (const bai of BAI) {
   await ctx.close();
 }
 await browser.close();
+if (LUU) writeCatalog();
 const file = resolve(OUT, `ket-qua-${NHAN}.json`);
 let prev = [];
 if (CHI) { try { prev = JSON.parse((await import('node:fs')).readFileSync(file, 'utf8')); } catch { prev = []; } }
@@ -148,3 +153,42 @@ const bad = results.filter((r) => !r.ok || !r.kiemChung.dung);
 if (bad.length) console.log('CHƯA ĐẠT:', bad.map((r) => r.id).join(', '));
 
 function fmtE(x) { return typeof x === 'number' ? x.toExponential(1) : String(x); }
+
+/**
+ * Mục lục thư viện ví dụ (examples/thu-vien/muc-luc.json) và module src/core/thu-vien.js nhập các tệp JSON
+ * (esbuild đóng gói vào dist/app.js → menu "Ví dụ" chạy được cả khi mở index.html từ ổ đĩa, không mạng).
+ */
+function writeCatalog() {
+  const dir = resolve('examples/thu-vien');
+  const list = BAI.filter((b) => existsSync(resolve(dir, b.id + '.json'))).map((b) => ({ id: b.id, nhom: b.nhom, ten: b.ten, de: b.de }));
+  writeFileSync(resolve(dir, 'muc-luc.json'), JSON.stringify(list, null, 1) + '\n');
+  const L = ['// TỰ SINH bởi `node tests/browser/dung-thu/chay.mjs --luu` – không sửa tay.',
+    '// Thư viện ví dụ: các hình dựng qua giao diện khi dùng thử (tests/browser/dung-thu), theo nhóm.',
+    "import mucLuc from '../../examples/thu-vien/muc-luc.json' with { type: 'json' };"];
+  list.forEach((b, i) => L.push(`import d${i} from '../../examples/thu-vien/${b.id}.json' with { type: 'json' };`));
+  L.push('', `const DOCS = [${list.map((_, i) => 'd' + i).join(', ')}];`);
+  L.push('export const THU_VIEN = mucLuc.map((m, i) => ({ ...m, doc: DOCS[i] }));', '');
+  writeFileSync(resolve('src/core/thu-vien.js'), L.join('\n'));
+  void readFileSync;
+}
+
+/** Chụp phần có nét vẽ của bảng vẽ (quét điểm ảnh canvas), ẩn thông báo và thanh gợi ý. */
+async function snap(page, path) {
+  await page.addStyleTag({ content: '#toast, #hint { display: none !important; }' });
+  await page.waitForTimeout(60);
+  const r = await page.evaluate(() => {
+    const cv = __app.view.canvas, ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
+    const d = ctx.getImageData(0, 0, W, H).data;
+    let x1 = W, y1 = H, x2 = -1, y2 = -1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = 4 * (y * W + x);
+      if (d[i + 3] > 20 && (d[i] < 235 || d[i + 1] < 235 || d[i + 2] < 235)) { if (x < x1) x1 = x; if (x > x2) x2 = x; if (y < y1) y1 = y; if (y > y2) y2 = y; }
+    }
+    const b = cv.getBoundingClientRect(), k = (window.devicePixelRatio || 1);
+    if (x2 < 0) return { x: b.left, y: b.top, width: b.width, height: b.height };
+    const m = 18;
+    const X1 = Math.max(0, x1 / k - m), Y1 = Math.max(0, y1 / k - m), X2 = Math.min(b.width, x2 / k + m), Y2 = Math.min(b.height, y2 / k + m);
+    return { x: b.left + X1, y: b.top + Y1, width: X2 - X1, height: Y2 - Y1 };
+  });
+  await page.screenshot({ path, clip: r });
+}

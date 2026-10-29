@@ -1,0 +1,185 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "IMO 2018 – Bài 1",
+ "view": {
+  "bbox": [
+   -12.507,
+   9.097,
+   12.237,
+   -5.793
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.4,
+    "y": 3.8
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -4,
+    "y": -1.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 4,
+    "y": -1.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s8",
+   "type": "center",
+   "args": [
+    "s7"
+   ],
+   "name": "O",
+   "joinPrev": true
+  },
+  {
+   "id": "s9",
+   "type": "point_on",
+   "args": [
+    "s4"
+   ],
+   "params": {
+    "t": 0.6250000268505589
+   },
+   "name": "D"
+  },
+  {
+   "id": "s10",
+   "type": "circle",
+   "args": [
+    "s1",
+    "s9"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s11",
+   "type": "intersection",
+   "args": [
+    "s10",
+    "s6"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "E"
+  },
+  {
+   "id": "s12",
+   "type": "perp_bisector",
+   "args": [
+    "s2",
+    "s9"
+   ],
+   "name": "d4"
+  },
+  {
+   "id": "s13",
+   "type": "intersection",
+   "args": [
+    "s12",
+    "s7"
+   ],
+   "params": {
+    "which": 1
+   },
+   "name": "F"
+  },
+  {
+   "id": "s14",
+   "type": "perp_bisector",
+   "args": [
+    "s3",
+    "s11"
+   ],
+   "name": "d5"
+  },
+  {
+   "id": "s15",
+   "type": "intersection",
+   "args": [
+    "s14",
+    "s7"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "G"
+  },
+  {
+   "id": "s16",
+   "type": "segment",
+   "args": [
+    "s9",
+    "s11"
+   ],
+   "name": "d6"
+  },
+  {
+   "id": "s17",
+   "type": "segment",
+   "args": [
+    "s13",
+    "s15"
+   ],
+   "name": "d7"
+  }
+ ]
+}

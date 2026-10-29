@@ -92,6 +92,11 @@ Kiểu đối số: `point`, `line` (gồm đường thẳng, đoạn, tia), `ci
 | `homothety` | `obj` X, O | `k` | Vị tự tâm O tỉ số k. |
 | `translate` | `obj` X, P, Q | – | Tịnh tiến theo vectơ PQ. |
 | `invert` | P, `circle` | – | Nghịch đảo điểm P qua đường tròn. |
+| `invert_line` | `curve` X, `circle` | – | *(bản 1.2)* Ảnh qua phép nghịch đảo của đường thẳng/đường tròn X **đi qua tâm** nghịch đảo – một **đường thẳng** (X không qua tâm → không xác định). |
+| `invert_circle` | `curve` X, `circle` | – | *(bản 1.2)* Ảnh của đường thẳng/đường tròn X **không qua tâm** nghịch đảo – một **đường tròn**. |
+| `rotate_by` | `obj` X, O, A, B, C | – | *(bản 1.2)* Quay X quanh O một góc bằng góc có hướng ∠ABC **trên hình** (từ tia BA sang BC) – kéo hình thì góc đổi theo. |
+| `homothety_by` | `obj` X, O, A, B, C, D | `negative` | *(bản 1.2)* Vị tự tâm O, tỉ số AB/CD **trên hình** (`negative: true`: tỉ số âm). |
+| `spiral` | `obj` X, O, A, B | – | *(bản 1.2)* Phép đồng dạng thuận tâm O biến A thành B (quay ∠AOB, vị tự OB/OA), áp cho X. |
 | `tangent_at` | `circle`, P | – | Tiếp tuyến tại P (đường qua P vuông góc bán kính). |
 | `tangent_point` | `circle`, P | `which` (0/1) | Tiếp điểm của tiếp tuyến kẻ từ P (thứ tự chuẩn như giao hai đường tròn). |
 | `common_tangent` | `circle`, `circle` | `internal`, `which` | Tiếp tuyến chung ngoài/trong (đường đi từ tiếp điểm trên đường tròn 1 tới tiếp điểm trên đường tròn 2). |

@@ -1,0 +1,205 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "IMO 2025 – Bài 2",
+ "view": {
+  "bbox": [
+   -6.227,
+   4.25,
+   7.727,
+   -4.147
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -1.5,
+    "y": 0.3
+   },
+   "name": "M"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -1.5,
+    "y": -1.7
+   },
+   "name": "U"
+  },
+  {
+   "id": "s3",
+   "type": "circle",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s4",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 1.9,
+    "y": 0.3
+   },
+   "name": "N"
+  },
+  {
+   "id": "s5",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 1.9,
+    "y": -2.8
+   },
+   "name": "V"
+  },
+  {
+   "id": "s6",
+   "type": "circle",
+   "args": [
+    "s4",
+    "s5"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s7",
+   "type": "intersection",
+   "args": [
+    "s6",
+    "s3"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "A"
+  },
+  {
+   "id": "s8",
+   "type": "intersection_other",
+   "args": [
+    "s6",
+    "s3",
+    "s7"
+   ],
+   "name": "B"
+  },
+  {
+   "id": "s9",
+   "type": "line",
+   "args": [
+    "s1",
+    "s4"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s10",
+   "type": "intersection",
+   "args": [
+    "s9",
+    "s3"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "C"
+  },
+  {
+   "id": "s11",
+   "type": "intersection",
+   "args": [
+    "s9",
+    "s6"
+   ],
+   "params": {
+    "which": 1
+   },
+   "name": "D"
+  },
+  {
+   "id": "s12",
+   "type": "circumcenter",
+   "args": [
+    "s7",
+    "s10",
+    "s11"
+   ],
+   "name": "P"
+  },
+  {
+   "id": "s13",
+   "type": "line",
+   "args": [
+    "s7",
+    "s12"
+   ],
+   "name": "d2"
+  },
+  {
+   "id": "s14",
+   "type": "intersection_other",
+   "args": [
+    "s13",
+    "s3",
+    "s7"
+   ],
+   "name": "E"
+  },
+  {
+   "id": "s15",
+   "type": "intersection_other",
+   "args": [
+    "s13",
+    "s6",
+    "s7"
+   ],
+   "name": "F"
+  },
+  {
+   "id": "s16",
+   "type": "orthocenter",
+   "args": [
+    "s12",
+    "s1",
+    "s4"
+   ],
+   "name": "H"
+  },
+  {
+   "id": "s17",
+   "type": "parallel",
+   "args": [
+    "s16",
+    "s13"
+   ],
+   "name": "d3"
+  },
+  {
+   "id": "s18",
+   "type": "circle_3pts",
+   "args": [
+    "s8",
+    "s14",
+    "s15"
+   ],
+   "name": "ω3"
+  },
+  {
+   "id": "s19",
+   "type": "center",
+   "args": [
+    "s18"
+   ],
+   "name": "O",
+   "joinPrev": true
+  }
+ ]
+}

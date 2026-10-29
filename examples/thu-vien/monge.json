@@ -1,0 +1,193 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Tiếp tuyến chung – định lý Monge",
+ "view": {
+  "bbox": [
+   -18.11,
+   11.234,
+   25.21,
+   -14.834
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -4.5,
+    "y": -1
+   },
+   "name": "O_1"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.78,
+    "y": -1.96
+   },
+   "name": "R_1"
+  },
+  {
+   "id": "s3",
+   "type": "circle",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s4",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 0.5,
+    "y": 2.4
+   },
+   "name": "O_2"
+  },
+  {
+   "id": "s5",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 1.58,
+    "y": 0.96
+   },
+   "name": "R_2"
+  },
+  {
+   "id": "s6",
+   "type": "circle",
+   "args": [
+    "s4",
+    "s5"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s7",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 4.2,
+    "y": -1.5
+   },
+   "name": "O_3"
+  },
+  {
+   "id": "s8",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 4.68,
+    "y": -2.14
+   },
+   "name": "R_3"
+  },
+  {
+   "id": "s9",
+   "type": "circle",
+   "args": [
+    "s7",
+    "s8"
+   ],
+   "name": "ω3"
+  },
+  {
+   "id": "s10",
+   "type": "common_tangent",
+   "args": [
+    "s3",
+    "s6"
+   ],
+   "params": {
+    "internal": false,
+    "which": 0
+   },
+   "name": "d1"
+  },
+  {
+   "id": "s11",
+   "type": "common_tangent",
+   "args": [
+    "s3",
+    "s6"
+   ],
+   "params": {
+    "internal": false,
+    "which": 1
+   },
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s12",
+   "type": "common_tangent",
+   "args": [
+    "s3",
+    "s6"
+   ],
+   "params": {
+    "internal": true,
+    "which": 0
+   },
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s13",
+   "type": "common_tangent",
+   "args": [
+    "s3",
+    "s6"
+   ],
+   "params": {
+    "internal": true,
+    "which": 1
+   },
+   "name": "d4",
+   "joinPrev": true
+  },
+  {
+   "id": "s14",
+   "type": "homothety_center",
+   "args": [
+    "s3",
+    "s6"
+   ],
+   "name": "S_{12}"
+  },
+  {
+   "id": "s15",
+   "type": "homothety_center",
+   "args": [
+    "s6",
+    "s9"
+   ],
+   "name": "S_{23}"
+  },
+  {
+   "id": "s16",
+   "type": "homothety_center",
+   "args": [
+    "s3",
+    "s9"
+   ],
+   "name": "S_{13}"
+  },
+  {
+   "id": "s17",
+   "type": "line",
+   "args": [
+    "s14",
+    "s15"
+   ],
+   "name": "d5"
+  }
+ ]
+}

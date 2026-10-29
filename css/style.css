@@ -49,7 +49,10 @@ kbd { font: 11px ui-monospace, Consolas, monospace; color: var(--muted); margin-
 .menu-pop button.check.on::before { content: '✓'; color: var(--accent); }
 .menu-sep { height: 1px; background: var(--line); margin: 4px 2px; }
 .menu-label { font-size: 11px; color: var(--muted); padding: 4px 10px 2px; text-transform: uppercase; letter-spacing: .04em; }
-#example-list button { padding-left: 16px; }
+.examples-pop { display: none; gap: 4px; min-width: 0; width: max-content; max-width: calc(100vw - 40px); }
+.menu.open .examples-pop { display: flex; flex-wrap: wrap; }
+.ex-col { width: 230px; }
+.ex-col button { padding-left: 14px; }
 
 /* ---------- bố cục: gần như toàn bộ màn hình cho bảng vẽ ---------- */
 #main { flex: 1; display: flex; min-height: 0; }

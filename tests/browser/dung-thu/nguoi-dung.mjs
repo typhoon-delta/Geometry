@@ -478,11 +478,13 @@ export class NguoiDung {
       await this.uncover(s.x, s.y);
       if (process.env.DEBUG) console.log('    nháy đúp', s, await this.ev(([x, y, bx, by]) => [document.elementFromPoint(bx + x, by + y)?.tagName, __app.hitTest(x, y).map((h) => h.id + ':' + h.kind + ':' + h.d.toFixed(1)), __app.toolId], [s.x, s.y, this.box.x, this.box.y]));
       await this.page.mouse.dblclick(this.box.x + s.x, this.box.y + s.y);
-      const dlg = await this.page.waitForSelector('.modal-input', { timeout: 1500 }).catch(() => null);
+      // bản cũ: hộp thoại đổi tên; bản 1.2: ô tên tại chỗ (.inline-name)
+      const dlg = await this.page.waitForSelector('.modal-input, .inline-name', { timeout: 1500 }).catch(() => null);
       this.keys += newName.length + 1;
       if (dlg) {
-        await this.page.fill('.modal-input', newName);
-        await this.page.keyboard.press('Enter');
+        const sel = (await this.page.$('.inline-name')) ? '.inline-name' : '.modal-input';
+        await this.page.fill(sel, newName);
+        await this.page.press(sel, 'Enter');
       } else if (await this.page.$('#props.show #p-name')) {
         // nháy đúp không mở được hộp đổi tên (thẻ thuộc tính hiện ra đè lên điểm) → gõ vào ô Tên của thẻ
         this.issue('che hình', 'Bấm vào điểm gần góc phải: thẻ thuộc tính hiện ra đè lên chính điểm đó, nháy đúp không mở được hộp đổi tên – phải gõ vào ô Tên của thẻ');

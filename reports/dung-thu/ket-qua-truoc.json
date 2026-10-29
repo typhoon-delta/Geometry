@@ -5,7 +5,7 @@
   "ten": "IMO 2008 – Bài 1",
   "de": "Tam giác nhọn ABC, trực tâm H. Đường tròn tâm là trung điểm BC đi qua H cắt đường thẳng BC tại A₁, A₂; tương tự B₁, B₂ (với CA) và C₁, C₂ (với AB). Chứng minh sáu điểm A₁, A₂, B₁, B₂, C₁, C₂ cùng thuộc một đường tròn.",
   "ok": true,
-  "thoiGianDung": 3536,
+  "thoiGianDung": 4132,
   "thaoTac": {
    "tool": 30,
    "board": 24,
@@ -46,7 +46,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 14,
+   "ms": 13,
    "count": 4,
    "top": [
     "A, M_b, M_c, D đồng viên",
@@ -64,7 +64,7 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.39,
+    "msKhung": 0.46,
     "msKhungMax": 1,
     "saiSoSauKeo": 1.046579991469517e-15
    }
@@ -77,7 +77,7 @@
   "ten": "IMO 2010 – Bài 2",
   "de": "I là tâm nội tiếp tam giác ABC, Γ là đường tròn ngoại tiếp. AI cắt Γ lần nữa tại D. E thuộc cung BDC, F thuộc cạnh BC sao cho ∠BAF = ∠CAE. G là trung điểm IF. Chứng minh DG và EI cắt nhau trên Γ.",
   "ok": true,
-  "thoiGianDung": 2119,
+  "thoiGianDung": 2561,
   "thaoTac": {
    "tool": 16,
    "board": 25,
@@ -115,7 +115,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 10,
+   "ms": 17,
    "count": 1,
    "top": [
     "X nằm trên DG"
@@ -130,8 +130,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.31,
-    "msKhungMax": 0.8,
+    "msKhung": 0.42,
+    "msKhungMax": 1.1,
     "saiSoSauKeo": 1.2957498628885765e-16
    }
   ],
@@ -143,7 +143,7 @@
   "ten": "IMO 2012 – Bài 5",
   "de": "Tam giác ABC vuông tại C, D là chân đường cao từ C. X nằm trong đoạn CD. K thuộc đoạn AX với BK = BC; L thuộc đoạn BX với AL = AC. M là giao điểm của AL và BK. Chứng minh MK = ML.",
   "ok": true,
-  "thoiGianDung": 3340,
+  "thoiGianDung": 3504,
   "thaoTac": {
    "tool": 25,
    "board": 21,
@@ -186,7 +186,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 15,
+   "ms": 11,
    "count": 3,
    "top": [
     "CB tiếp xúc (A, AC)",
@@ -200,16 +200,16 @@
     "diem": "X",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.28,
-    "msKhungMax": 0.4,
+    "msKhung": 0.33,
+    "msKhungMax": 0.5,
     "saiSoSauKeo": 5.825329998628934e-16
    },
    {
     "diem": "B",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.32,
-    "msKhungMax": 0.9,
+    "msKhung": 0.35,
+    "msKhungMax": 1.5,
     "saiSoSauKeo": 2.9126649995516296e-16
    }
   ],
@@ -221,7 +221,7 @@
   "ten": "IMO 2013 – Bài 4",
   "de": "Tam giác nhọn ABC, trực tâm H, W thuộc cạnh BC. M, N là chân đường cao từ B, C. ω₁ là đường tròn (BWN), X ∈ ω₁ với WX là đường kính; ω₂ là đường tròn (CWM), Y ∈ ω₂ với WY là đường kính. Chứng minh X, Y, H thẳng hàng.",
   "ok": true,
-  "thoiGianDung": 3007,
+  "thoiGianDung": 4003,
   "thaoTac": {
    "tool": 24,
    "board": 25,
@@ -261,7 +261,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 12,
+   "ms": 14,
    "count": 6,
    "top": [
     "A, H, M, N đồng viên",
@@ -281,16 +281,16 @@
     "diem": "W",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.37,
-    "msKhungMax": 0.7,
+    "msKhung": 0.39,
+    "msKhungMax": 1,
     "saiSoSauKeo": 0
    },
    {
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.37,
-    "msKhungMax": 0.6,
+    "msKhung": 0.39,
+    "msKhungMax": 0.5,
     "saiSoSauKeo": 2.5462297439628405e-17
    }
   ],
@@ -301,29 +301,33 @@
   "nhom": "IMO",
   "ten": "IMO 2014 – Bài 4",
   "de": "P, Q thuộc cạnh BC của tam giác nhọn ABC sao cho ∠PAB = ∠BCA và ∠CAQ = ∠ABC. M, N thuộc AP, AQ sao cho P là trung điểm AM, Q là trung điểm AN. Chứng minh BM và CN cắt nhau trên đường tròn ngoại tiếp ABC.",
-  "ok": false,
-  "loi": "page.waitForSelector: Timeout 2000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.modal-input') to be visible\u001b[22m\n",
-  "thoiGianDung": 3760,
+  "ok": true,
+  "thoiGianDung": 3312,
   "thaoTac": {
-   "tool": 12,
-   "board": 16,
-   "rename": 3,
-   "other": 1,
-   "tong": 32,
-   "lanBam": 50,
-   "phim": 4
+   "tool": 21,
+   "board": 23,
+   "rename": 5,
+   "other": 2,
+   "tong": 51,
+   "lanBam": 82,
+   "phim": 10
   },
-  "vanDe": [],
+  "vanDe": [
+   {
+    "kind": "khung nhìn",
+    "text": "Đối tượng mới dựng nằm ngoài khung nhìn – phải \"Thu phóng vừa hình\" mới bấm/đặt tên được (M)"
+   }
+  ],
   "doiTuong": {
-   "point": 9,
-   "line": 3,
+   "point": 11,
+   "line": 5,
    "circle": 3,
    "mark": 0,
    "an": 0,
-   "buoc": 15
+   "buoc": 19
   },
   "nhan": {
-   "n": 9,
+   "n": 11,
    "overlapLL": [],
    "overPoint": [],
    "overCurve": [
@@ -334,27 +338,35 @@
    "outside": []
   },
   "kiemChung": {
-   "base": "LỖI: Không có đối tượng X",
-   "samples": 0,
-   "undef": 120,
+   "base": 5.665572235179314e-16,
+   "samples": 30,
+   "undef": 0,
    "skipped": 0,
-   "max": 0,
-   "dung": false
+   "max": 3.0995639083254793e-15,
+   "dung": true
   },
   "khamPha": {
-   "ms": 14,
-   "count": 0,
-   "top": [],
-   "found": null
+   "ms": 16,
+   "count": 4,
+   "top": [
+    "X nằm trên (ABC)",
+    "B, Q, N, X đồng viên",
+    "C, P, M, X đồng viên",
+    "P, Q, M, N đồng viên"
+   ],
+   "found": {
+    "rank": 1,
+    "text": "X nằm trên (ABC)"
+   }
   },
   "keo": [
    {
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.31,
-    "msKhungMax": 0.7,
-    "saiSoSauKeo": "LỖI: Không có đối tượng X"
+    "msKhung": 0.38,
+    "msKhungMax": 1,
+    "saiSoSauKeo": 5.665572235179314e-16
    }
   ],
   "loiTrang": []
@@ -365,72 +377,76 @@
   "ten": "IMO 2015 – Bài 4",
   "de": "Tam giác ABC nội tiếp Ω tâm O. Đường tròn Γ tâm A cắt BC tại D, E (B, D, E, C theo thứ tự) và cắt Ω tại F, G (A, F, B, C, G theo thứ tự). Đường tròn (BDF) cắt AB lần nữa tại K, (CGE) cắt CA lần nữa tại L. FK và GL cắt nhau tại X. Chứng minh X thuộc AO.",
   "ok": true,
-  "thoiGianDung": 2593,
+  "thoiGianDung": 3913,
   "thaoTac": {
-   "tool": 20,
+   "tool": 25,
    "board": 27,
-   "rename": 5,
+   "rename": 8,
    "other": 1,
-   "tong": 53,
-   "lanBam": 76,
-   "phim": 10
+   "tong": 61,
+   "lanBam": 91,
+   "phim": 18
   },
   "vanDe": [
    {
     "kind": "đặt tên",
-    "text": "Đổi tên thành \"K\" bị từ chối (tên đã có) – phải đổi tên điểm kia trước"
+    "text": "Tên \"K\" đã bị chiếm (tâm đường tròn tự đặt tên) – phải đổi tên điểm kia trước"
    },
    {
     "kind": "đặt tên",
-    "text": "Đổi tên thành \"L\" bị từ chối (tên đã có) – phải đổi tên điểm kia trước"
+    "text": "Tên \"L\" đã bị chiếm (tâm đường tròn tự đặt tên) – phải đổi tên điểm kia trước"
    }
   ],
   "doiTuong": {
-   "point": 14,
+   "point": 13,
    "line": 6,
    "circle": 4,
    "mark": 0,
    "an": 0,
-   "buoc": 24
+   "buoc": 23
   },
   "nhan": {
-   "n": 14,
+   "n": 13,
    "overlapLL": [],
    "overPoint": [],
    "overCurve": [
-    "A",
+    "F",
     "G",
-    "K",
-    "M",
-    "P"
+    "Z1",
+    "Z2",
+    "L",
+    "X"
    ],
-   "overCurveCount": 6,
+   "overCurveCount": 7,
    "outside": []
   },
   "kiemChung": {
-   "base": 0.8712117626128864,
+   "base": 5.173799311817919e-15,
    "samples": 30,
-   "undef": 11,
+   "undef": 0,
    "skipped": 0,
-   "max": 0.925907776520265,
-   "dung": false
+   "max": 2.6813087804825302e-14,
+   "dung": true
   },
   "khamPha": {
-   "ms": 16,
-   "count": 0,
-   "top": [],
-   "found": null
+   "ms": 11,
+   "count": 1,
+   "top": [
+    "X nằm trên AO"
+   ],
+   "found": {
+    "rank": 1,
+    "text": "X nằm trên AO"
+   }
   },
   "keo": [
    {
     "diem": "A",
-    "nhay": [
-     "X"
-    ],
-    "doiTuongMat": 11,
-    "msKhung": 0.35,
-    "msKhungMax": 1,
-    "saiSoSauKeo": 0.8712117626128864
+    "nhay": [],
+    "doiTuongMat": 0,
+    "msKhung": 0.45,
+    "msKhungMax": 1.2,
+    "saiSoSauKeo": 5.173799311817919e-15
    }
   ],
   "loiTrang": []
@@ -440,79 +456,86 @@
   "nhom": "IMO",
   "ten": "IMO 2017 – Bài 4",
   "de": "R, S thuộc đường tròn Ω, RS không là đường kính; ℓ là tiếp tuyến của Ω tại R. T sao cho S là trung điểm RT. J thuộc cung nhỏ RS sao cho đường tròn Γ ngoại tiếp JST cắt ℓ tại hai điểm; A là giao điểm gần R hơn. AJ cắt Ω lần nữa tại K. Chứng minh KT tiếp xúc Γ.",
-  "ok": false,
-  "loi": "Không thấy đường {\"line\":[\"A\",\"J\"]}",
-  "thoiGianDung": 2389,
+  "ok": true,
+  "thoiGianDung": 3774,
   "thaoTac": {
-   "tool": 19,
-   "board": 14,
-   "rename": 6,
-   "other": 1,
-   "tong": 40,
-   "lanBam": 63,
-   "phim": 12
+   "tool": 26,
+   "board": 17,
+   "rename": 9,
+   "other": 2,
+   "tong": 54,
+   "lanBam": 86,
+   "phim": 19
   },
   "vanDe": [
    {
     "kind": "đặt tên",
-    "text": "Đổi tên thành \"A\" bị từ chối (tên đã có) – phải đổi tên điểm kia trước"
+    "text": "Tên \"A\" đã bị chiếm (tâm đường tròn tự đặt tên) – phải đổi tên điểm kia trước"
+   },
+   {
+    "kind": "khung nhìn",
+    "text": "Đối tượng mới dựng nằm ngoài khung nhìn – phải \"Thu phóng vừa hình\" mới bấm/đặt tên được (Z1)"
    }
   ],
   "doiTuong": {
-   "point": 7,
-   "line": 1,
+   "point": 8,
+   "line": 3,
    "circle": 2,
    "mark": 0,
    "an": 0,
-   "buoc": 10
+   "buoc": 13
   },
   "nhan": {
-   "n": 7,
+   "n": 8,
    "overlapLL": [
     [
      "J",
-     "B"
+     "A"
     ]
    ],
    "overPoint": [],
    "overCurve": [
-    "B"
+    "S",
+    "A"
    ],
-   "overCurveCount": 1,
+   "overCurveCount": 3,
    "outside": []
   },
   "kiemChung": {
-   "base": "LỖI: Không có đối tượng K",
-   "samples": 0,
-   "undef": 120,
+   "base": 0,
+   "samples": 30,
+   "undef": 0,
    "skipped": 0,
-   "max": 0,
-   "dung": false
+   "max": 5.569997007731119e-16,
+   "dung": true
   },
   "khamPha": {
-   "ms": 9,
-   "count": 0,
-   "top": [],
-   "found": null
+   "ms": 11,
+   "count": 1,
+   "top": [
+    "KT tiếp xúc (JST)"
+   ],
+   "found": {
+    "rank": 1,
+    "text": "KT tiếp xúc (JST)"
+   }
   },
   "keo": [
    {
     "diem": "S",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.27,
-    "msKhungMax": 0.6,
-    "saiSoSauKeo": "LỖI: Không có đối tượng K"
+    "msKhung": 0.34,
+    "msKhungMax": 0.7,
+    "saiSoSauKeo": 2.530947613520497e-16
    },
    {
     "diem": "J",
-    "nhay": [
-     "A"
-    ],
+    "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.29,
-    "msKhungMax": 0.5,
-    "saiSoSauKeo": "LỖI: Không có đối tượng K"
+    "msKhung": 0.37,
+    "msKhungMax": 1.6,
+    "saiSoSauKeo": 1.26547380561095e-16
    }
   ],
   "loiTrang": []
@@ -523,7 +546,7 @@
   "ten": "IMO 2018 – Bài 1",
   "de": "Γ là đường tròn ngoại tiếp tam giác nhọn ABC. D, E thuộc các đoạn AB, AC với AD = AE. Trung trực của BD và CE cắt các cung nhỏ AB, AC của Γ tại F, G. Chứng minh DE ∥ FG (hoặc trùng).",
   "ok": true,
-  "thoiGianDung": 1705,
+  "thoiGianDung": 1834,
   "thaoTac": {
    "tool": 13,
    "board": 20,
@@ -561,7 +584,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 9,
+   "ms": 8,
    "count": 0,
    "top": [],
    "found": null
@@ -571,8 +594,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.34,
-    "msKhungMax": 1.1,
+    "msKhung": 0.36,
+    "msKhungMax": 1.5,
     "saiSoSauKeo": 1.3877787807814457e-16
    }
   ],
@@ -583,72 +606,69 @@
   "nhom": "IMO",
   "ten": "IMO 2019 – Bài 6",
   "de": "I là tâm nội tiếp tam giác nhọn ABC (AB ≠ AC), ω tiếp xúc BC, CA, AB tại D, E, F. Đường thẳng qua D vuông góc EF cắt ω lần nữa tại R. AR cắt ω lần nữa tại P. Đường tròn (PCE) và (PBF) cắt nhau lần nữa tại Q. Chứng minh DI và PQ cắt nhau trên đường thẳng qua A vuông góc AI.",
-  "ok": false,
-  "loi": "page.waitForSelector: Timeout 2000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.modal-input') to be visible\u001b[22m\n",
-  "thoiGianDung": 4516,
+  "ok": true,
+  "thoiGianDung": 3489,
   "thaoTac": {
-   "tool": 18,
-   "board": 31,
+   "tool": 23,
+   "board": 38,
    "rename": 3,
    "other": 1,
-   "tong": 53,
-   "lanBam": 77,
-   "phim": 4
+   "tong": 65,
+   "lanBam": 94,
+   "phim": 6
   },
-  "vanDe": [
-   {
-    "kind": "chọn",
-    "text": "Chỗ cắt nằm ngoài khung nhìn – phải chọn lần lượt hai đường"
-   }
-  ],
+  "vanDe": [],
   "doiTuong": {
-   "point": 11,
-   "line": 6,
+   "point": 12,
+   "line": 10,
    "circle": 3,
    "mark": 0,
    "an": 0,
-   "buoc": 20
+   "buoc": 25
   },
   "nhan": {
-   "n": 11,
+   "n": 12,
    "overlapLL": [],
    "overPoint": [],
    "overCurve": [
-    "A",
-    "P"
+    "P",
+    "Q"
    ],
-   "overCurveCount": 2,
+   "overCurveCount": 4,
    "outside": []
   },
   "kiemChung": {
-   "base": "LỖI: Không có đối tượng Q",
-   "samples": 0,
-   "undef": 120,
+   "base": 9.492406860545088e-15,
+   "samples": 30,
+   "undef": 0,
    "skipped": 0,
-   "max": 0,
-   "dung": false
+   "max": 3.9135500534692724e-8,
+   "dung": true
   },
   "khamPha": {
-   "ms": 15,
-   "count": 7,
+   "ms": 11,
+   "count": 10,
    "top": [
-    "I, P, M thẳng hàng",
     "A, I, E, F đồng viên",
-    "B, C, I, M đồng viên",
+    "B, C, I, Q đồng viên",
     "B, I, D, F đồng viên",
     "C, I, D, E đồng viên",
-    "I, E, K, M đồng viên"
+    "DI, PQ, d10 (⊥ AI qua A) đồng quy",
+    "BC ⊥ DI"
    ],
-   "found": null
+   "found": {
+    "rank": 5,
+    "text": "DI, PQ, d10 (⊥ AI qua A) đồng quy"
+   }
   },
   "keo": [
    {
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.36,
-    "msKhungMax": 0.6,
-    "saiSoSauKeo": "LỖI: Không có đối tượng Q"
+    "msKhung": 0.37,
+    "msKhungMax": 0.7,
+    "saiSoSauKeo": 9.492406860545088e-15
    }
   ],
   "loiTrang": []
@@ -659,7 +679,7 @@
   "ten": "IMO 2021 – Bài 4",
   "de": "Đường tròn Γ tâm I tiếp xúc bốn cạnh của tứ giác lồi ABCD. Ω là đường tròn (AIC). Tia đối của AB… cắt Ω tại X (BA kéo dài qua A), Z (BC kéo dài qua C); AD, CD kéo dài qua D cắt Ω tại Y, T. Chứng minh AD + DT + TX + XA = CD + DY + YZ + ZC.",
   "ok": true,
-  "thoiGianDung": 4400,
+  "thoiGianDung": 4617,
   "thaoTac": {
    "tool": 34,
    "board": 25,
@@ -703,7 +723,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 12,
+   "ms": 13,
    "count": 4,
    "top": [
     "I, T_1, T_2, D đồng viên",
@@ -718,16 +738,16 @@
     "diem": "T_1",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.38,
-    "msKhungMax": 0.7,
+    "msKhung": 0.42,
+    "msKhungMax": 0.8,
     "saiSoSauKeo": 1.422627279169546e-16
    },
    {
     "diem": "U",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.43,
-    "msKhungMax": 1.9,
+    "msKhung": 0.38,
+    "msKhungMax": 0.6,
     "saiSoSauKeo": 0
    }
   ],
@@ -739,7 +759,7 @@
   "ten": "IMO 2023 – Bài 2",
   "de": "Tam giác nhọn ABC, AB < AC, Ω ngoại tiếp. S là điểm chính giữa cung CB chứa A. Đường vuông góc từ A xuống BC cắt BS tại D, cắt Ω lần nữa tại E. Đường qua D song song BC cắt BE tại L. ω = (BDL) cắt Ω lần nữa tại P. Chứng minh tiếp tuyến của ω tại P cắt BS trên phân giác trong góc BAC.",
   "ok": true,
-  "thoiGianDung": 2959,
+  "thoiGianDung": 3277,
   "thaoTac": {
    "tool": 22,
    "board": 29,
@@ -778,7 +798,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 11,
+   "ms": 15,
    "count": 2,
    "top": [
     "B, O, F, X đồng viên",
@@ -791,8 +811,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.36,
-    "msKhungMax": 0.8,
+    "msKhung": 0.35,
+    "msKhungMax": 0.7,
     "saiSoSauKeo": 4.2179971705221807e-16
    }
   ],
@@ -804,7 +824,7 @@
   "ten": "IMO 2024 – Bài 4",
   "de": "Tam giác ABC với AB < AC < BC, tâm nội tiếp I, đường tròn nội tiếp ω. X ≠ C thuộc BC sao cho đường qua X song song AC tiếp xúc ω; Y ≠ B thuộc BC sao cho đường qua Y song song AB tiếp xúc ω. AI cắt (ABC) lần nữa tại P. K, L là trung điểm AC, AB. Chứng minh ∠KIL + ∠YPX = 180°.",
   "ok": true,
-  "thoiGianDung": 3219,
+  "thoiGianDung": 3680,
   "thaoTac": {
    "tool": 25,
    "board": 28,
@@ -842,7 +862,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 9,
+   "ms": 10,
    "count": 6,
    "top": [
     "d4 tiếp xúc đường tròn nội tiếp ABC",
@@ -860,7 +880,7 @@
     "nhay": [],
     "doiTuongMat": 0,
     "msKhung": 0.37,
-    "msKhungMax": 0.7,
+    "msKhungMax": 0.8,
     "saiSoSauKeo": 1.4135798584282297e-16
    }
   ],
@@ -871,70 +891,78 @@
   "nhom": "IMO",
   "ten": "IMO 2025 – Bài 2",
   "de": "Ω tâm M và Γ tâm N (bán kính Ω nhỏ hơn) cắt nhau tại A, B. MN cắt Ω tại C, cắt Γ tại D (C, M, N, D theo thứ tự). P là tâm ngoại tiếp ACD. AP cắt Ω lần nữa tại E, cắt Γ lần nữa tại F. H là trực tâm PMN. Chứng minh đường qua H song song AP tiếp xúc đường tròn (BEF).",
-  "ok": false,
-  "loi": "Không thấy đối tượng \"P\"",
-  "thoiGianDung": 2337,
+  "ok": true,
+  "thoiGianDung": 2808,
   "thaoTac": {
    "tool": 21,
-   "board": 17,
-   "rename": 6,
+   "board": 25,
+   "rename": 5,
    "other": 1,
-   "tong": 45,
-   "lanBam": 70,
-   "phim": 12
+   "tong": 52,
+   "lanBam": 77,
+   "phim": 10
   },
   "vanDe": [],
   "doiTuong": {
-   "point": 10,
-   "line": 2,
-   "circle": 2,
+   "point": 13,
+   "line": 3,
+   "circle": 3,
    "mark": 0,
    "an": 0,
-   "buoc": 14
+   "buoc": 19
   },
   "nhan": {
-   "n": 10,
+   "n": 13,
    "overlapLL": [],
    "overPoint": [],
    "overCurve": [
-    "A"
+    "A",
+    "B",
+    "K"
    ],
-   "overCurveCount": 1,
+   "overCurveCount": 3,
    "outside": []
   },
   "kiemChung": {
-   "base": "LỖI: Không có đối tượng #h",
-   "samples": 0,
-   "undef": 120,
+   "base": 7.824257325803798e-16,
+   "samples": 30,
+   "undef": 0,
    "skipped": 0,
-   "max": 0,
-   "dung": false
+   "max": 1.011809732124728e-13,
+   "dung": true
   },
   "khamPha": {
-   "ms": 8,
-   "count": 2,
+   "ms": 13,
+   "count": 6,
    "top": [
-    "M, C, F, E đồng viên",
-    "N, A, C, F đồng viên"
+    "M, A, D, P đồng viên",
+    "M, C, P, E đồng viên",
+    "N, A, C, P đồng viên",
+    "N, D, P, F đồng viên",
+    "d3 (∥ AP qua H) tiếp xúc (BEF)",
+    "M, N, B, K đồng viên"
    ],
-   "found": null
+   "found": {
+    "rank": 5,
+    "text": "d3 (∥ AP qua H) tiếp xúc (BEF)"
+   }
   },
   "keo": [
    {
     "diem": "N",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.3,
+    "msKhung": 0.39,
     "msKhungMax": 0.6,
-    "saiSoSauKeo": "LỖI: Không có đối tượng #h"
+    "saiSoSauKeo": 7.824257325803798e-16
    },
    {
     "diem": "U",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.27,
-    "msKhungMax": 0.4,
-    "saiSoSauKeo": "LỖI: Không có đối tượng #h"
+    "msKhung": 0.34,
+    "msKhungMax": 0.5,
+    "saiSoSauKeo": null
    }
   ],
   "loiTrang": []
@@ -945,7 +973,7 @@
   "ten": "VMO 2014 – Bài 4",
   "de": "Tam giác nhọn ABC (AB < AC) nội tiếp (O); I là điểm chính giữa cung BC không chứa A. K ≠ C thuộc AC với IK = IC. BK cắt (O) tại D (D ≠ B), cắt AI tại E. DI cắt AC tại F. a) EF = BC/2. b) M thuộc DI với CM ∥ AD; KM cắt BC tại N; (BKN) cắt (O) tại P ≠ B. Chứng minh PK đi qua trung điểm AD.",
   "ok": true,
-  "thoiGianDung": 3800,
+  "thoiGianDung": 4277,
   "thaoTac": {
    "tool": 31,
    "board": 39,
@@ -999,7 +1027,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 16,
+   "ms": 17,
    "count": 15,
    "top": [
     "I, K, E, F, P đồng viên",
@@ -1016,8 +1044,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.36,
-    "msKhungMax": 0.8,
+    "msKhung": 0.46,
+    "msKhungMax": 1.1,
     "saiSoSauKeo": 4.461862174362451e-16
    }
   ],
@@ -1028,34 +1056,41 @@
   "nhom": "VMO",
   "ten": "VMO 2016 – Bài 3",
   "de": "B, C cố định, A thay đổi (tam giác ABC nhọn). D là trung điểm BC; E, F là hình chiếu của D trên AB, AC. O là tâm ngoại tiếp; EF cắt AO, BC tại M, N. a) Đường tròn (AMN) luôn đi qua một điểm cố định. b) Tiếp tuyến tại E, F của (AEF) cắt nhau tại T; T thuộc một đường thẳng cố định.",
-  "ok": false,
-  "loi": "page.waitForSelector: Timeout 2000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.modal-input') to be visible\u001b[22m\n",
-  "thoiGianDung": 3526,
+  "ok": true,
+  "thoiGianDung": 3213,
   "thaoTac": {
-   "tool": 11,
-   "board": 18,
-   "rename": 2,
-   "other": 1,
-   "tong": 32,
-   "lanBam": 46,
-   "phim": 2
+   "tool": 20,
+   "board": 29,
+   "rename": 3,
+   "other": 3,
+   "tong": 55,
+   "lanBam": 83,
+   "phim": 6
   },
   "vanDe": [
    {
+    "kind": "khung nhìn",
+    "text": "Đối tượng mới dựng nằm ngoài khung nhìn – phải \"Thu phóng vừa hình\" mới bấm/đặt tên được (chỗ cắt)"
+   },
+   {
     "kind": "chọn",
     "text": "Chỗ cắt nằm ngoài khung nhìn – phải chọn lần lượt hai đường"
+   },
+   {
+    "kind": "khung nhìn",
+    "text": "Đối tượng mới dựng nằm ngoài khung nhìn – phải \"Thu phóng vừa hình\" mới bấm/đặt tên được (N)"
    }
   ],
   "doiTuong": {
-   "point": 9,
-   "line": 5,
-   "circle": 0,
+   "point": 12,
+   "line": 8,
+   "circle": 2,
    "mark": 0,
    "an": 0,
-   "buoc": 14
+   "buoc": 22
   },
   "nhan": {
-   "n": 9,
+   "n": 12,
    "overlapLL": [
     [
      "O",
@@ -1064,38 +1099,46 @@
    ],
    "overPoint": [],
    "overCurve": [
-    "O"
+    "D",
+    "F",
+    "O",
+    "L"
    ],
-   "overCurveCount": 1,
+   "overCurveCount": 6,
    "outside": []
   },
   "kiemChung": {
-   "base": "LỖI: Không có đối tượng N",
-   "samples": 0,
-   "undef": 120,
+   "base": 2.2246124748576357e-16,
+   "samples": 30,
+   "undef": 0,
    "skipped": 0,
-   "max": 0,
-   "dung": false
+   "max": 7.327189489647194e-16,
+   "dung": true
   },
   "khamPha": {
-   "ms": 8,
-   "count": 2,
+   "ms": 22,
+   "count": 6,
    "top": [
-    "A, D, E, F đồng viên",
-    "A, D, M, K đồng viên"
+    "O, M, N, T đồng viên",
+    "D nằm trên (AMN)",
+    "E, F nằm trên ω2",
+    "A, D, L thẳng hàng",
+    "E, F, L, T đồng viên",
+    "T nằm trên d8 (trung trực BC)"
    ],
-   "found": null
+   "found": {
+    "rank": 2,
+    "text": "D nằm trên (AMN)"
+   }
   },
   "keo": [
    {
     "diem": "A",
-    "nhay": [
-     "K"
-    ],
+    "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.29,
-    "msKhungMax": 0.8,
-    "saiSoSauKeo": "LỖI: Không có đối tượng N"
+    "msKhung": 0.37,
+    "msKhungMax": 0.7,
+    "saiSoSauKeo": 2.2246124748576357e-16
    }
   ],
   "loiTrang": []
@@ -1106,7 +1149,7 @@
   "ten": "Bổ đề tâm nội tiếp – bàng tiếp",
   "de": "S là điểm chính giữa cung BC không chứa A của (ABC). Chứng minh B, C, I, I_A cùng nằm trên đường tròn tâm S (S là trung điểm II_A).",
   "ok": true,
-  "thoiGianDung": 1431,
+  "thoiGianDung": 1598,
   "thaoTac": {
    "tool": 9,
    "board": 19,
@@ -1142,7 +1185,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 6,
+   "ms": 11,
    "count": 2,
    "top": [
     "C, I, I_A nằm trên (S, SB)",
@@ -1158,8 +1201,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.35,
-    "msKhungMax": 0.6,
+    "msKhung": 0.37,
+    "msKhungMax": 0.8,
     "saiSoSauKeo": 6.937875496215512e-16
    }
   ],
@@ -1171,7 +1214,7 @@
   "ten": "Đường tròn Euler – định lý Feuerbach",
   "de": "Đường tròn Euler của tam giác ABC tiếp xúc với đường tròn nội tiếp và ba đường tròn bàng tiếp.",
   "ok": true,
-  "thoiGianDung": 1504,
+  "thoiGianDung": 1656,
   "thaoTac": {
    "tool": 9,
    "board": 19,
@@ -1212,7 +1255,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 20,
+   "ms": 19,
    "count": 17,
    "top": [
     "đường tròn Euler ABC tiếp xúc đường tròn nội tiếp ABC",
@@ -1232,8 +1275,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.39,
-    "msKhungMax": 1.5,
+    "msKhung": 0.43,
+    "msKhungMax": 0.8,
     "saiSoSauKeo": 2.332306890877489e-16
    }
   ],
@@ -1245,7 +1288,7 @@
   "ten": "Đường tròn mixtilinear",
   "de": "Đường tròn mixtilinear nội ứng với A tiếp xúc AB, AC tại K, L và tiếp xúc trong (O) tại T. Chứng minh I là trung điểm KL và T, I và điểm chính giữa cung BAC thẳng hàng.",
   "ok": true,
-  "thoiGianDung": 2654,
+  "thoiGianDung": 3153,
   "thaoTac": {
    "tool": 20,
    "board": 24,
@@ -1281,7 +1324,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 17,
+   "ms": 19,
    "count": 8,
    "top": [
     "A, J, I thẳng hàng",
@@ -1298,8 +1341,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.36,
-    "msKhungMax": 1,
+    "msKhung": 0.34,
+    "msKhungMax": 0.6,
     "saiSoSauKeo": 1.0327227971047476e-16
    }
   ],
@@ -1311,7 +1354,7 @@
   "ten": "Nghịch đảo √(bc)",
   "de": "Phép nghịch đảo tâm A bán kính √(AB·AC) hợp với phép đối xứng qua phân giác góc A đổi chỗ B và C, biến (ABC) thành đường thẳng BC và biến đường tròn mixtilinear nội thành đường tròn bàng tiếp góc A.",
   "ok": true,
-  "thoiGianDung": 5779,
+  "thoiGianDung": 6163,
   "thaoTac": {
    "tool": 40,
    "board": 45,
@@ -1399,7 +1442,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 16,
+   "ms": 22,
    "count": 28,
    "top": [
     "B_1C_1, (ABC), (A, AT) cùng đi qua một điểm",
@@ -1416,8 +1459,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.47,
-    "msKhungMax": 0.9,
+    "msKhung": 0.54,
+    "msKhungMax": 1,
     "saiSoSauKeo": 8.077674180167477e-16
    }
   ],
@@ -1429,7 +1472,7 @@
   "ten": "Tứ giác nội tiếp – định lý Brocard",
   "de": "Tứ giác ABCD nội tiếp (O). P = AC ∩ BD, Q = AB ∩ CD, R = AD ∩ BC. Chứng minh O là trực tâm tam giác PQR.",
   "ok": true,
-  "thoiGianDung": 2868,
+  "thoiGianDung": 2889,
   "thaoTac": {
    "tool": 18,
    "board": 21,
@@ -1485,7 +1528,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 11,
+   "ms": 9,
    "count": 1,
    "top": [
     "P nằm trên d10 (⊥ QR qua O)"
@@ -1513,7 +1556,7 @@
   "ten": "Tiếp tuyến chung – định lý Monge",
   "de": "Ba đường tròn có bán kính khác nhau. Hai tiếp tuyến chung ngoài của mỗi cặp cắt nhau tại tâm vị tự ngoài; ba tâm vị tự ngoài thẳng hàng.",
   "ok": true,
-  "thoiGianDung": 3903,
+  "thoiGianDung": 3748,
   "thaoTac": {
    "tool": 26,
    "board": 16,
@@ -1562,7 +1605,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 12,
+   "ms": 16,
    "count": 6,
    "top": [
     "O_1, O_2, S_{12} thẳng hàng",
@@ -1582,8 +1625,8 @@
     "diem": "O_1",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.39,
-    "msKhungMax": 0.8,
+    "msKhung": 0.4,
+    "msKhungMax": 0.9,
     "saiSoSauKeo": 1.7790699210298208e-17
    }
   ],
@@ -1595,7 +1638,7 @@
   "ten": "Tâm đồng dạng xoắn (quay + vị tự)",
   "de": "X = AB ∩ CD; (XAC) và (XBD) cắt nhau lần nữa tại S. Phép quay tâm S góc ∠ASC rồi vị tự tâm S tỉ số SC/SA biến A thành C và B thành D.",
   "ok": true,
-  "thoiGianDung": 2121,
+  "thoiGianDung": 2224,
   "thaoTac": {
    "tool": 16,
    "board": 20,
@@ -1638,7 +1681,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 7,
+   "ms": 10,
    "count": 0,
    "top": [],
    "found": null
@@ -1648,8 +1691,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.36,
-    "msKhungMax": 1.2,
+    "msKhung": 0.4,
+    "msKhungMax": 3.3,
     "saiSoSauKeo": 1.0135828604486259e-16
    }
   ],
@@ -1661,7 +1704,7 @@
   "ten": "Tam giác với ba tâm bàng tiếp (hình dày)",
   "de": "Tam giác ABC, tâm nội tiếp I, ba tâm bàng tiếp I_A, I_B, I_C, đường tròn ngoại tiếp và ba đường tròn bàng tiếp. (O) là đường tròn Euler của tam giác I_AI_BI_C, I là trực tâm của nó, trung điểm M_A của II_A nằm trên (O). Kèm nhãn có chỉ số dưới và dấu phẩy.",
   "ok": true,
-  "thoiGianDung": 4916,
+  "thoiGianDung": 4848,
   "thaoTac": {
    "tool": 33,
    "board": 31,
@@ -1712,7 +1755,7 @@
    "dung": true
   },
   "khamPha": {
-   "ms": 26,
+   "ms": 22,
    "count": 17,
    "top": [
     "M_A, M_B, M_C, A', B', C' nằm trên (ABC)",
@@ -1732,8 +1775,8 @@
     "diem": "A",
     "nhay": [],
     "doiTuongMat": 0,
-    "msKhung": 0.46,
-    "msKhungMax": 1,
+    "msKhung": 0.48,
+    "msKhungMax": 1.1,
     "saiSoSauKeo": 2.101498555884241e-16
    }
   ],

@@ -9,7 +9,8 @@ import * as codec from '../io/codec.js';
 import { setupExplore, drawRelationOverlay } from './explorePanel.js';
 import { explore } from '../explore/explorer.js';
 import { toTikZ } from '../export/tikz.js';
-import { textDialog } from './dialog.js';
+import { textDialog, toast } from './dialog.js';
+import { THU_VIEN } from '../core/thu-vien.js';
 
 function start() {
   const app = new App();
@@ -24,9 +25,18 @@ function start() {
     }));
   document.getElementById('exit-projector').onclick = () => app.setProjector(false);
 
-  // Hình mẫu (menu Tệp)
-  const exList = document.getElementById('example-list');
-  exList.innerHTML = Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${e.title}</button>`).join('');
+  // Menu "Ví dụ": thư viện các bài đã dựng khi dùng thử (theo nhóm) + các hình mẫu dựng bằng mã
+  const exMenu = document.getElementById('example-menu');
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const groups = [];
+  for (const e of THU_VIEN) {
+    let g = groups.find((x) => x.name === e.nhom);
+    if (!g) groups.push((g = { name: e.nhom, items: [] }));
+    g.items.push(`<button data-lib="${e.id}" title="${esc(e.de)}">${esc(e.ten)}</button>`);
+  }
+  groups.push({ name: 'Hình mẫu', items: Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${esc(e.title)}</button>`) });
+  const GROUP_LABEL = { 'Cấu hình': 'Cấu hình hay gặp' };
+  exMenu.innerHTML = groups.map((g) => `<div class="ex-col"><div class="menu-label">${esc(GROUP_LABEL[g.name] || g.name)}</div>${g.items.join('')}</div>`).join('');
   app.loadExample = (key) => {
     const ex = EXAMPLES[key];
     if (!ex) return;
@@ -35,7 +45,18 @@ function start() {
     app.loadDoc(doc, { keepHistory: true });
     app.zoomFit();
   };
-  exList.addEventListener('click', (e) => { const b = e.target.closest('[data-example]'); if (b) app.loadExample(b.dataset.example); });
+  app.loadLibrary = (id) => {
+    const e = THU_VIEN.find((x) => x.id === id);
+    if (!e) return;
+    app.loadDoc(JSON.parse(JSON.stringify(e.doc)), { keepHistory: true });
+    app.zoomFit();
+    toast(`${e.ten}. ${e.de}`, 9000);
+  };
+  exMenu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-example], [data-lib]');
+    if (b && b.dataset.example) app.loadExample(b.dataset.example);
+    else if (b) app.loadLibrary(b.dataset.lib);
+  });
 
   // Khám phá
   app.drawRelationOverlay = () => drawRelationOverlay(app);
@@ -64,7 +85,7 @@ function start() {
 
   // Cho phép dùng từ console / test tự động
   window.__app = app;
-  window.GeoCore = { ...core, Builder, EXAMPLES, codec, explore, toTikZ };
+  window.GeoCore = { ...core, Builder, EXAMPLES, THU_VIEN, codec, explore, toTikZ };
   return app;
 }
 

@@ -5980,6 +5980,5042 @@
     return outL;
   }
 
+  // examples/thu-vien/muc-luc.json
+  var muc_luc_default = [
+    {
+      id: "imo2008-1",
+      nhom: "IMO",
+      ten: "IMO 2008 \u2013 B\xE0i 1",
+      de: "Tam gi\xE1c nh\u1ECDn ABC, tr\u1EF1c t\xE2m H. \u0110\u01B0\u1EDDng tr\xF2n t\xE2m l\xE0 trung \u0111i\u1EC3m BC \u0111i qua H c\u1EAFt \u0111\u01B0\u1EDDng th\u1EB3ng BC t\u1EA1i A\u2081, A\u2082; t\u01B0\u01A1ng t\u1EF1 B\u2081, B\u2082 (v\u1EDBi CA) v\xE0 C\u2081, C\u2082 (v\u1EDBi AB). Ch\u1EE9ng minh s\xE1u \u0111i\u1EC3m A\u2081, A\u2082, B\u2081, B\u2082, C\u2081, C\u2082 c\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n."
+    },
+    {
+      id: "imo2010-2",
+      nhom: "IMO",
+      ten: "IMO 2010 \u2013 B\xE0i 2",
+      de: "I l\xE0 t\xE2m n\u1ED9i ti\u1EBFp tam gi\xE1c ABC, \u0393 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp. AI c\u1EAFt \u0393 l\u1EA7n n\u1EEFa t\u1EA1i D. E thu\u1ED9c cung BDC, F thu\u1ED9c c\u1EA1nh BC sao cho \u2220BAF = \u2220CAE. G l\xE0 trung \u0111i\u1EC3m IF. Ch\u1EE9ng minh DG v\xE0 EI c\u1EAFt nhau tr\xEAn \u0393."
+    },
+    {
+      id: "imo2012-5",
+      nhom: "IMO",
+      ten: "IMO 2012 \u2013 B\xE0i 5",
+      de: "Tam gi\xE1c ABC vu\xF4ng t\u1EA1i C, D l\xE0 ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB C. X n\u1EB1m trong \u0111o\u1EA1n CD. K thu\u1ED9c \u0111o\u1EA1n AX v\u1EDBi BK = BC; L thu\u1ED9c \u0111o\u1EA1n BX v\u1EDBi AL = AC. M l\xE0 giao \u0111i\u1EC3m c\u1EE7a AL v\xE0 BK. Ch\u1EE9ng minh MK = ML."
+    },
+    {
+      id: "imo2013-4",
+      nhom: "IMO",
+      ten: "IMO 2013 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c nh\u1ECDn ABC, tr\u1EF1c t\xE2m H, W thu\u1ED9c c\u1EA1nh BC. M, N l\xE0 ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB B, C. \u03C9\u2081 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (BWN), X \u2208 \u03C9\u2081 v\u1EDBi WX l\xE0 \u0111\u01B0\u1EDDng k\xEDnh; \u03C9\u2082 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (CWM), Y \u2208 \u03C9\u2082 v\u1EDBi WY l\xE0 \u0111\u01B0\u1EDDng k\xEDnh. Ch\u1EE9ng minh X, Y, H th\u1EB3ng h\xE0ng."
+    },
+    {
+      id: "imo2014-4",
+      nhom: "IMO",
+      ten: "IMO 2014 \u2013 B\xE0i 4",
+      de: "P, Q thu\u1ED9c c\u1EA1nh BC c\u1EE7a tam gi\xE1c nh\u1ECDn ABC sao cho \u2220PAB = \u2220BCA v\xE0 \u2220CAQ = \u2220ABC. M, N thu\u1ED9c AP, AQ sao cho P l\xE0 trung \u0111i\u1EC3m AM, Q l\xE0 trung \u0111i\u1EC3m AN. Ch\u1EE9ng minh BM v\xE0 CN c\u1EAFt nhau tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp ABC."
+    },
+    {
+      id: "imo2015-4",
+      nhom: "IMO",
+      ten: "IMO 2015 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c ABC n\u1ED9i ti\u1EBFp \u03A9 t\xE2m O. \u0110\u01B0\u1EDDng tr\xF2n \u0393 t\xE2m A c\u1EAFt BC t\u1EA1i D, E (B, D, E, C theo th\u1EE9 t\u1EF1) v\xE0 c\u1EAFt \u03A9 t\u1EA1i F, G (A, F, B, C, G theo th\u1EE9 t\u1EF1). \u0110\u01B0\u1EDDng tr\xF2n (BDF) c\u1EAFt AB l\u1EA7n n\u1EEFa t\u1EA1i K, (CGE) c\u1EAFt CA l\u1EA7n n\u1EEFa t\u1EA1i L. FK v\xE0 GL c\u1EAFt nhau t\u1EA1i X. Ch\u1EE9ng minh X thu\u1ED9c AO."
+    },
+    {
+      id: "imo2017-4",
+      nhom: "IMO",
+      ten: "IMO 2017 \u2013 B\xE0i 4",
+      de: "R, S thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n \u03A9, RS kh\xF4ng l\xE0 \u0111\u01B0\u1EDDng k\xEDnh; \u2113 l\xE0 ti\u1EBFp tuy\u1EBFn c\u1EE7a \u03A9 t\u1EA1i R. T sao cho S l\xE0 trung \u0111i\u1EC3m RT. J thu\u1ED9c cung nh\u1ECF RS sao cho \u0111\u01B0\u1EDDng tr\xF2n \u0393 ngo\u1EA1i ti\u1EBFp JST c\u1EAFt \u2113 t\u1EA1i hai \u0111i\u1EC3m; A l\xE0 giao \u0111i\u1EC3m g\u1EA7n R h\u01A1n. AJ c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i K. Ch\u1EE9ng minh KT ti\u1EBFp x\xFAc \u0393."
+    },
+    {
+      id: "imo2018-1",
+      nhom: "IMO",
+      ten: "IMO 2018 \u2013 B\xE0i 1",
+      de: "\u0393 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp tam gi\xE1c nh\u1ECDn ABC. D, E thu\u1ED9c c\xE1c \u0111o\u1EA1n AB, AC v\u1EDBi AD = AE. Trung tr\u1EF1c c\u1EE7a BD v\xE0 CE c\u1EAFt c\xE1c cung nh\u1ECF AB, AC c\u1EE7a \u0393 t\u1EA1i F, G. Ch\u1EE9ng minh DE \u2225 FG (ho\u1EB7c tr\xF9ng)."
+    },
+    {
+      id: "imo2019-6",
+      nhom: "IMO",
+      ten: "IMO 2019 \u2013 B\xE0i 6",
+      de: "I l\xE0 t\xE2m n\u1ED9i ti\u1EBFp tam gi\xE1c nh\u1ECDn ABC (AB \u2260 AC), \u03C9 ti\u1EBFp x\xFAc BC, CA, AB t\u1EA1i D, E, F. \u0110\u01B0\u1EDDng th\u1EB3ng qua D vu\xF4ng g\xF3c EF c\u1EAFt \u03C9 l\u1EA7n n\u1EEFa t\u1EA1i R. AR c\u1EAFt \u03C9 l\u1EA7n n\u1EEFa t\u1EA1i P. \u0110\u01B0\u1EDDng tr\xF2n (PCE) v\xE0 (PBF) c\u1EAFt nhau l\u1EA7n n\u1EEFa t\u1EA1i Q. Ch\u1EE9ng minh DI v\xE0 PQ c\u1EAFt nhau tr\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng qua A vu\xF4ng g\xF3c AI."
+    },
+    {
+      id: "imo2021-4",
+      nhom: "IMO",
+      ten: "IMO 2021 \u2013 B\xE0i 4",
+      de: "\u0110\u01B0\u1EDDng tr\xF2n \u0393 t\xE2m I ti\u1EBFp x\xFAc b\u1ED1n c\u1EA1nh c\u1EE7a t\u1EE9 gi\xE1c l\u1ED3i ABCD. \u03A9 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (AIC). Tia \u0111\u1ED1i c\u1EE7a AB\u2026 c\u1EAFt \u03A9 t\u1EA1i X (BA k\xE9o d\xE0i qua A), Z (BC k\xE9o d\xE0i qua C); AD, CD k\xE9o d\xE0i qua D c\u1EAFt \u03A9 t\u1EA1i Y, T. Ch\u1EE9ng minh AD + DT + TX + XA = CD + DY + YZ + ZC."
+    },
+    {
+      id: "imo2023-2",
+      nhom: "IMO",
+      ten: "IMO 2023 \u2013 B\xE0i 2",
+      de: "Tam gi\xE1c nh\u1ECDn ABC, AB < AC, \u03A9 ngo\u1EA1i ti\u1EBFp. S l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung CB ch\u1EE9a A. \u0110\u01B0\u1EDDng vu\xF4ng g\xF3c t\u1EEB A xu\u1ED1ng BC c\u1EAFt BS t\u1EA1i D, c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i E. \u0110\u01B0\u1EDDng qua D song song BC c\u1EAFt BE t\u1EA1i L. \u03C9 = (BDL) c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i P. Ch\u1EE9ng minh ti\u1EBFp tuy\u1EBFn c\u1EE7a \u03C9 t\u1EA1i P c\u1EAFt BS tr\xEAn ph\xE2n gi\xE1c trong g\xF3c BAC."
+    },
+    {
+      id: "imo2024-4",
+      nhom: "IMO",
+      ten: "IMO 2024 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c ABC v\u1EDBi AB < AC < BC, t\xE2m n\u1ED9i ti\u1EBFp I, \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp \u03C9. X \u2260 C thu\u1ED9c BC sao cho \u0111\u01B0\u1EDDng qua X song song AC ti\u1EBFp x\xFAc \u03C9; Y \u2260 B thu\u1ED9c BC sao cho \u0111\u01B0\u1EDDng qua Y song song AB ti\u1EBFp x\xFAc \u03C9. AI c\u1EAFt (ABC) l\u1EA7n n\u1EEFa t\u1EA1i P. K, L l\xE0 trung \u0111i\u1EC3m AC, AB. Ch\u1EE9ng minh \u2220KIL + \u2220YPX = 180\xB0."
+    },
+    {
+      id: "imo2025-2",
+      nhom: "IMO",
+      ten: "IMO 2025 \u2013 B\xE0i 2",
+      de: "\u03A9 t\xE2m M v\xE0 \u0393 t\xE2m N (b\xE1n k\xEDnh \u03A9 nh\u1ECF h\u01A1n) c\u1EAFt nhau t\u1EA1i A, B. MN c\u1EAFt \u03A9 t\u1EA1i C, c\u1EAFt \u0393 t\u1EA1i D (C, M, N, D theo th\u1EE9 t\u1EF1). P l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp ACD. AP c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i E, c\u1EAFt \u0393 l\u1EA7n n\u1EEFa t\u1EA1i F. H l\xE0 tr\u1EF1c t\xE2m PMN. Ch\u1EE9ng minh \u0111\u01B0\u1EDDng qua H song song AP ti\u1EBFp x\xFAc \u0111\u01B0\u1EDDng tr\xF2n (BEF)."
+    },
+    {
+      id: "vmo2014-4",
+      nhom: "VMO",
+      ten: "VMO 2014 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c nh\u1ECDn ABC (AB < AC) n\u1ED9i ti\u1EBFp (O); I l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A. K \u2260 C thu\u1ED9c AC v\u1EDBi IK = IC. BK c\u1EAFt (O) t\u1EA1i D (D \u2260 B), c\u1EAFt AI t\u1EA1i E. DI c\u1EAFt AC t\u1EA1i F. a) EF = BC/2. b) M thu\u1ED9c DI v\u1EDBi CM \u2225 AD; KM c\u1EAFt BC t\u1EA1i N; (BKN) c\u1EAFt (O) t\u1EA1i P \u2260 B. Ch\u1EE9ng minh PK \u0111i qua trung \u0111i\u1EC3m AD."
+    },
+    {
+      id: "vmo2016-3",
+      nhom: "VMO",
+      ten: "VMO 2016 \u2013 B\xE0i 3",
+      de: "B, C c\u1ED1 \u0111\u1ECBnh, A thay \u0111\u1ED5i (tam gi\xE1c ABC nh\u1ECDn). D l\xE0 trung \u0111i\u1EC3m BC; E, F l\xE0 h\xECnh chi\u1EBFu c\u1EE7a D tr\xEAn AB, AC. O l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp; EF c\u1EAFt AO, BC t\u1EA1i M, N. a) \u0110\u01B0\u1EDDng tr\xF2n (AMN) lu\xF4n \u0111i qua m\u1ED9t \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh. b) Ti\u1EBFp tuy\u1EBFn t\u1EA1i E, F c\u1EE7a (AEF) c\u1EAFt nhau t\u1EA1i T; T thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng c\u1ED1 \u0111\u1ECBnh."
+    },
+    {
+      id: "noi-bang-tiep",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "B\u1ED5 \u0111\u1EC1 t\xE2m n\u1ED9i ti\u1EBFp \u2013 b\xE0ng ti\u1EBFp",
+      de: "S l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A c\u1EE7a (ABC). Ch\u1EE9ng minh B, C, I, I_A c\xF9ng n\u1EB1m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n t\xE2m S (S l\xE0 trung \u0111i\u1EC3m II_A)."
+    },
+    {
+      id: "euler-feuerbach",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "\u0110\u01B0\u1EDDng tr\xF2n Euler \u2013 \u0111\u1ECBnh l\xFD Feuerbach",
+      de: "\u0110\u01B0\u1EDDng tr\xF2n Euler c\u1EE7a tam gi\xE1c ABC ti\u1EBFp x\xFAc v\u1EDBi \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp v\xE0 ba \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp."
+    },
+    {
+      id: "mixtilinear",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear",
+      de: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear n\u1ED9i \u1EE9ng v\u1EDBi A ti\u1EBFp x\xFAc AB, AC t\u1EA1i K, L v\xE0 ti\u1EBFp x\xFAc trong (O) t\u1EA1i T. Ch\u1EE9ng minh I l\xE0 trung \u0111i\u1EC3m KL v\xE0 T, I v\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BAC th\u1EB3ng h\xE0ng."
+    },
+    {
+      id: "nghich-dao-bc",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "Ngh\u1ECBch \u0111\u1EA3o \u221A(bc)",
+      de: "Ph\xE9p ngh\u1ECBch \u0111\u1EA3o t\xE2m A b\xE1n k\xEDnh \u221A(AB\xB7AC) h\u1EE3p v\u1EDBi ph\xE9p \u0111\u1ED1i x\u1EE9ng qua ph\xE2n gi\xE1c g\xF3c A \u0111\u1ED5i ch\u1ED7 B v\xE0 C, bi\u1EBFn (ABC) th\xE0nh \u0111\u01B0\u1EDDng th\u1EB3ng BC v\xE0 bi\u1EBFn \u0111\u01B0\u1EDDng tr\xF2n mixtilinear n\u1ED9i th\xE0nh \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp g\xF3c A."
+    },
+    {
+      id: "brocard",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp \u2013 \u0111\u1ECBnh l\xFD Brocard",
+      de: "T\u1EE9 gi\xE1c ABCD n\u1ED9i ti\u1EBFp (O). P = AC \u2229 BD, Q = AB \u2229 CD, R = AD \u2229 BC. Ch\u1EE9ng minh O l\xE0 tr\u1EF1c t\xE2m tam gi\xE1c PQR."
+    },
+    {
+      id: "monge",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "Ti\u1EBFp tuy\u1EBFn chung \u2013 \u0111\u1ECBnh l\xFD Monge",
+      de: "Ba \u0111\u01B0\u1EDDng tr\xF2n c\xF3 b\xE1n k\xEDnh kh\xE1c nhau. Hai ti\u1EBFp tuy\u1EBFn chung ngo\xE0i c\u1EE7a m\u1ED7i c\u1EB7p c\u1EAFt nhau t\u1EA1i t\xE2m v\u1ECB t\u1EF1 ngo\xE0i; ba t\xE2m v\u1ECB t\u1EF1 ngo\xE0i th\u1EB3ng h\xE0ng."
+    },
+    {
+      id: "dong-dang-xoan",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "T\xE2m \u0111\u1ED3ng d\u1EA1ng xo\u1EAFn (quay + v\u1ECB t\u1EF1)",
+      de: "X = AB \u2229 CD; (XAC) v\xE0 (XBD) c\u1EAFt nhau l\u1EA7n n\u1EEFa t\u1EA1i S. Ph\xE9p quay t\xE2m S g\xF3c \u2220ASC r\u1ED3i v\u1ECB t\u1EF1 t\xE2m S t\u1EC9 s\u1ED1 SC/SA bi\u1EBFn A th\xE0nh C v\xE0 B th\xE0nh D."
+    },
+    {
+      id: "hinh-day",
+      nhom: "H\xECnh d\xE0y",
+      ten: "Tam gi\xE1c v\u1EDBi ba t\xE2m b\xE0ng ti\u1EBFp (h\xECnh d\xE0y)",
+      de: "Tam gi\xE1c ABC, t\xE2m n\u1ED9i ti\u1EBFp I, ba t\xE2m b\xE0ng ti\u1EBFp I_A, I_B, I_C, \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp v\xE0 ba \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp. (O) l\xE0 \u0111\u01B0\u1EDDng tr\xF2n Euler c\u1EE7a tam gi\xE1c I_AI_BI_C, I l\xE0 tr\u1EF1c t\xE2m c\u1EE7a n\xF3, trung \u0111i\u1EC3m M_A c\u1EE7a II_A n\u1EB1m tr\xEAn (O). K\xE8m nh\xE3n c\xF3 ch\u1EC9 s\u1ED1 d\u01B0\u1EDBi v\xE0 d\u1EA5u ph\u1EA9y."
+    }
+  ];
+
+  // examples/thu-vien/imo2008-1.json
+  var imo2008_1_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2008 \u2013 B\xE0i 1",
+    view: {
+      bbox: [
+        -7.963,
+        4.407,
+        8.13,
+        -5.277
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.8,
+          y: 3.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -2
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.8,
+          y: -2
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "orthocenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "H"
+      },
+      {
+        id: "s8",
+        type: "midpoint",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "M_a"
+      },
+      {
+        id: "s9",
+        type: "circle",
+        args: [
+          "s8",
+          "s7"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s9",
+          "s5"
+        ],
+        params: {
+          which: 0
+        },
+        name: "A_1"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s9",
+          "s5",
+          "s10"
+        ],
+        name: "A_2"
+      },
+      {
+        id: "s12",
+        type: "midpoint",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "M_b"
+      },
+      {
+        id: "s13",
+        type: "circle",
+        args: [
+          "s12",
+          "s7"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s13",
+          "s6"
+        ],
+        params: {
+          which: 0
+        },
+        name: "B_1"
+      },
+      {
+        id: "s15",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s6",
+          "s14"
+        ],
+        name: "B_2"
+      },
+      {
+        id: "s16",
+        type: "midpoint",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "M_c"
+      },
+      {
+        id: "s17",
+        type: "circle",
+        args: [
+          "s16",
+          "s7"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s18",
+        type: "intersection",
+        args: [
+          "s17",
+          "s4"
+        ],
+        params: {
+          which: 0
+        },
+        name: "C_1"
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s17",
+          "s4",
+          "s18"
+        ],
+        name: "C_2"
+      },
+      {
+        id: "s20",
+        type: "circle_3pts",
+        args: [
+          "s10",
+          "s11",
+          "s14"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s21",
+        type: "center",
+        args: [
+          "s20"
+        ],
+        name: "O",
+        joinPrev: true
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2010-2.json
+  var imo2010_2_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2010 \u2013 B\xE0i 2",
+    view: {
+      bbox: [
+        -7.93,
+        4.621,
+        8.13,
+        -5.043
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.2,
+          y: 3.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.8,
+          y: -1.8
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I"
+      },
+      {
+        id: "s10",
+        type: "line",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s7",
+          "s1"
+        ],
+        name: "D"
+      },
+      {
+        id: "s12",
+        type: "point_on",
+        args: [
+          "s7"
+        ],
+        params: {
+          t: -0.9075712557190003
+        },
+        name: "E"
+      },
+      {
+        id: "s13",
+        type: "isogonal_line",
+        args: [
+          "s2",
+          "s1",
+          "s3",
+          "s12"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s13",
+          "s5"
+        ],
+        name: "F"
+      },
+      {
+        id: "s15",
+        type: "midpoint",
+        args: [
+          "s9",
+          "s14"
+        ],
+        name: "G"
+      },
+      {
+        id: "s16",
+        type: "line",
+        args: [
+          "s11",
+          "s15"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s12",
+          "s9"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s18",
+        type: "intersection",
+        args: [
+          "s17",
+          "s16"
+        ],
+        name: "X"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2012-5.json
+  var imo2012_5_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2012 \u2013 B\xE0i 5",
+    view: {
+      bbox: [
+        -15.548,
+        7.198,
+        12.697,
+        -9.799
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.5,
+          y: 3.5
+        },
+        name: "C"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4.5,
+          y: -1.5
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s4",
+        type: "perpendicular",
+        args: [
+          "s1",
+          "s3"
+        ],
+        name: "d2",
+        hidden: true,
+        joinPrev: true
+      },
+      {
+        id: "s5",
+        type: "point_on",
+        args: [
+          "s4"
+        ],
+        params: {
+          t: 0.75
+        },
+        name: "A",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s1",
+          "s5"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "segment",
+        args: [
+          "s2",
+          "s5"
+        ],
+        name: "d4",
+        joinPrev: true
+      },
+      {
+        id: "s8",
+        type: "altitude_foot",
+        args: [
+          "s1",
+          "s5",
+          "s2"
+        ],
+        name: "D"
+      },
+      {
+        id: "s9",
+        type: "segment",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d5",
+        style: {
+          dash: true
+        },
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "point_on",
+        args: [
+          "s9"
+        ],
+        params: {
+          t: 0.5499999576752862
+        },
+        name: "X"
+      },
+      {
+        id: "s11",
+        type: "segment",
+        args: [
+          "s5",
+          "s10"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s2",
+          "s10"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s13",
+        type: "circle",
+        args: [
+          "s2",
+          "s1"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s14",
+        type: "circle",
+        args: [
+          "s5",
+          "s1"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s13",
+          "s11"
+        ],
+        params: {
+          which: 0
+        },
+        name: "K"
+      },
+      {
+        id: "s16",
+        type: "intersection",
+        args: [
+          "s14",
+          "s12"
+        ],
+        params: {
+          which: 0
+        },
+        name: "L"
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s5",
+          "s16"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s2",
+          "s15"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s19",
+        type: "intersection",
+        args: [
+          "s18",
+          "s17"
+        ],
+        name: "M"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2013-4.json
+  var imo2013_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2013 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -6.921,
+        4.637,
+        7.825,
+        -4.237
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.8,
+          y: -1.8
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "orthocenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "H"
+      },
+      {
+        id: "s8",
+        type: "point_on",
+        args: [
+          "s5"
+        ],
+        params: {
+          t: 0.6074999640969668
+        },
+        name: "W"
+      },
+      {
+        id: "s9",
+        type: "altitude_foot",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "M"
+      },
+      {
+        id: "s10",
+        type: "segment",
+        args: [
+          "s2",
+          "s9"
+        ],
+        name: "d4",
+        style: {
+          dash: true
+        },
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "altitude_foot",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "N"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s3",
+          "s11"
+        ],
+        name: "d5",
+        style: {
+          dash: true
+        },
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s8",
+          "s11"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "O_1",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "reflect",
+        args: [
+          "s8",
+          "s14"
+        ],
+        name: "X"
+      },
+      {
+        id: "s16",
+        type: "circle_3pts",
+        args: [
+          "s3",
+          "s8",
+          "s9"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s17",
+        type: "center",
+        args: [
+          "s16"
+        ],
+        name: "O_2",
+        joinPrev: true
+      },
+      {
+        id: "s18",
+        type: "reflect",
+        args: [
+          "s8",
+          "s17"
+        ],
+        name: "Y"
+      },
+      {
+        id: "s19",
+        type: "line",
+        args: [
+          "s15",
+          "s18"
+        ],
+        name: "d6"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2014-4.json
+  var imo2014_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2014 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -12.147,
+        6.401,
+        11.831,
+        -8.028
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 3.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.8,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.6,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "circle_tangent_at",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s9",
+          "s5",
+          "s3"
+        ],
+        name: "P"
+      },
+      {
+        id: "s12",
+        type: "circle_tangent_at",
+        args: [
+          "s1",
+          "s3",
+          "s2"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s13",
+        type: "center",
+        args: [
+          "s12"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s14",
+        type: "intersection_other",
+        args: [
+          "s12",
+          "s5",
+          "s2"
+        ],
+        name: "Q"
+      },
+      {
+        id: "s15",
+        type: "reflect",
+        args: [
+          "s1",
+          "s11"
+        ],
+        name: "M"
+      },
+      {
+        id: "s16",
+        type: "reflect",
+        args: [
+          "s1",
+          "s14"
+        ],
+        name: "N"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s2",
+          "s15"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s18",
+        type: "line",
+        args: [
+          "s3",
+          "s16"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s19",
+        type: "intersection",
+        args: [
+          "s18",
+          "s17"
+        ],
+        name: "X"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2015-4.json
+  var imo2015_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2015 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -14.59,
+        10.895,
+        13.39,
+        -5.943
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "point_on",
+        args: [
+          "s5"
+        ],
+        params: {
+          t: 0.19999997756060434
+        },
+        name: "D"
+      },
+      {
+        id: "s10",
+        type: "circle",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s5",
+          "s9"
+        ],
+        name: "E"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s10",
+          "s7"
+        ],
+        params: {
+          which: 0
+        },
+        name: "F"
+      },
+      {
+        id: "s13",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s7",
+          "s12"
+        ],
+        name: "G"
+      },
+      {
+        id: "s14",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s9",
+          "s12"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s15",
+        type: "center",
+        args: [
+          "s14"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s16",
+        type: "intersection_other",
+        args: [
+          "s14",
+          "s4",
+          "s2"
+        ],
+        name: "K"
+      },
+      {
+        id: "s17",
+        type: "circle_3pts",
+        args: [
+          "s3",
+          "s13",
+          "s11"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s17",
+          "s6",
+          "s3"
+        ],
+        name: "L"
+      },
+      {
+        id: "s20",
+        type: "line",
+        args: [
+          "s12",
+          "s16"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s21",
+        type: "line",
+        args: [
+          "s13",
+          "s19"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s22",
+        type: "intersection",
+        args: [
+          "s21",
+          "s20"
+        ],
+        name: "X"
+      },
+      {
+        id: "s23",
+        type: "line",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d6"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2017-4.json
+  var imo2017_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2017 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -17.9,
+        7.762,
+        41.519,
+        -27.995
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: 0.6
+        },
+        name: "O"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: -3.4
+        },
+        name: "R"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -0.3490659190754673
+        },
+        name: "S"
+      },
+      {
+        id: "s5",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s6",
+        type: "reflect",
+        args: [
+          "s2",
+          "s4"
+        ],
+        name: "T"
+      },
+      {
+        id: "s7",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -1.0471975535926368
+        },
+        name: "J"
+      },
+      {
+        id: "s8",
+        type: "circle_3pts",
+        args: [
+          "s7",
+          "s4",
+          "s6"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s9",
+        type: "center",
+        args: [
+          "s8"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s8",
+          "s5"
+        ],
+        params: {
+          which: 0
+        },
+        name: "A"
+      },
+      {
+        id: "s11",
+        type: "line",
+        args: [
+          "s10",
+          "s7"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s12",
+        type: "intersection_other",
+        args: [
+          "s11",
+          "s3",
+          "s7"
+        ],
+        name: "K"
+      },
+      {
+        id: "s13",
+        type: "line",
+        args: [
+          "s12",
+          "s6"
+        ],
+        name: "d3"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2018-1.json
+  var imo2018_1_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2018 \u2013 B\xE0i 1",
+    view: {
+      bbox: [
+        -12.507,
+        9.097,
+        12.237,
+        -5.793
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "point_on",
+        args: [
+          "s4"
+        ],
+        params: {
+          t: 0.6250000268505589
+        },
+        name: "D"
+      },
+      {
+        id: "s10",
+        type: "circle",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "intersection",
+        args: [
+          "s10",
+          "s6"
+        ],
+        params: {
+          which: 0
+        },
+        name: "E"
+      },
+      {
+        id: "s12",
+        type: "perp_bisector",
+        args: [
+          "s2",
+          "s9"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s12",
+          "s7"
+        ],
+        params: {
+          which: 1
+        },
+        name: "F"
+      },
+      {
+        id: "s14",
+        type: "perp_bisector",
+        args: [
+          "s3",
+          "s11"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s14",
+          "s7"
+        ],
+        params: {
+          which: 0
+        },
+        name: "G"
+      },
+      {
+        id: "s16",
+        type: "segment",
+        args: [
+          "s9",
+          "s11"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s13",
+          "s15"
+        ],
+        name: "d7"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2019-6.json
+  var imo2019_6_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2019 \u2013 B\xE0i 6",
+    view: {
+      bbox: [
+        -7.599,
+        4.636,
+        7.487,
+        -4.443
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.8,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.8,
+          y: -1.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.8
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incircle_touch",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "D"
+      },
+      {
+        id: "s10",
+        type: "incircle_touch",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "E"
+      },
+      {
+        id: "s11",
+        type: "incircle_touch",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "F"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s10",
+          "s11"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "perpendicular",
+        args: [
+          "s9",
+          "s12"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s14",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s7",
+          "s9"
+        ],
+        name: "R"
+      },
+      {
+        id: "s15",
+        type: "line",
+        args: [
+          "s1",
+          "s14"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s16",
+        type: "intersection_other",
+        args: [
+          "s15",
+          "s7",
+          "s14"
+        ],
+        name: "P"
+      },
+      {
+        id: "s17",
+        type: "circle_3pts",
+        args: [
+          "s16",
+          "s3",
+          "s10"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "circle_3pts",
+        args: [
+          "s16",
+          "s2",
+          "s11"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s20",
+        type: "center",
+        args: [
+          "s19"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s21",
+        type: "intersection_other",
+        args: [
+          "s19",
+          "s17",
+          "s16"
+        ],
+        name: "Q"
+      },
+      {
+        id: "s22",
+        type: "line",
+        args: [
+          "s9",
+          "s8"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s23",
+        type: "line",
+        args: [
+          "s16",
+          "s21"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s24",
+        type: "line",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s25",
+        type: "perpendicular",
+        args: [
+          "s1",
+          "s24"
+        ],
+        name: "d10"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2021-4.json
+  var imo2021_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2021 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -22.661,
+        19.098,
+        18.072,
+        -5.413
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: 0
+        },
+        name: "I"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: -2.2
+        },
+        name: "U"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: 1.5707963267948966
+        },
+        name: "T_1"
+      },
+      {
+        id: "s5",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: 2.443460752297466
+        },
+        name: "T_2"
+      },
+      {
+        id: "s6",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -2.2689280718183586
+        },
+        name: "T_3"
+      },
+      {
+        id: "s7",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -0.523598796373967
+        },
+        name: "T_4"
+      },
+      {
+        id: "s8",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s4"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s9",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s5"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s10",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s6"
+        ],
+        name: "d3"
+      },
+      {
+        id: "s11",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s7"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s9",
+          "s8"
+        ],
+        name: "D"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s10",
+          "s9"
+        ],
+        name: "A"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s11",
+          "s10"
+        ],
+        name: "B"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s11",
+          "s8"
+        ],
+        name: "C"
+      },
+      {
+        id: "s16",
+        type: "circle_3pts",
+        args: [
+          "s13",
+          "s1",
+          "s15"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s17",
+        type: "center",
+        args: [
+          "s16"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s18",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s10",
+          "s13"
+        ],
+        name: "X"
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s11",
+          "s15"
+        ],
+        name: "Z"
+      },
+      {
+        id: "s20",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s9",
+          "s13"
+        ],
+        name: "Y"
+      },
+      {
+        id: "s21",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s8",
+          "s15"
+        ],
+        name: "T"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2023-2.json
+  var imo2023_2_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2023 \u2013 B\xE0i 2",
+    view: {
+      bbox: [
+        -11.179,
+        6.101,
+        8.115,
+        -5.51
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: true
+        },
+        name: "S"
+      },
+      {
+        id: "s10",
+        type: "perpendicular",
+        args: [
+          "s1",
+          "s5"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s11",
+        type: "line",
+        args: [
+          "s2",
+          "s9"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s11",
+          "s10"
+        ],
+        name: "D"
+      },
+      {
+        id: "s13",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s7",
+          "s1"
+        ],
+        name: "E"
+      },
+      {
+        id: "s14",
+        type: "parallel",
+        args: [
+          "s12",
+          "s5"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s15",
+        type: "line",
+        args: [
+          "s2",
+          "s13"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s16",
+        type: "intersection",
+        args: [
+          "s15",
+          "s14"
+        ],
+        name: "L"
+      },
+      {
+        id: "s17",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s12",
+          "s16"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s17",
+          "s7",
+          "s2"
+        ],
+        name: "P"
+      },
+      {
+        id: "s20",
+        type: "tangent_at",
+        args: [
+          "s17",
+          "s19"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s21",
+        type: "intersection",
+        args: [
+          "s20",
+          "s11"
+        ],
+        name: "X"
+      },
+      {
+        id: "s22",
+        type: "line",
+        args: [
+          "s1",
+          "s21"
+        ],
+        name: "d9"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2024-4.json
+  var imo2024_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2024 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -7.613,
+        4.325,
+        8.813,
+        -5.56
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0.5,
+          y: 3.5
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.4,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.600001,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "reflect",
+        args: [
+          "s6",
+          "s8"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s9",
+          "s5"
+        ],
+        name: "X"
+      },
+      {
+        id: "s11",
+        type: "reflect",
+        args: [
+          "s4",
+          "s8"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s11",
+          "s5"
+        ],
+        name: "Y"
+      },
+      {
+        id: "s13",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "line",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s16",
+        type: "intersection_other",
+        args: [
+          "s15",
+          "s13",
+          "s1"
+        ],
+        name: "P"
+      },
+      {
+        id: "s17",
+        type: "midpoint",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "K"
+      },
+      {
+        id: "s18",
+        type: "midpoint",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "L"
+      },
+      {
+        id: "s19",
+        type: "segment",
+        args: [
+          "s17",
+          "s8"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s20",
+        type: "segment",
+        args: [
+          "s8",
+          "s18"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s21",
+        type: "segment",
+        args: [
+          "s12",
+          "s16"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s22",
+        type: "segment",
+        args: [
+          "s16",
+          "s10"
+        ],
+        name: "d10"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2025-2.json
+  var imo2025_2_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2025 \u2013 B\xE0i 2",
+    view: {
+      bbox: [
+        -6.227,
+        4.25,
+        7.727,
+        -4.147
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.5,
+          y: 0.3
+        },
+        name: "M"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.5,
+          y: -1.7
+        },
+        name: "U"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.9,
+          y: 0.3
+        },
+        name: "N"
+      },
+      {
+        id: "s5",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.9,
+          y: -2.8
+        },
+        name: "V"
+      },
+      {
+        id: "s6",
+        type: "circle",
+        args: [
+          "s4",
+          "s5"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s7",
+        type: "intersection",
+        args: [
+          "s6",
+          "s3"
+        ],
+        params: {
+          which: 0
+        },
+        name: "A"
+      },
+      {
+        id: "s8",
+        type: "intersection_other",
+        args: [
+          "s6",
+          "s3",
+          "s7"
+        ],
+        name: "B"
+      },
+      {
+        id: "s9",
+        type: "line",
+        args: [
+          "s1",
+          "s4"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s9",
+          "s3"
+        ],
+        params: {
+          which: 0
+        },
+        name: "C"
+      },
+      {
+        id: "s11",
+        type: "intersection",
+        args: [
+          "s9",
+          "s6"
+        ],
+        params: {
+          which: 1
+        },
+        name: "D"
+      },
+      {
+        id: "s12",
+        type: "circumcenter",
+        args: [
+          "s7",
+          "s10",
+          "s11"
+        ],
+        name: "P"
+      },
+      {
+        id: "s13",
+        type: "line",
+        args: [
+          "s7",
+          "s12"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s14",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s3",
+          "s7"
+        ],
+        name: "E"
+      },
+      {
+        id: "s15",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s6",
+          "s7"
+        ],
+        name: "F"
+      },
+      {
+        id: "s16",
+        type: "orthocenter",
+        args: [
+          "s12",
+          "s1",
+          "s4"
+        ],
+        name: "H"
+      },
+      {
+        id: "s17",
+        type: "parallel",
+        args: [
+          "s16",
+          "s13"
+        ],
+        name: "d3"
+      },
+      {
+        id: "s18",
+        type: "circle_3pts",
+        args: [
+          "s8",
+          "s14",
+          "s15"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s19",
+        type: "center",
+        args: [
+          "s18"
+        ],
+        name: "O",
+        joinPrev: true
+      }
+    ]
+  };
+
+  // examples/thu-vien/vmo2014-4.json
+  var vmo2014_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "VMO 2014 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -12.75,
+        5.387,
+        13.35,
+        -10.319
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.2,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: false
+        },
+        name: "I"
+      },
+      {
+        id: "s10",
+        type: "circle",
+        args: [
+          "s9",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s6",
+          "s3"
+        ],
+        name: "K"
+      },
+      {
+        id: "s12",
+        type: "line",
+        args: [
+          "s2",
+          "s11"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "intersection_other",
+        args: [
+          "s12",
+          "s7",
+          "s2"
+        ],
+        name: "D"
+      },
+      {
+        id: "s14",
+        type: "line",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s14",
+          "s12"
+        ],
+        name: "E"
+      },
+      {
+        id: "s16",
+        type: "line",
+        args: [
+          "s13",
+          "s9"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s17",
+        type: "intersection",
+        args: [
+          "s16",
+          "s6"
+        ],
+        name: "F"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s15",
+          "s17"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s19",
+        type: "line",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s20",
+        type: "parallel",
+        args: [
+          "s3",
+          "s19"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s21",
+        type: "intersection",
+        args: [
+          "s20",
+          "s16"
+        ],
+        name: "M"
+      },
+      {
+        id: "s22",
+        type: "line",
+        args: [
+          "s11",
+          "s21"
+        ],
+        name: "d10"
+      },
+      {
+        id: "s23",
+        type: "intersection",
+        args: [
+          "s22",
+          "s5"
+        ],
+        name: "N"
+      },
+      {
+        id: "s24",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s11",
+          "s23"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s25",
+        type: "center",
+        args: [
+          "s24"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s26",
+        type: "intersection_other",
+        args: [
+          "s24",
+          "s7",
+          "s2"
+        ],
+        name: "P"
+      },
+      {
+        id: "s27",
+        type: "midpoint",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "J"
+      },
+      {
+        id: "s28",
+        type: "line",
+        args: [
+          "s26",
+          "s11"
+        ],
+        name: "d11"
+      }
+    ]
+  };
+
+  // examples/thu-vien/vmo2016-3.json
+  var vmo2016_3_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "VMO 2016 \u2013 B\xE0i 3",
+    view: {
+      bbox: [
+        -18.274,
+        17.933,
+        46.614,
+        -21.115
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0.8,
+          y: 3.4
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.6,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "midpoint",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "D"
+      },
+      {
+        id: "s8",
+        type: "projection",
+        args: [
+          "s7",
+          "s4"
+        ],
+        name: "E"
+      },
+      {
+        id: "s9",
+        type: "projection",
+        args: [
+          "s7",
+          "s6"
+        ],
+        name: "F"
+      },
+      {
+        id: "s10",
+        type: "circumcenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "O"
+      },
+      {
+        id: "s11",
+        type: "line",
+        args: [
+          "s8",
+          "s9"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s12",
+        type: "line",
+        args: [
+          "s1",
+          "s10"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s12",
+          "s11"
+        ],
+        name: "M"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s11",
+          "s5"
+        ],
+        name: "N"
+      },
+      {
+        id: "s15",
+        type: "circle_3pts",
+        args: [
+          "s1",
+          "s13",
+          "s14"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s16",
+        type: "center",
+        args: [
+          "s15"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "circle_diameter",
+        args: [
+          "s1",
+          "s7"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "tangent_at",
+        args: [
+          "s17",
+          "s8"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s20",
+        type: "tangent_at",
+        args: [
+          "s17",
+          "s9"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s21",
+        type: "intersection",
+        args: [
+          "s20",
+          "s19"
+        ],
+        name: "T"
+      },
+      {
+        id: "s22",
+        type: "perp_bisector",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d8"
+      }
+    ]
+  };
+
+  // examples/thu-vien/noi-bang-tiep.json
+  var noi_bang_tiep_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "B\u1ED5 \u0111\u1EC1 t\xE2m n\u1ED9i ti\u1EBFp \u2013 b\xE0ng ti\u1EBFp",
+    view: {
+      bbox: [
+        -9.034,
+        5.358,
+        9.234,
+        -5.635
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 4.4
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -2.6,
+          y: 0.2
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2.8,
+          y: 0.2
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I"
+      },
+      {
+        id: "s10",
+        type: "excenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I_A"
+      },
+      {
+        id: "s11",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: false
+        },
+        name: "S"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s1",
+          "s10"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "circle",
+        args: [
+          "s11",
+          "s2"
+        ],
+        name: "\u03C92"
+      }
+    ]
+  };
+
+  // examples/thu-vien/euler-feuerbach.json
+  var euler_feuerbach_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "\u0110\u01B0\u1EDDng tr\xF2n Euler \u2013 \u0111\u1ECBnh l\xFD Feuerbach",
+    view: {
+      bbox: [
+        -14.652,
+        8.752,
+        16.048,
+        -9.722
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 2.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -2,
+          y: -0.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2.2,
+          y: -0.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "nine_point_circle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "N",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "excircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s12",
+        type: "center",
+        args: [
+          "s11"
+        ],
+        name: "I_A",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "excircle",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "I_B",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "excircle",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "\u03C95"
+      },
+      {
+        id: "s16",
+        type: "center",
+        args: [
+          "s15"
+        ],
+        name: "I_C",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "intersection",
+        args: [
+          "s9",
+          "s7"
+        ],
+        params: {
+          which: 1
+        },
+        name: "F_e"
+      }
+    ]
+  };
+
+  // examples/thu-vien/mixtilinear.json
+  var mixtilinear_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear",
+    view: {
+      bbox: [
+        -8.107,
+        4.654,
+        8.307,
+        -5.224
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.8,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "mixtilinear",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "J",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "incenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s9",
+          "s7"
+        ],
+        params: {
+          which: 0
+        },
+        name: "T"
+      },
+      {
+        id: "s13",
+        type: "projection",
+        args: [
+          "s10",
+          "s4"
+        ],
+        name: "K"
+      },
+      {
+        id: "s14",
+        type: "projection",
+        args: [
+          "s10",
+          "s6"
+        ],
+        name: "L"
+      },
+      {
+        id: "s15",
+        type: "segment",
+        args: [
+          "s13",
+          "s14"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s16",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: true
+        },
+        name: "S"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s12",
+          "s16"
+        ],
+        name: "d5"
+      }
+    ]
+  };
+
+  // examples/thu-vien/nghich-dao-bc.json
+  var nghich_dao_bc_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "Ngh\u1ECBch \u0111\u1EA3o \u221A(bc)",
+    view: {
+      bbox: [
+        -24.071,
+        12.332,
+        25.24,
+        -17.341
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3,
+          y: -0.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.4
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "angle_bisector",
+        args: [
+          "s2",
+          "s1",
+          "s3"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s10",
+        type: "reflect",
+        args: [
+          "s3",
+          "s9"
+        ],
+        name: "C'"
+      },
+      {
+        id: "s11",
+        type: "circle_diameter",
+        args: [
+          "s2",
+          "s10"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s12",
+        type: "center",
+        args: [
+          "s11"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "tangent_point",
+        args: [
+          "s11",
+          "s1"
+        ],
+        params: {
+          which: 0
+        },
+        name: "T"
+      },
+      {
+        id: "s14",
+        type: "line",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "d5",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "tangent_point",
+        args: [
+          "s11",
+          "s1"
+        ],
+        params: {
+          which: 1
+        },
+        name: "E",
+        joinPrev: true
+      },
+      {
+        id: "s16",
+        type: "line",
+        args: [
+          "s1",
+          "s15"
+        ],
+        name: "d6",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "circle",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s18",
+        type: "invert_line",
+        args: [
+          "s7",
+          "s17"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s19",
+        type: "reflect",
+        args: [
+          "s18",
+          "s9"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s20",
+        type: "mixtilinear",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s21",
+        type: "center",
+        args: [
+          "s20"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s22",
+        type: "invert_circle",
+        args: [
+          "s20",
+          "s17"
+        ],
+        name: "\u03C95"
+      },
+      {
+        id: "s23",
+        type: "reflect",
+        args: [
+          "s22",
+          "s9"
+        ],
+        name: "\u03C96"
+      },
+      {
+        id: "s24",
+        type: "excircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C97"
+      },
+      {
+        id: "s25",
+        type: "center",
+        args: [
+          "s24"
+        ],
+        name: "I_A",
+        joinPrev: true
+      }
+    ]
+  };
+
+  // examples/thu-vien/brocard.json
+  var brocard_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp \u2013 \u0111\u1ECBnh l\xFD Brocard",
+    view: {
+      bbox: [
+        -25.633,
+        6.563,
+        34.011,
+        -29.329
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -2.6,
+          y: 2.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.4,
+          y: -1.4
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2.2,
+          y: -2.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "circle_3pts",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s5",
+        type: "center",
+        args: [
+          "s4"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "point_on",
+        args: [
+          "s4"
+        ],
+        params: {
+          t: 0
+        },
+        name: "D",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1",
+        joinPrev: true
+      },
+      {
+        id: "s8",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "segment",
+        args: [
+          "s3",
+          "s6"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "segment",
+        args: [
+          "s6",
+          "s1"
+        ],
+        name: "d4",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "segment",
+        args: [
+          "s1",
+          "s3"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s2",
+          "s6"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s12",
+          "s11"
+        ],
+        name: "P"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s7",
+          "s9"
+        ],
+        name: "Q"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s10",
+          "s8"
+        ],
+        name: "R"
+      },
+      {
+        id: "s16",
+        type: "segment",
+        args: [
+          "s13",
+          "s14"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s14",
+          "s15"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s15",
+          "s13"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s19",
+        type: "perpendicular",
+        args: [
+          "s5",
+          "s17"
+        ],
+        name: "d10"
+      }
+    ]
+  };
+
+  // examples/thu-vien/monge.json
+  var monge_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "Ti\u1EBFp tuy\u1EBFn chung \u2013 \u0111\u1ECBnh l\xFD Monge",
+    view: {
+      bbox: [
+        -18.11,
+        11.234,
+        25.21,
+        -14.834
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4.5,
+          y: -1
+        },
+        name: "O_1"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.78,
+          y: -1.96
+        },
+        name: "R_1"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0.5,
+          y: 2.4
+        },
+        name: "O_2"
+      },
+      {
+        id: "s5",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.58,
+          y: 0.96
+        },
+        name: "R_2"
+      },
+      {
+        id: "s6",
+        type: "circle",
+        args: [
+          "s4",
+          "s5"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s7",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.5
+        },
+        name: "O_3"
+      },
+      {
+        id: "s8",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.68,
+          y: -2.14
+        },
+        name: "R_3"
+      },
+      {
+        id: "s9",
+        type: "circle",
+        args: [
+          "s7",
+          "s8"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s10",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: false,
+          which: 0
+        },
+        name: "d1"
+      },
+      {
+        id: "s11",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: false,
+          which: 1
+        },
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s12",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: true,
+          which: 0
+        },
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: true,
+          which: 1
+        },
+        name: "d4",
+        joinPrev: true
+      },
+      {
+        id: "s14",
+        type: "homothety_center",
+        args: [
+          "s3",
+          "s6"
+        ],
+        name: "S_{12}"
+      },
+      {
+        id: "s15",
+        type: "homothety_center",
+        args: [
+          "s6",
+          "s9"
+        ],
+        name: "S_{23}"
+      },
+      {
+        id: "s16",
+        type: "homothety_center",
+        args: [
+          "s3",
+          "s9"
+        ],
+        name: "S_{13}"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s14",
+          "s15"
+        ],
+        name: "d5"
+      }
+    ]
+  };
+
+  // examples/thu-vien/dong-dang-xoan.json
+  var dong_dang_xoan_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "T\xE2m \u0111\u1ED3ng d\u1EA1ng xo\u1EAFn (quay + v\u1ECB t\u1EF1)",
+    view: {
+      bbox: [
+        -6.453,
+        5.08,
+        6.251,
+        -2.565
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4,
+          y: 1.5
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.6,
+          y: -0.3
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.5,
+          y: 0.3
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.5,
+          y: 2.7
+        },
+        name: "D"
+      },
+      {
+        id: "s5",
+        type: "line",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s6",
+        type: "line",
+        args: [
+          "s3",
+          "s4"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s7",
+        type: "intersection",
+        args: [
+          "s6",
+          "s5"
+        ],
+        name: "X"
+      },
+      {
+        id: "s8",
+        type: "circle_3pts",
+        args: [
+          "s7",
+          "s1",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s9",
+        type: "center",
+        args: [
+          "s8"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "circle_3pts",
+        args: [
+          "s7",
+          "s2",
+          "s4"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "center",
+        args: [
+          "s10"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s12",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s8",
+          "s7"
+        ],
+        name: "S"
+      },
+      {
+        id: "s13",
+        type: "rotate_by",
+        args: [
+          "s2",
+          "s12",
+          "s1",
+          "s12",
+          "s3"
+        ],
+        name: "B_1"
+      },
+      {
+        id: "s14",
+        type: "homothety_by",
+        args: [
+          "s13",
+          "s12",
+          "s12",
+          "s3",
+          "s12",
+          "s1"
+        ],
+        name: "D'"
+      },
+      {
+        id: "s15",
+        type: "segment",
+        args: [
+          "s12",
+          "s2"
+        ],
+        name: "d3"
+      },
+      {
+        id: "s16",
+        type: "segment",
+        args: [
+          "s12",
+          "s14"
+        ],
+        name: "d4"
+      }
+    ]
+  };
+
+  // examples/thu-vien/hinh-day.json
+  var hinh_day_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "Tam gi\xE1c v\u1EDBi ba t\xE2m b\xE0ng ti\u1EBFp (h\xECnh d\xE0y)",
+    view: {
+      bbox: [
+        -13.115,
+        7.517,
+        13.996,
+        -8.798
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.3,
+          y: 2.4
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.8,
+          y: -0.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2,
+          y: -0.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91",
+        joinPrev: true
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "excircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C93",
+        joinPrev: true
+      },
+      {
+        id: "s12",
+        type: "center",
+        args: [
+          "s11"
+        ],
+        name: "I_A",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "excircle",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "\u03C94",
+        joinPrev: true
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "I_B",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "excircle",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "\u03C95",
+        joinPrev: true
+      },
+      {
+        id: "s16",
+        type: "center",
+        args: [
+          "s15"
+        ],
+        name: "I_C",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s14",
+          "s16"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s16",
+          "s12"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s19",
+        type: "segment",
+        args: [
+          "s12",
+          "s14"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s20",
+        type: "midpoint",
+        args: [
+          "s10",
+          "s12"
+        ],
+        name: "M_A"
+      },
+      {
+        id: "s21",
+        type: "midpoint",
+        args: [
+          "s10",
+          "s14"
+        ],
+        name: "M_B"
+      },
+      {
+        id: "s22",
+        type: "midpoint",
+        args: [
+          "s10",
+          "s16"
+        ],
+        name: "M_C"
+      },
+      {
+        id: "s23",
+        type: "projection",
+        args: [
+          "s12",
+          "s5"
+        ],
+        name: "T_A"
+      },
+      {
+        id: "s24",
+        type: "projection",
+        args: [
+          "s14",
+          "s6"
+        ],
+        name: "T_B"
+      },
+      {
+        id: "s25",
+        type: "projection",
+        args: [
+          "s16",
+          "s4"
+        ],
+        name: "T_C"
+      },
+      {
+        id: "s26",
+        type: "reflect",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "A'"
+      },
+      {
+        id: "s27",
+        type: "reflect",
+        args: [
+          "s2",
+          "s8"
+        ],
+        name: "B'"
+      },
+      {
+        id: "s28",
+        type: "reflect",
+        args: [
+          "s3",
+          "s8"
+        ],
+        name: "C'"
+      },
+      {
+        id: "s29",
+        type: "segment",
+        args: [
+          "s1",
+          "s26"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s30",
+        type: "segment",
+        args: [
+          "s10",
+          "s12"
+        ],
+        name: "d8"
+      }
+    ]
+  };
+
+  // src/core/thu-vien.js
+  var DOCS = [imo2008_1_default, imo2010_2_default, imo2012_5_default, imo2013_4_default, imo2014_4_default, imo2015_4_default, imo2017_4_default, imo2018_1_default, imo2019_6_default, imo2021_4_default, imo2023_2_default, imo2024_4_default, imo2025_2_default, vmo2014_4_default, vmo2016_3_default, noi_bang_tiep_default, euler_feuerbach_default, mixtilinear_default, nghich_dao_bc_default, brocard_default, monge_default, dong_dang_xoan_default, hinh_day_default];
+  var THU_VIEN = muc_luc_default.map((m, i) => ({ ...m, doc: DOCS[i] }));
+
   // src/ui/main.js
   function start() {
     const app = new App();
@@ -5990,8 +11026,17 @@
       document.querySelectorAll(".tabpane").forEach((p) => p.classList.toggle("active", p.id === t.dataset.tab));
     }));
     document.getElementById("exit-projector").onclick = () => app.setProjector(false);
-    const exList = document.getElementById("example-list");
-    exList.innerHTML = Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${e.title}</button>`).join("");
+    const exMenu = document.getElementById("example-menu");
+    const esc4 = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const groups = [];
+    for (const e of THU_VIEN) {
+      let g = groups.find((x) => x.name === e.nhom);
+      if (!g) groups.push(g = { name: e.nhom, items: [] });
+      g.items.push(`<button data-lib="${e.id}" title="${esc4(e.de)}">${esc4(e.ten)}</button>`);
+    }
+    groups.push({ name: "H\xECnh m\u1EABu", items: Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${esc4(e.title)}</button>`) });
+    const GROUP_LABEL = { "C\u1EA5u h\xECnh": "C\u1EA5u h\xECnh hay g\u1EB7p" };
+    exMenu.innerHTML = groups.map((g) => `<div class="ex-col"><div class="menu-label">${esc4(GROUP_LABEL[g.name] || g.name)}</div>${g.items.join("")}</div>`).join("");
     app.loadExample = (key) => {
       const ex = EXAMPLES[key];
       if (!ex) return;
@@ -6000,9 +11045,17 @@
       app.loadDoc(doc, { keepHistory: true });
       app.zoomFit();
     };
-    exList.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-example]");
-      if (b) app.loadExample(b.dataset.example);
+    app.loadLibrary = (id) => {
+      const e = THU_VIEN.find((x) => x.id === id);
+      if (!e) return;
+      app.loadDoc(JSON.parse(JSON.stringify(e.doc)), { keepHistory: true });
+      app.zoomFit();
+      toast(`${e.ten}. ${e.de}`, 9e3);
+    };
+    exMenu.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-example], [data-lib]");
+      if (b && b.dataset.example) app.loadExample(b.dataset.example);
+      else if (b) app.loadLibrary(b.dataset.lib);
     });
     app.drawRelationOverlay = () => drawRelationOverlay(app);
     setupExplore(app);
@@ -6039,7 +11092,7 @@
       title.value = app.doc.title || "";
     });
     window.__app = app;
-    window.GeoCore = { ...core_exports, Builder, EXAMPLES, codec: codec_exports, explore, toTikZ };
+    window.GeoCore = { ...core_exports, Builder, EXAMPLES, THU_VIEN, codec: codec_exports, explore, toTikZ };
     return app;
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

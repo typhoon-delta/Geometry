@@ -57,7 +57,8 @@ const menu = async (id) => {
   await page.click('#' + id);
 };
 const example = async (key) => {
-  await page.click('#topbar .menu:nth-child(1) .menu-btn');
+  const i = await page.evaluate((k) => [...document.querySelectorAll('#topbar .menu')].indexOf(document.querySelector(`[data-example="${k}"]`).closest('.menu')), key);
+  await page.click(`#topbar .menu:nth-child(${i + 1}) .menu-btn`);
   await page.click(`[data-example="${key}"]`);
 };
 
@@ -160,13 +161,13 @@ ok(errors.length === 0, 'không có lỗi JS: ' + errors.join(' | '));
 
 
 // Các mốc sau được nối tiếp từ file riêng nếu có
-const extra = process.env.SMOKE_ONLY_M1 ? [] : ['./smoke2.mjs'];
+const extra = process.env.SMOKE_ONLY_M1 ? [] : ['./smoke2.mjs', './smoke3.mjs'];
 for (const f of extra) {
   try {
     const m = await import(f);
     await m.run({ page, ok, shot, state, tool, clickAt, toPage, errors, menu, example });
   } catch (e) {
-    if (e.code === 'ERR_MODULE_NOT_FOUND' && String(e.message).includes('smoke2')) continue;
+    if (e.code === 'ERR_MODULE_NOT_FOUND' && /smoke[23]/.test(String(e.message))) continue;
     console.log('  ✗ lỗi khi chạy ' + f + ': ' + e.stack);
     failures++;
   }

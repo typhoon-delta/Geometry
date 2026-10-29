@@ -75,6 +75,7 @@ export const BAI = [
   },
   {
     id: 'imo2012-5', nhom: 'IMO', ten: 'IMO 2012 – Bài 5',
+    ghiChu: 'Nhãn đè tăng 1 → 2: nhãn C và K nằm ở chỗ có nhiều đường và hai đường tròn lớn đi qua, không còn hướng nào trống hẳn (vẫn đọc rõ, không đè điểm hay nhãn khác).',
     de: 'Tam giác ABC vuông tại C, D là chân đường cao từ C. X nằm trong đoạn CD. K thuộc đoạn AX với BK = BC; L thuộc đoạn BX với AL = AC. M là giao điểm của AL và BK. Chứng minh MK = ML.',
     async dung(u) {
       await u.use('right_triangle', [-0.5, 3.5], [-4.5, -1.5]); // đỉnh góc vuông bấm trước
@@ -162,11 +163,12 @@ export const BAI = [
       await tri(u, [-0.6, 3.8], [-4, -1.6], [4, -1.6]);
       await u.use('circumcircle', 'A', 'B', 'C');
       u.refs.w = circleId(u);
-      await u.use('circle', 'A', [-5.8, 1.5]);
-      await name(u, 'R');
-      const g = { cr: ['A', 'R'] };
-      await u.cross(g, { line: ['B', 'C'] }, { x: -3, y: -1.6 }, 'D');
-      await u.cross(g, { line: ['B', 'C'] }, { x: 3, y: -1.6 }, 'E');
+      // Γ: lấy D trên BC rồi vẽ đường tròn tâm A qua D (kéo A, D thì Γ vẫn cắt BC)
+      await u.use('point', { spec: { line: ['B', 'C'] }, near: { x: -2.4, y: -1.6 } });
+      await name(u, 'D');
+      await u.use('circle', 'A', 'D');
+      const g = { cr: ['A', 'D'] };
+      await u.cross(g, { line: ['B', 'C'] }, { not: 'D' }, 'E');
       await u.cross(g, { id: u.refs.w }, { x: -4.5, y: 0 }, 'F');
       await u.cross(g, { id: u.refs.w }, { x: 4.5, y: 0 }, 'G');
       await u.use('circle_3pts', 'B', 'D', 'F');
@@ -589,6 +591,7 @@ export const BAI = [
   },
   {
     id: 'dong-dang-xoan', nhom: 'Cấu hình', ten: 'Tâm đồng dạng xoắn (quay + vị tự)',
+    ghiChu: 'Bản 1.1 không có phép quay/vị tự lấy góc, tỉ số trên hình nên kịch bản dừng ở việc dựng S (kiểm chứng bằng công thức); bản 1.2 dựng thêm D′ = ảnh của B và kiểm chứng D′ ≡ D – vì vậy nhiều thao tác hơn.',
     de: 'X = AB ∩ CD; (XAC) và (XBD) cắt nhau lần nữa tại S. Phép quay tâm S góc ∠ASC rồi vị tự tâm S tỉ số SC/SA biến A thành C và B thành D.',
     async dung(u) {
       for (const [x, y] of [[-4, 1.5], [-1.6, -0.3], [1.5, 0.3], [3.5, 2.7]]) await u.use('point', [x, y]);
