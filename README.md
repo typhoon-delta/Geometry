@@ -14,8 +14,11 @@ mạng: bộ vẽ canvas tự viết, toàn bộ mã nằm trong `dist/app.js`).
   biến hình, mô hình – và **tự tạo công cụ** từ hình đã dựng.
 * Tua từng bước dựng khi giảng, chế độ trình chiếu nét đậm chữ to.
 * Đánh dấu kiểu sách giáo khoa (cung góc, vạch đoạn bằng nhau, tô nền).
-* **Nhiều tab hình** cùng lúc (mỗi tab có lịch sử hoàn tác riêng); **dán ảnh** (Ctrl+V, kéo thả) – vd ảnh đề bài,
-  hình gốc để đồ lại.
+* **Nhiều tab hình** cùng lúc (mỗi tab có lịch sử hoàn tác riêng).
+* **Khung chữ** nổi trên bảng vẽ (bản 1.4): *Đề bài* (dán ảnh cắt đề bằng `Ctrl+V`), *Lời giải*, *Ghi chú* – chữ và
+  công thức LaTeX hiển thị ngay (KaTeX, chạy offline), bộ soạn gõ nhanh (tự đổi `goc` → ∠, gõ tắt `;cm` + Tab…),
+  lời giải chia **bước** hiện dần khi trình bày, rê chuột lên tên điểm trong công thức thì điểm sáng lên trên hình.
+  Xuất **phiếu LaTeX** (đề + hình TikZ + lời giải).
 * Chia sẻ bằng link, lưu/mở tệp `.json`, tự lưu nháp (mọi tab).
 * **Khám phá**: tự tìm các quan hệ ẩn (thẳng hàng, đồng viên, đồng quy, tiếp xúc…).
 * Xuất mã **TikZ** để dán vào LaTeX.
@@ -39,15 +42,15 @@ Trình duyệt khuyên dùng: Chrome, Edge, Firefox hoặc Safari bản mới.
 
 ### Giao diện
 
-* Thanh menu mỏng trên cùng: **Tệp** (hình mới, mở, lưu, chia sẻ link, xuất TikZ, chèn ảnh), **Sửa** (hoàn tác,
+* Thanh menu trên cùng: **Tệp** (hình mới, mở, lưu, chia sẻ link, xuất TikZ, xuất phiếu LaTeX), **Sửa** (hoàn tác,
   làm lại, xoá, mở khoá ảnh nền), **Hiển thị** (bộ kiểu *Đơn sắc* / *Sách giáo khoa*, lưới, đường thẳng vừa đủ, thu phóng vừa hình,
-  bảng các bước), **Ví dụ** (thư viện bài dựng sẵn theo nhóm và các hình mẫu). Bên cạnh là **dải tab** các hình
+  bảng các bước), **Chèn** (khung lời giải, khung đề bài, khung ghi chú, ảnh đề bài, ảnh nền để đồ hình, bộ gõ tắt), **Ví dụ** (thư viện bài dựng sẵn theo nhóm và các hình mẫu). Bên cạnh là **dải tab** các hình
   đang mở: bấm để đổi hình, nháy đúp vào tab đang mở để đặt tên hình, ✕ để đóng, ＋ để mở hình mới. *Hình mới*, mở
   tệp, mở ví dụ, mở link đều mở ở tab mới (nếu tab đang mở còn trống thì dùng luôn tab đó).
   Các nút biểu tượng bên phải: hoàn tác, làm lại, 🔍 khám phá, ▶ trình bày, ⛶ trình chiếu, ◫ bảng các bước.
 * **Thanh công cụ dọc** bên trái: mỗi biểu tượng là một nhóm (chọn/kéo, điểm, đường tròn, đoạn/tia/đường thẳng,
   dựng, đánh dấu, **Công cụ**). Bấm biểu tượng để dùng công cụ đang chọn của nhóm, đồng thời danh sách công cụ
-  trong nhóm hiện ra để đổi. Gợi ý thao tác nằm ở thanh trạng thái dưới đáy. Dưới cùng là dải **công cụ vừa dùng**
+  trong nhóm hiện ra để đổi. Gợi ý thao tác nằm ở dòng nhỏ góc dưới bảng vẽ. Dưới cùng là dải **công cụ vừa dùng**
   (6 công cụ gần nhất, bấm một lần là chọn lại – đỡ phải mở menu nhiều tầng).
 * Bảng **các bước dựng** ẩn mặc định để dành chỗ cho bảng vẽ (nút ◫ để mở). Khi chọn một đối tượng bằng công cụ
   Chọn, thẻ **thuộc tính** nổi lên ở góc phải (tự dời xuống nếu che đối tượng đang chọn; khi đang dựng thì không hiện).
@@ -148,14 +151,52 @@ trên máy chiếu. Thoát: `Esc` hoặc nút ✕ ở góc trên.
   cũ. Rê chuột lên tên bài để xem đề tóm tắt. Các hình được dựng qua giao diện trong đợt dùng thử bản 1.2 và đã kiểm
   chứng kết luận bằng số; tệp JSON ở `examples/thu-vien/`.
 
-### Dán ảnh
+### Khung chữ: đề bài, lời giải, ghi chú (bản 1.4)
 
-Dán ảnh bằng `Ctrl+V` (ảnh chụp màn hình đề bài, hình trong tệp PDF…), kéo thả tệp ảnh vào bảng vẽ, hoặc *Tệp › Chèn
-ảnh…*. Ảnh nằm dưới mọi đối tượng hình học và đi theo hình khi phóng to/dời hình. Với công cụ Chọn: kéo ảnh để dời,
-kéo ô vuông góc dưới phải để đổi cỡ (giữ tỉ lệ), `Delete` để xoá; thẻ thuộc tính có *Độ đậm* và *Khoá làm nền* (ảnh
-khoá không bị chọn hay kéo nhầm khi đồ hình lên trên; mở lại ở *Sửa › Mở khoá các ảnh nền*). Ảnh được lưu trong tệp
-`.json` và bản nháp, nhưng **không** nằm trong link chia sẻ (link sẽ quá dài) và không xuất sang TikZ. Ảnh lớn hơn
-1600 px được thu nhỏ khi dán.
+Khung chữ là thẻ nổi trên bảng vẽ: kéo **thanh tiêu đề** để dời, kéo **góc dưới phải** để đổi cỡ. Các nút trên thanh
+tiêu đề (hiện khi rê chuột): cách gắn khung – **gắn màn hình** (đứng yên khi dời/phóng hình), **gắn hình** (đi theo
+hình), **gắn điểm** (bám theo điểm gần nhất, vd ghi chú cạnh điểm H); chữ nhỏ hơn / to hơn; thu gọn; xoá.
+
+* **Đề bài**: thường là ảnh cắt từ đề – chụp/cắt rồi `Ctrl+V` vào bảng vẽ là thành khung *Đề bài* (ảnh dán khi đã có
+  khung đề thì thành một khung ảnh mới). Cũng có *Chèn › Khung đề bài (chữ)* để gõ đề.
+* **Lời giải**: `Ctrl+Enter` mở khung lời giải (tạo ở cột phải nếu chưa có) và đặt con trỏ ở cuối để gõ tiếp.
+* **Ghi chú**: *Chèn › Khung ghi chú*.
+
+Nháy đúp vào nội dung khung để soạn: bên trên là bộ soạn, bên dưới là bản xem trước cập nhật khi gõ. Cú pháp gần với
+LaTeX/markdown: `$…$` công thức trong dòng, `$$…$$` công thức riêng dòng, `**đậm**`, `*nghiêng*`, dòng bắt đầu `- `
+là gạch đầu dòng, `1. ` là đánh số. Có sẵn `\goc`, `\tamgiac`, `\cung{AB}`, `\vecto{AB}`. Đang soạn mà dán ảnh thì ảnh
+chèn vào chữ.
+
+**Gõ nhanh** (sửa được ở *Chèn › Gõ tắt và tự đổi…*):
+
+* *Tự đổi trong công thức* – gõ xong là đổi, không cần phím nào: `goc` → `\angle`, `tgiac` → `\triangle`, `^o` → `^\circ`,
+  `<=` `>=` `!=` → ≤ ≥ ≠, `=>` → ⇒, `iff` → ⇔, `//` → ∥, `_|_` → ⊥, `~=` → ≅, `~~` → ∼, `ff` → `\frac{}{}`,
+  `sqrt`, `vec`, `bar`, chữ Hy Lạp `al be ga de ph om pi`…
+* *Gõ tắt* – gõ rồi nhấn `Tab` (ở đâu cũng được): `;g` ∠, `;tg` △, `;ss` ∥, `;vg` ⊥, `;fr` phân số, `;he` hệ, `;ho`
+  tuyển, `;dt` công thức riêng dòng, `;cm` **Chứng minh.**, `;ta` Ta có, `;suyra`, `;vay`, `;dpcm` (đpcm),
+  `;tgnt` tứ giác nội tiếp… Bắt đầu bằng `;` để không đụng bộ gõ tiếng Việt (Telex/VNI).
+* `Tab` nhảy qua các ô trống `{}` và ra khỏi `$…$`; `Ctrl+M` bọc `$…$`; `Ctrl+Shift+M` `$$…$$`; `Ctrl+Space` gợi ý
+  tên điểm; gõ `\` gợi ý lệnh LaTeX.
+* **Bấm vào một điểm trên hình** khi đang soạn: chèn tên điểm đó vào chữ.
+* `Ctrl+Enter`: sang **bước** mới (dòng `---`); `Esc` hoặc bấm ra ngoài: xong.
+
+**Bước và trình bày.** Dòng `---` chia lời giải thành các bước. Khi trình bày (▶), bước *k* hiện ở khung trình bày
+thứ *k* (cùng nhịp với các bước dựng hình); viết `--- @5` để bước sau hiện từ khung 5. Số khung trình bày tự kéo dài
+nếu lời giải nhiều bước hơn hình.
+
+**Tên điểm trong công thức** (A, H, I_A, M_{BC}, B'…) được gắn với hình: rê chuột lên thì đối tượng sáng lên.
+
+**Xuất phiếu LaTeX** (*Tệp › Xuất phiếu LaTeX*): tải tệp `.tex` gồm đề bài, hình (TikZ, theo bộ kiểu đang chọn) và lời
+giải đánh số theo bước, kèm các ảnh đề (để cùng thư mục). Biên dịch bằng `pdflatex` (cần gói `vietnam` của vntex).
+
+### Ảnh nền để đồ hình
+
+*Chèn › Ảnh nền để đồ hình…* (dán hay kéo thả ảnh thì thành khung Đề bài, xem trên): ảnh nằm **dưới** mọi đối tượng hình học và đi theo hình khi phóng to/dời hình – dùng để đồ lại hình gốc. Với công cụ
+Chọn: kéo ảnh để dời, kéo ô vuông góc dưới phải để đổi cỡ (giữ tỉ lệ), `Delete` để xoá; thẻ thuộc tính có *Độ đậm* và
+*Khoá làm nền* (ảnh khoá không bị chọn hay kéo nhầm khi đồ hình lên trên; mở lại ở *Sửa › Mở khoá các ảnh nền*).
+
+Ảnh (ảnh nền và ảnh trong khung chữ) được lưu trong tệp `.json` và bản nháp, nhưng **không** nằm trong link chia sẻ
+(link sẽ quá dài; chữ trong khung thì có). Ảnh lớn hơn 1600 px được thu nhỏ khi dán.
 
 ### Hiển thị
 
@@ -187,7 +228,9 @@ LaTeX. Chỉ cần `\usepackage{tikz}`. Đổi kích thước bằng cách sửa
 |---|---|
 | `Ctrl+Z` / `Ctrl+Y` | Hoàn tác / làm lại |
 | gõ chữ / `F2` | Đặt tên điểm đang chọn (vd điểm vừa dựng) |
-| `Ctrl+V` | Dán ảnh vào hình |
+| `Ctrl+V` | Dán ảnh: thành khung Đề bài (đang soạn chữ: chèn vào chữ) |
+| `Ctrl+Enter` | Soạn lời giải; trong bộ soạn: sang bước mới |
+| trong bộ soạn: `Tab`, `Ctrl+M`, `Ctrl+Space`, `Esc` | Gõ tắt / nhảy ô; bọc `$…$`; gợi ý tên điểm; xong |
 | giữ `Shift` khi bấm / kéo điểm | Căn hướng: đường nằm ngang, thẳng đứng, bước 15° |
 | `Home` | Thu phóng vừa hình |
 | `Delete` | Xoá đối tượng đang chọn |
@@ -204,10 +247,13 @@ dist/app.js           giao diện đã đóng gói (sinh bằng `npm run build`,
 src/core/             LÕI hình học thuần JS: bước dựng, tính toạ độ (cả tính lại từng phần khi kéo), mô hình JSON,
                       tên/nhãn, bộ kiểu, công cụ tự tạo (macro.js), chạy công cụ ngoài giao diện (apply.js)
 src/explore/          BỘ KHÁM PHÁ thuần JS
-src/export/tikz.js    xuất TikZ
+src/export/tikz.js    xuất TikZ; src/export/latex.js: phiếu LaTeX (đề + TikZ + lời giải)
+src/text/             KHUNG CHỮ: markup.js (chữ + công thức, chia bước, gắn tên điểm, sang LaTeX), snippets.js (gõ tắt,
+                      tự đổi), editor.js (bộ soạn CodeMirror)
+css/style.css         giao diện; css/katex.css: CSS + phông KaTeX nhúng sẵn (sinh bằng scripts/katex-css.mjs)
 src/io/codec.js       mã hoá hình vào URL
 src/ui/               GIAO DIỆN: view.js + render.js (bộ vẽ canvas), tools.js (công cụ cơ bản),
-                      library.js (menu Công cụ), app.js, panels.js…
+                      library.js (menu Công cụ), textboxes.js (khung chữ), app.js, panels.js…
 src/core/thu-vien.js  mục lục thư viện ví dụ (tự sinh, nhập các tệp examples/thu-vien/*.json)
 scripts/              công cụ dòng lệnh: kham-pha.mjs, tikz.mjs
 lab/                  PHÒNG THÍ NGHIỆM Python (vòng khám phá tự chạy, cầu nối Newclid, báo cáo) – lab/HUONG_DAN.md
@@ -264,5 +310,7 @@ phục vụ nguyên trạng các tệp tĩnh.
 
 ## 5. Thư viện bên ngoài
 
-Từ bản 1.1 trang không dùng thư viện bên ngoài nào khi chạy (bộ vẽ canvas tự viết). Khi phát triển chỉ cần
-`esbuild` để đóng gói.
+Bộ vẽ hình là canvas tự viết. Từ bản 1.4, khung chữ dùng **KaTeX** (hiển thị công thức) và **CodeMirror 6** (bộ soạn) –
+cả hai được đóng gói sẵn vào `dist/app.js`, phông chữ KaTeX nhúng thẳng vào `css/katex.css` (vì trình duyệt chặn tải
+phông từ `file://`), nên trang vẫn **chạy offline hoàn toàn**. Khi phát triển cần `npm install` (esbuild, katex,
+codemirror); `npm run build` sinh lại cả `css/katex.css` và `dist/app.js`.

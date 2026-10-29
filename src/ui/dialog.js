@@ -78,3 +78,20 @@ export function toast(msg, ms = 2600) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
+
+/**
+ * Hộp sửa văn bản dài (vd bộ gõ tắt). Trả về văn bản mới, null nếu huỷ, hoặc '\u0000default' nếu bấm nút phụ.
+ */
+export function textDialogEditable(title, text, hintHTML = '', extraLabel = '') {
+  return modal((box, close) => {
+    box.classList.add('wide');
+    box.innerHTML = `<h3>${esc(title)}</h3>${hintHTML ? `<div class="modal-body">${hintHTML}</div>` : ''}<textarea class="modal-text" spellcheck="false"></textarea>
+      <div class="modal-actions">${extraLabel ? `<button class="extra" style="margin-right:auto">${esc(extraLabel)}</button>` : ''}<button class="cancel">Huỷ</button><button class="primary">Lưu</button></div>`;
+    const ta = box.querySelector('textarea');
+    ta.value = text;
+    box.querySelector('.cancel').onclick = () => close(null);
+    box.querySelector('.primary').onclick = () => close(ta.value);
+    const ex = box.querySelector('.extra');
+    if (ex) ex.onclick = () => close('\u0000default');
+  });
+}
