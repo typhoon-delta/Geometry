@@ -1,7 +1,7 @@
 // Văn bản trong khung chữ (bản 1.4): chia bước, công thức KaTeX, liên kết tên điểm, xuất LaTeX.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { splitSteps, stepFrames, tokenize, linkNames, renderStep, toLatex } from '../src/text/markup.js';
+import { splitSteps, stepFrames, tokenize, linkNames, renderStep, toLatex, renameInText } from '../src/text/markup.js';
 
 test('chia bước bằng ---, @k gắn khung trình bày', () => {
   const st = splitSteps('Gọi $M$ là trung điểm.\n---\nTa có $MB=MC$.\n--- @5\nVậy …');
@@ -49,4 +49,15 @@ test('xuất LaTeX: thoát ký tự đặc biệt ngoài công thức, giữ cô
   assert.match(t, /Lãi 50\\% \\& \\textbf\{đậm\} \$a_1\$/);
   assert.match(t, /\\begin\{enumerate\}\n  \\item một\n  \\item hai\n\\end\{enumerate\}/);
   assert.match(t, /\\includegraphics\[width=0\.9\\linewidth\]\{de-x1\.png\}/);
+});
+
+test('đổi tên điểm: chữ trong khung đổi theo (công thức, từ toàn tên điểm), không đụng chữ thường', () => {
+  const names = [['A', 'a'], ['B', 'b'], ['C', 'c'], ['A_1', 'a1'], ['H', 'h'], ['T', 't'], ['G', 'g']].map(([name, id]) => ({ name, id }));
+  const t = 'Cho tam giác ABC, trực tâm H. Ta có $\\angle BAC = \\angle BHC$, $A_1A$, $A_{1}$, \\$A\n---\nGọi $$\\frac{AB}{AC}\\text{ A}$$ ![](img:Ab)';
+  const r = renameInText(t, names, new Map([['a', 'D'], ['h', 'H_1'], ['t', 'X'], ['g', 'K']]));
+  assert.equal(r, 'Cho tam giác DBC, trực tâm $H_1$. Ta có $\\angle BDC = \\angle BH_1C$, $A_1D$, $A_{1}$, \\$D\n---\nGọi $$\\frac{DB}{DC}\\text{ A}$$ ![](img:Ab)');
+  // đổi chỗ hai tên cùng lúc
+  assert.equal(renameInText('$AB$ và AB', names, new Map([['a', 'B'], ['b', 'A']])), '$BA$ và BA');
+  // không có gì đổi thì giữ nguyên từng ký tự
+  assert.equal(renameInText(t, names, new Map([['c', 'C']])), t);
 });

@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hình học động</title>
-<link rel="stylesheet" href="css/katex.css">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/katex.css?v=1.5">
+<link rel="stylesheet" href="css/style.css?v=1.5">
 </head>
 <body>
 <header id="topbar">
@@ -15,8 +15,12 @@
       <button class="menu-btn">Tệp</button>
       <div class="menu-pop">
         <button id="btn-new">Hình mới (tab mới)</button>
-        <button id="btn-open">Mở tệp… <kbd>Ctrl+O</kbd></button>
-        <button id="btn-save">Lưu tệp <kbd>Ctrl+S</kbd></button>
+        <button id="btn-open">Mở tệp (một hoặc nhiều)… <kbd>Ctrl+O</kbd></button>
+        <button id="btn-save">Lưu hình này ra tệp <kbd>Ctrl+S</kbd></button>
+        <button id="btn-save-all">Lưu tất cả các tab (một tệp) <kbd>Ctrl+Shift+S</kbd></button>
+        <button id="btn-reopen">Mở lại hình vừa đóng</button>
+        <button id="btn-restore">Khôi phục bản nháp cũ…</button>
+        <div class="menu-sep"></div>
         <button id="btn-share">Chia sẻ bằng link…</button>
         <button id="btn-tikz">Xuất TikZ…</button>
         <button id="btn-latex">Xuất phiếu LaTeX (.tex)…</button>
@@ -28,6 +32,8 @@
         <button id="menu-undo">Hoàn tác <kbd>Ctrl+Z</kbd></button>
         <button id="menu-redo">Làm lại <kbd>Ctrl+Y</kbd></button>
         <button id="btn-delete">Xoá đối tượng đang chọn <kbd>Delete</kbd></button>
+        <button id="btn-hide">Ẩn đối tượng đang chọn <kbd>Ctrl+H</kbd></button>
+        <button id="btn-show-hidden">Hiện các đối tượng đã ẩn <kbd>Ctrl+Shift+H</kbd></button>
         <button id="btn-unlock-images">Mở khoá các ảnh nền</button>
       </div>
     </div>
@@ -58,12 +64,29 @@
       </div>
     </div>
     <div class="menu">
+      <button class="menu-btn">Kho</button>
+      <div class="menu-pop">
+        <button id="btn-kho-open">Mở từ kho… <kbd>Ctrl+K</kbd></button>
+        <button id="btn-kho-save">Lưu vào kho <kbd>Ctrl+S</kbd></button>
+        <button id="btn-kho-meta">Thông tin bài này…</button>
+        <div class="menu-sep"></div>
+        <button id="btn-kho-buoi-tabs">Lưu các tab đang mở thành buổi dạy…</button>
+        <button id="btn-kho-buoi">Các buổi dạy…</button>
+        <button id="btn-kho-import">Nhập tệp vào kho…</button>
+        <div class="menu-sep"></div>
+        <button id="btn-kho-connect">Kết nối kho…</button>
+        <button id="btn-kho-disconnect">Ngắt kết nối kho</button>
+      </div>
+    </div>
+    <div class="menu">
       <button class="menu-btn">Ví dụ</button>
       <div class="menu-pop examples-pop" id="example-menu"></div>
     </div>
   </nav>
   <div id="tabbar" title="Các hình đang mở"></div>
   <div class="spacer"></div>
+  <button id="kho-status" class="kho-chip off"></button>
+  <span class="vsep"></span>
   <button id="btn-undo" class="icon" title="Hoàn tác (Ctrl+Z)"></button>
   <button id="btn-redo" class="icon" title="Làm lại (Ctrl+Y)"></button>
   <span class="vsep"></span>
@@ -99,6 +122,6 @@
     <div id="tab-explore" class="tabpane"></div>
   </aside>
 </main>
-<script src="dist/app.js"></script>
+<script src="dist/app.js?v=1.5"></script>
 </body>
 </html>

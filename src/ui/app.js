@@ -13,6 +13,9 @@ import { createMacro, macroTool, validMacro, USER_MENU } from '../core/macro.js'
 import { isDraggableType, PALETTE, setTheme } from '../core/styles.js';
 import { confirmDialog, promptDialog, toast } from './dialog.js';
 import { renderStepList, renderProps, renderToolOptions } from './panels.js';
+import { renameInText } from '../text/markup.js';
+import { tabDirty, tabDoc, isEmptyDoc } from './share.js';
+import { downloadFile } from './download.js';
 
 const HISTORY_MAX = 200;
 
@@ -73,6 +76,8 @@ export class App {
     else { this.undoStack = []; this.redoStack = []; }
     this.doc = clone(doc);
     this.takeImages(this.doc);
+    // hình mới nạp vào tab: chưa gắn với bài nào trong kho, chưa lưu
+    if (this.tabs && this.tabs[this.tabIdx] && !keepHistory) Object.assign(this.tabs[this.tabIdx], { kho: null, savedSig: null });
     this.imageSel = null;
     this.selection.clear();
     this.highlight.clear();
@@ -180,7 +185,8 @@ export class App {
   // Mỗi tab giữ hình, lịch sử hoàn tác/làm lại và khung nhìn riêng. Tab đang mở dùng trực tiếp this.doc,
   // this.undoStack… (như trước); khi đổi tab thì cất vào this.tabs[i] rồi lấy tab kia ra.
   initTabs() {
-    this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null }];
+    this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null, kho: null, savedSig: null }];
+    this.closedTabs = []; // hình vừa đóng (để mở lại), tối đa 10
     this.tabIdx = 0;
   }
 
@@ -216,31 +222,46 @@ export class App {
     this.showTab(i);
   }
 
-  /** Mở một hình ở tab mới (doc = null: hình trống). */
-  newTab(doc = null) {
+  /** Mở một hình ở tab mới (doc = null: hình trống). meta: {kho, savedSig} – bài trong kho mà tab gắn với, chữ ký lần lưu cuối. */
+  newTab(doc = null, meta = {}) {
     this.stashTab();
     const d = doc ? clone(doc) : emptyDoc();
     this.takeImages(d);
-    this.tabs.push({ doc: d, undo: [], redo: [], bbox: null });
+    this.tabs.push({ doc: d, undo: [], redo: [], bbox: null, kho: meta.kho || null, savedSig: meta.savedSig || null });
     this.showTab(this.tabs.length - 1);
   }
 
   async closeTab(i) {
-    const t = i === this.tabIdx ? { doc: this.doc } : this.tabs[i];
-    const n = t.doc.steps.length + (t.doc.images?.length || 0);
-    if (n && !(await confirmDialog('Đóng hình', `Đóng hình <b>${escapeHTML(t.doc.title || 'chưa đặt tên')}</b>? Hình chưa lưu tệp sẽ mất.`, 'Đóng'))) return;
+    const t = i === this.tabIdx ? { ...this.tabs[i], doc: this.doc } : this.tabs[i];
+    // hình đã lưu (tệp/kho) và chưa sửa gì thêm thì đóng luôn; chưa lưu thì hỏi – dù sao vẫn mở lại được
+    if (tabDirty(this, i) && !(await confirmDialog('Đóng hình', `Hình <b>${escapeHTML(t.doc.title || 'chưa đặt tên')}</b> có thay đổi chưa lưu ra tệp hay kho. Đóng?<br><span class="note">Lỡ đóng thì vào <i>Tệp › Mở lại hình vừa đóng</i>.</span>`, 'Đóng'))) return;
     this.stashTab();
+    if (!isEmptyDoc(t.doc)) {
+      this.closedTabs.push({ doc: tabDoc(this, i), kho: t.kho || null, savedSig: t.savedSig || null });
+      if (this.closedTabs.length > 10) this.closedTabs.shift();
+    }
     const cur = this.tabIdx;
     this.tabs.splice(i, 1);
-    if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null });
+    if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null, kho: null, savedSig: null });
     const next = i < cur ? cur - 1 : i === cur ? Math.min(i, this.tabs.length - 1) : cur;
     this.showTab(next);
   }
 
-  /** Mở hình (tệp, ví dụ, link): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. */
-  openDoc(doc) {
-    if (!this.doc.steps.length && !(this.doc.images || []).length) this.loadDoc(doc);
-    else this.newTab(doc);
+  /** Tệp › Mở lại hình vừa đóng. */
+  reopenTab() {
+    const c = this.closedTabs.pop();
+    if (!c) return toast('Chưa đóng hình nào trong lần mở trang này');
+    this.newTab(c.doc, c);
+    toast(`Đã mở lại "${c.doc.title || 'hình vừa đóng'}"`);
+  }
+
+  /** Mở hình (tệp, ví dụ, link, kho): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. meta như newTab. */
+  openDoc(doc, meta = {}) {
+    if (isEmptyDoc(this.doc)) {
+      this.loadDoc(doc);
+      Object.assign(this.tabs[this.tabIdx], { kho: meta.kho || null, savedSig: meta.savedSig || null });
+      this.emit('saved');
+    } else this.newTab(doc, meta);
   }
 
   pushUndo(snapshot) {
@@ -1002,12 +1023,37 @@ export class App {
     if (!name || name === s.name) return false;
     const other = this.doc.steps.find((x) => x.name === name && x.id !== id);
     const old = s.name;
-    this.commit(() => {
+    // đang soạn khung chữ: lưu trước, để chữ trong bộ soạn cũng được đổi tên
+    if (this.textBoxes && this.textBoxes.editing) this.textBoxes.stopEdit(true);
+    this.commit((doc) => {
+      // tên điểm trong các khung chữ (đề, lời giải, ghi chú) đổi theo – cùng một bước hoàn tác
+      const k = kinds(doc);
+      const pts = doc.steps.filter((x) => k.get(x.id) === 'point' && x.name).map((x) => ({ name: x.name, id: x.id }));
+      const ren = new Map([[id, name], ...(other ? [[other.id, old]] : [])]);
+      for (const b of doc.boxes || []) b.text = renameInText(b.text, pts, ren);
       if (other) other.name = old;
       s.name = name;
     });
     if (other) toast(`Đã đổi chỗ tên: ${name} ↔ ${old}`);
     return true;
+  }
+
+  /** Ctrl+H: ẩn các đối tượng đang chọn (vẫn tính, vẫn dùng để dựng tiếp; hiện lại ở menu Sửa hoặc bảng các bước). */
+  hideSelected() {
+    const ids = [...this.selection].filter((id) => stepById(this.doc, id));
+    if (!ids.length) return toast('Chọn đối tượng cần ẩn trước (công cụ Chọn, bấm vào đối tượng; giữ Shift để chọn nhiều)');
+    this.commit((doc) => { for (const id of ids) stepById(doc, id).hidden = true; });
+    this.selection.clear();
+    this.refresh();
+    toast(`Đã ẩn ${ids.length} đối tượng – hiện lại: Sửa › Hiện các đối tượng đã ẩn (Ctrl+Shift+H), hoặc nút ● trong bảng các bước`, 4500);
+  }
+
+  /** Hiện lại mọi đối tượng đã ẩn. */
+  showHidden() {
+    const n = this.doc.steps.filter((s) => s.hidden).length;
+    if (!n) return toast('Không có đối tượng nào đang ẩn');
+    this.commit((doc) => { for (const s of doc.steps) delete s.hidden; });
+    toast(`Đã hiện lại ${n} đối tượng (Ctrl+Z để ẩn lại)`);
   }
 
   setStyle(ids, patch) {
@@ -1160,6 +1206,13 @@ export class App {
       const ctrl = e.ctrlKey || e.metaKey;
       // Ctrl+Enter: soạn lời giải (khung chữ), con trỏ ở cuối
       if (ctrl && e.key === 'Enter' && this.mode === 'edit' && this.textBoxes) { e.preventDefault(); this.textBoxes.editSolution(); return; }
+      // chuyển tab hình: Alt+1…9 (tab thứ n), Alt+PageUp/PageDown (tab trước/sau) – Ctrl+Tab bị trình duyệt giữ
+      if (e.altKey && !ctrl && this.tabs.length > 1) {
+        const d = /^Digit([1-9])$/.exec(e.code);
+        const n = this.tabs.length;
+        if (d) { e.preventDefault(); this.switchTab(Math.min(+d[1], n) - 1); return; }
+        if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); this.switchTab((this.tabIdx + (e.key === 'PageDown' ? 1 : n - 1)) % n); return; }
+      }
       if (ctrl && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); this.undo(); return; }
       if (ctrl && (e.key === 'y' || e.key === 'Y' || ((e.key === 'z' || e.key === 'Z') && e.shiftKey))) { e.preventDefault(); this.redo(); return; }
       if (this.mode === 'present') {
@@ -1186,6 +1239,12 @@ export class App {
         else { this.selection.clear(); this.imageSel = null; this.setRelation(null); }
       } else if (e.key === 'Enter' && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === '...point') {
         this.completeTool(TOOL_BY_ID[this.toolId]);
+      } else if (ctrl && (e.key === 'h' || e.key === 'H') && e.shiftKey) {
+        e.preventDefault();
+        this.showHidden();
+      } else if (ctrl && (e.key === 'h' || e.key === 'H') && !e.shiftKey) {
+        e.preventDefault();
+        this.hideSelected();
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && this.selection.size) {
         e.preventDefault();
         this.deleteSteps([...this.selection]);
@@ -1235,13 +1294,7 @@ export class App {
       this.saveUserTools();
     } else if (action === 'export') {
       if (!this.userTools.length) return toast('Chưa có công cụ tự tạo nào');
-      const blob = new Blob([JSON.stringify({ format: 'hinh-hoc-dong-cong-cu', version: 1, tools: this.userTools }, null, 1)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'cong-cu-cua-toi.json';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      downloadFile('cong-cu-cua-toi.json', JSON.stringify({ format: 'hinh-hoc-dong-cong-cu', version: 1, tools: this.userTools }, null, 1), 'application/json');
     } else if (action === 'import') {
       const inp = document.createElement('input');
       inp.type = 'file';
@@ -1414,6 +1467,8 @@ export class App {
     this.togglePanel(loadPref('panel', '0') === '1', false);
     this.updateMenuChecks();
     on('btn-delete', () => this.deleteSteps([...this.selection]));
+    on('btn-hide', () => this.hideSelected());
+    on('btn-show-hidden', () => this.showHidden());
     on('btn-grid', () => this.toggleGrid());
     on('btn-trim', () => { this.renderer.trimLines = !this.renderer.trimLines; savePref('trim', this.renderer.trimLines ? '1' : '0'); this.updateMenuChecks(); this.refresh(); });
     on('btn-fit', () => this.zoomFit());

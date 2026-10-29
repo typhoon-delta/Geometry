@@ -130,5 +130,44 @@ export async function run({ page, ok, shot, state, clickAt, errors }) {
   ok((await page.evaluate(() => __app.doc.boxes.length)) === 1, 'xoá khung (có hỏi lại)');
   await page.keyboard.press('Control+z');
   ok((await page.evaluate(() => __app.doc.boxes.length)) === 2, 'hoàn tác xoá khung');
+
+  // ---- bấm điểm khi soạn: tự bọc $…$, bấm liền nhau gộp một công thức; đổi tên điểm → chữ đổi theo ----
+  await page.keyboard.press('Home');
+  const nb = await page.evaluate(() => __app.textBoxes.newBox('ghichu', { fx: 0.7, fy: 0.8 }));
+  await page.evaluate((id) => __app.textBoxes.edit(id), nb);
+  // tạm ẩn các khung khác để không che điểm cần bấm
+  await page.evaluate((id) => document.querySelectorAll('.tbox').forEach((el) => { if (el.dataset.id !== id) el.style.visibility = 'hidden'; }), nb);
+  await page.keyboard.type('Tam giác ');
+  const at = (nm) => page.evaluate((nm) => { const s = __app.doc.steps.find((x) => x.name === nm); const r = __app.view.canvas.getBoundingClientRect(); const q = __app.toScreen(__app.values.get(s.id)); return { x: r.left + q.x, y: r.top + q.y }; }, nm);
+  for (const nm of ['A', 'B', 'C']) { const p = await at(nm); await page.mouse.click(p.x, p.y); }
+  await page.keyboard.type(' có trực tâm ');
+  { const p = await at('H'); await page.mouse.click(p.x, p.y); }
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => document.querySelectorAll('.tbox').forEach((el) => { el.style.visibility = ''; }));
+  const nt = () => page.evaluate((id) => __app.doc.boxes.find((b) => b.id === id).text, nb);
+  ok((await nt()) === 'Tam giác $ABC$ có trực tâm $H$', `bấm điểm ngoài công thức tự bọc $…$, bấm liền A, B, C ra $ABC$ (${await nt()})`);
+  await page.evaluate(() => __app.setName(__app.doc.steps.find((x) => x.name === 'H').id, 'H_1'));
+  const sol = await page.evaluate(() => __app.doc.boxes.find((b) => b.role === 'loigiai').text);
+  ok((await nt()) === 'Tam giác $ABC$ có trực tâm $H_1$' && sol.includes('\\angle BH_1C'), 'đổi tên H → H_1: mọi khung chữ đổi theo');
+  await page.keyboard.press('Control+z');
+  ok((await nt()).endsWith('$H$') && (await page.evaluate(() => __app.doc.steps.some((x) => x.name === 'H'))), 'một lần hoàn tác trả lại cả tên điểm lẫn chữ');
+
+  // ---- Ctrl+H ẩn đối tượng đang chọn, Ctrl+Shift+H hiện lại ----
+  await page.mouse.click(300, 700);
+  const lid = await page.evaluate(() => { const s = __app.doc.steps.find((x) => x.type === 'segment'); __app.select(s.id); return s.id; });
+  await page.keyboard.press('Control+h');
+  ok(await page.evaluate((id) => __app.doc.steps.find((x) => x.id === id).hidden === true && __app.selection.size === 0, lid), 'Ctrl+H ẩn đường đang chọn');
+  await page.keyboard.press('Control+Shift+h');
+  ok(await page.evaluate(() => !__app.doc.steps.some((x) => x.hidden)), 'Ctrl+Shift+H hiện lại mọi đối tượng đã ẩn');
+
+  // ---- chuyển tab bằng bàn phím ----
+  await page.mouse.click(300, 700);
+  const n = await page.evaluate(() => __app.tabs.length);
+  await page.keyboard.press('Alt+1');
+  ok((await page.evaluate(() => __app.tabIdx)) === 0, 'Alt+1: sang tab đầu');
+  await page.keyboard.press('Alt+PageUp');
+  ok((await page.evaluate(() => __app.tabIdx)) === n - 1, 'Alt+PageUp: vòng về tab cuối');
+  await page.keyboard.press('Alt+PageDown');
+  ok((await page.evaluate(() => __app.tabIdx)) === 0, 'Alt+PageDown: tab sau');
   ok(errors.length === 0, 'không có lỗi JS: ' + errors.join(' | '));
 }

@@ -4,7 +4,9 @@ import { bindStepList } from './panels.js';
 import { EXAMPLES } from '../core/examples.js';
 import { Builder } from '../core/builder.js';
 import * as core from '../core/index.js';
-import { initShare, shareLink, saveFile, openFile } from './share.js';
+import { initShare, shareLink, saveFile, saveAllFiles, openFile, restoreDialog } from './share.js';
+import { initDownloads, downloadTex } from './download.js';
+import { setupKho } from '../kho/ui.js';
 import * as codec from '../io/codec.js';
 import { setupExplore, drawRelationOverlay } from './explorePanel.js';
 import { explore } from '../explore/explorer.js';
@@ -78,18 +80,25 @@ function start() {
   // Lưu / mở / chia sẻ
   document.getElementById('btn-share').onclick = () => shareLink(app);
   document.getElementById('btn-save').onclick = () => saveFile(app);
+  document.getElementById('btn-save-all').onclick = () => saveAllFiles(app);
+  document.getElementById('btn-reopen').onclick = () => app.reopenTab();
+  document.getElementById('btn-restore').onclick = () => restoreDialog(app);
   document.getElementById('btn-open').onclick = () => openFile(app);
   setupTabBar(app);
   setupImages(app);
   const tb = setupTextBoxes(app);
+  const kho = setupKho(app);
   const onClick = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   for (const role of ['loigiai', 'de', 'ghichu']) onClick('btn-box-' + role, () => { const id = role === 'loigiai' ? null : tb.newBox(role); if (id) { tb.render(); tb.edit(id); } else tb.editSolution(); });
   onClick('btn-rules', () => tb.editRules());
   onClick('btn-latex', () => exportLatex(app));
   document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(app); }
+    // Ctrl+S: lưu vào kho nếu đã kết nối kho, không thì lưu ra tệp; Ctrl+Shift+S: mọi tab ra một tệp; Ctrl+K: mở kho
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) saveAllFiles(app); else if (kho.isConnected()) kho.saveCurrent(); else saveFile(app); }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'k' && !document.querySelector('.modal-back')) { e.preventDefault(); kho.openBrowser(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(app); }
   });
+  initDownloads();
   initShare(app).then(() => app.renderTabs());
 
   // Cho phép dùng từ console / test tự động
@@ -99,17 +108,11 @@ function start() {
 }
 
 /** Tệp › Xuất phiếu LaTeX: tải tệp .tex (đề + hình TikZ + lời giải) và các ảnh trong khung chữ. */
-function exportLatex(app) {
+async function exportLatex(app) {
   const vis = app.visibleSet();
   const doc = vis ? { ...app.doc, steps: app.doc.steps.map((s) => (vis.has(s.id) ? s : { ...s, hidden: true })) } : app.doc;
   const { tex, files } = toLatexHandout(doc, { values: app.values, theme: app.theme, trimLines: app.renderer.trimLines, imageSrc: (id) => app.images.get(id)?.src });
-  const base = fileSafeName(app.doc.title || 'phieu');
-  const download = (name, href) => { const a = document.createElement('a'); a.download = name; a.href = href; document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 500); };
-  const url = URL.createObjectURL(new Blob([tex], { type: 'application/x-tex' }));
-  download(base + '.tex', url);
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-  files.forEach((f, i) => setTimeout(() => download(f.name, f.dataURL), 300 * (i + 1)));
-  toast(files.length ? `Đã tải ${base}.tex và ${files.length} ảnh (để cùng thư mục rồi biên dịch bằng pdflatex)` : `Đã tải ${base}.tex (biên dịch bằng pdflatex)`, 6000);
+  await downloadTex(fileSafeName(app.doc.title || 'phieu'), tex, files);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

@@ -260,7 +260,7 @@ export function setupTextBoxes(app) {
       const h = app.hitTest(e.clientX - st.left, e.clientY - st.top).find((x) => x.kind === 'point');
       e.stopPropagation();
       e.preventDefault();
-      if (h) { editing.ed.insert(app.doc.steps.find((s) => s.id === h.id).name); return; }
+      if (h) { editing.ed.insertName(app.doc.steps.find((s) => s.id === h.id).name); return; }
     }
     stopEdit(true);
   }, true);

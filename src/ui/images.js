@@ -1,6 +1,7 @@
 // Dán / kéo thả / chèn ảnh vào hình (bản 1.3): ảnh đề bài chụp màn hình, hình gốc để đồ lại…
 // Ảnh nằm dưới mọi đối tượng hình học, theo toạ độ hình (phóng/dời cùng hình). Xem App.registerImage.
 import { toast } from './dialog.js';
+import { openFiles } from './share.js';
 
 const MAX_SIDE = 1600; // ảnh lớn hơn được thu nhỏ để tệp .json và bản nháp không quá nặng
 
@@ -19,9 +20,13 @@ export function setupImages(app) {
     if ([...(e.dataTransfer?.items || [])].some((it) => it.kind === 'file')) e.preventDefault();
   });
   stage.addEventListener('drop', (e) => {
-    const files = [...(e.dataTransfer?.files || [])].filter((f) => f.type.startsWith('image/'));
+    const all = [...(e.dataTransfer?.files || [])];
+    if (all.length) e.preventDefault(); // không để trình duyệt mở thẳng tệp (mất trang đang dạy)
+    // bản 1.5: kéo thả tệp hình .json (một hình hoặc bộ nhiều hình) → mở thành tab
+    const json = all.filter((f) => /\.json$/i.test(f.name) || f.type === 'application/json');
+    if (json.length) openFiles(app, json);
+    const files = all.filter((f) => f.type.startsWith('image/'));
     if (!files.length) return;
-    e.preventDefault();
     const r = app.view.canvas.getBoundingClientRect();
     files.forEach((f, i) => insertImageFile(app, f, { sx: e.clientX - r.left + 24 * i, sy: e.clientY - r.top + 24 * i }, app.textBoxes ? 'box' : 'background'));
   });

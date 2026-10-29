@@ -715,6 +715,12 @@ giao diện cho đẹp hơn**.
 * **Bước**: dòng `---` (tuỳ chọn `@k`) chia lời giải; khi trình bày bước *k* hiện ở khung *k* (cùng nhịp với các bước
   dựng), bước mới hiện có hiệu ứng nhẹ; số khung trình bày kéo dài theo lời giải.
 * **Tên điểm trong công thức** được bọc `\htmlData{p=id}` khi hiển thị: rê chuột lên tên thì đối tượng sáng lên.
+* **Đổi tên điểm → chữ đổi theo** (`renameInText` trong `src/text/markup.js`, gọi trong `setName` – cùng một bước hoàn
+  tác, cả khi đổi chỗ hai tên). Trong công thức: đổi mọi tên khớp (dài nhất trước, không cắt `I_A` thành `I`, bỏ qua
+  `\text{…}` và tên lệnh). Trong chữ thường: chỉ đổi "từ" tách được hết thành tên điểm ("tam giác ABC"), không đụng
+  "Ta", "Cho", "Gọi"; tên mới có chỉ số mà nằm ngoài công thức thì được bọc `$…$`. Bấm điểm khi đang soạn: ngoài công thức
+  tự bọc `$…$`, bấm liền nhau thì gộp vào công thức vừa chèn (`$ABC$`). Thêm sau khi dùng thử: tên điểm trước đây chỉ là
+  chữ, đổi tên điểm thì lời giải sai tên.
 * **Xuất phiếu LaTeX** (`src/export/latex.js`): đề + hình TikZ + lời giải đánh số theo bước + ảnh đề tải kèm.
 
 ## 2. Bộ soạn gõ nhanh (CodeMirror 6, soạn ngay trong khung, xem trước bên dưới)
@@ -751,12 +757,18 @@ Viết lại `css/style.css` thành một hệ thống thống nhất dựa trê
   biểu tượng SVG chỉ hiện khi rê chuột, thân khung chữ có chân; bộ soạn chữ đơn cách **không ghép ký tự** (`=>` hiện đúng
   hai ký tự đã gõ).
 * Menu *Ví dụ* nhiều cột không còn tràn khỏi màn hình; menu không bị xuống dòng khi mở nhiều tab.
+* **Chuyển tab bằng phím**: `Alt+1`…`Alt+9`, `Alt+PageUp`/`Alt+PageDown` (bù hạn chế của bản 1.3: `Ctrl+Tab` bị trình duyệt
+  giữ). Rê chuột lên tab thấy phím tắt.
+* **Ẩn nhanh**: `Ctrl+H` ẩn các đối tượng đang chọn (như Sketchpad), `Ctrl+Shift+H` hiện lại tất cả; có trong menu *Sửa*.
+  Trước đó phải chọn rồi tích *Ẩn* trong thẻ thuộc tính hoặc mở bảng các bước – người dùng thử hỏi "ẩn đường thẳng kiểu gì".
+* `index.html` gắn số phiên bản vào đường dẫn (`dist/app.js?v=1.4`…): khi dùng thử, trình duyệt từng giữ `app.js`/`style.css`
+  cũ trong bộ nhớ đệm trong khi `index.html` đã mới → mất dải tab, giao diện lẫn cũ mới. Mỗi bản sau cần tăng số này.
 
 ## 4. Kiểm thử
 
-* `npm test`: 134 test (133 đạt, 1 bỏ qua vì máy không có pdflatex), thêm `tests/van-ban.test.mjs` (chia bước, khung
+* `npm test`: 135 test (134 đạt, 1 bỏ qua vì máy không có pdflatex), thêm `tests/van-ban.test.mjs` (chia bước, khung
   trình bày, gắn tên điểm, tự đổi/gõ tắt, xuất LaTeX).
-* `npm run test:browser`: đạt, thêm `tests/browser/smoke5.mjs` – 26 kiểm tra: `Ctrl+Enter` tạo khung, gõ thật với tự đổi
+* `npm run test:browser`: đạt, thêm `tests/browser/smoke5.mjs` – 32 kiểm tra (cả bấm điểm tự bọc `$…$`, đổi tên điểm → chữ đổi theo, phím chuyển tab): `Ctrl+Enter` tạo khung, gõ thật với tự đổi
   và gõ tắt, bấm điểm chèn tên, công thức không lỗi, tên gắn hình, rê chuột tô sáng, kéo/đổi cỡ chữ/đổi cách gắn (khung
   gắn hình đi theo khi phóng), `Ctrl+V` ảnh thành khung Đề bài, trình bày hiện dần từng bước, lưu/mở tệp có khung và
   ảnh, xuất `.tex` (có TikZ, `\includegraphics`, `\item`), xoá/hoàn tác. `smoke4` đổi sang chèn ảnh nền qua menu.
@@ -775,3 +787,70 @@ Viết lại `css/style.css` thành một hệ thống thống nhất dựa trê
 * Khung gắn hình có thể ra ngoài khung nhìn khi phóng to (như mọi đối tượng hình) – `Home` đưa hình về.
 * Ảnh (cả ảnh đề) không có trong link chia sẻ; chữ trong khung thì có.
 * Phông Inter/STIX Two dùng nếu máy có, không thì dùng phông hệ thống (không nhúng để giữ dung lượng).
+
+# Bản 1.5 – Lưu trữ cho chắc và kho bài tập trên GitHub
+
+Sau buổi dạy thật đầu tiên trên bản 1.4 (6 bài trong 6 tab trên GitHub Pages), thầy/cô cần hai thứ: (1) không lo mất hình,
+lưu/mở lại nguyên hiện trạng; (2) **hệ thống lại các bài thành kho bài tập**, mở lại ở máy nào cũng được. Thầy/cô quyết:
+kho là repo riêng tư do thầy/cô tạo; một bài có thể (hiếm) nhiều hình; chưa làm phần cho học sinh.
+
+## 1. Bước 1 – lưu trên máy
+
+* **Lưu tất cả các tab vào một tệp** (`Ctrl+Shift+S`, định dạng `hinh-hoc-dong-bo`): giữ thứ tự tab, tab đang mở, khung
+  nhìn, khung chữ, ảnh. *Mở tệp* chọn được nhiều tệp, nhận cả tệp nhiều tab, không mở trùng hình đang mở; **kéo thả**
+  tệp `.json` vào bảng vẽ cũng mở (trước đây trình duyệt mở thẳng tệp và thay mất trang đang dạy).
+* **Dấu chưa lưu**: chấm cam trên tab có thay đổi chưa lưu ra tệp/kho (so chữ ký nội dung, không tính khung nhìn). Đóng
+  tab đã lưu không hỏi; *Tệp › Mở lại hình vừa đóng* (10 hình gần nhất).
+* **Bản nháp bền hơn**: ghi cả vào IndexedDB (hàng trăm MB) bên cạnh localStorage (~5 MB) – ảnh đề lớn không còn làm
+  hỏng bản nháp; lúc mở trang lấy bản mới hơn trong hai nơi. **Lịch sử bản nháp**: chụp các hình 5 phút một lần khi có
+  thay đổi (và lúc mở trang), giữ 12 bản; *Tệp › Khôi phục bản nháp cũ…* mở các hình của một mốc thành tab mới.
+* Lưu tệp/xuất LaTeX dùng chung `src/ui/download.js`: ở trang artifact của claude.ai (chặn tải kiểu thường) dùng khả
+  năng tải tệp của trang nếu có.
+
+## 2. Bước 2 – kho bài tập trên GitHub
+
+Chi tiết cài đặt, cách dùng, cấu trúc repo: [`docs/KHO_BAI.md`](docs/KHO_BAI.md). Tóm tắt thiết kế:
+
+* **Hai bên tách bạch**: chương trình (repo `Geometry`, công khai) không chứa dữ liệu; kho là repo **riêng tư**
+  (chương trình cảnh báo nếu repo kho công khai, vì học sinh sẽ xem được lời giải). Đọc/ghi bằng token fine-grained
+  chỉ có quyền *Contents* với đúng repo kho, lưu trong trình duyệt máy giáo viên. Không máy chủ riêng.
+* **Cấu trúc đọc được bằng mắt**: `bai/<mã>/bai.json` (thông tin + các hình), `bai/<mã>/anh/*` (ảnh tách tệp),
+  `bai/<mã>/thu-nho.jpg`, `buoi/<mã>.json`, `muc-luc.json` (chỉ mục để tìm nhanh), `chu-de.json`.
+* **Thông tin bài**: tên, nguồn (kỳ – năm – bài, tự điền từ tên dạng "VMO 2016 – Bài 4"; hoặc Tự ra), chủ đề (14 chủ
+  đề mặc định cho hình học Olympic, sửa được), kỹ thuật/thẻ (gợi ý thẻ đã dùng), độ khó 1–5, ghi chú riêng; trạng thái
+  (mới có đề / có hình / có lời giải) tự suy từ nội dung; "đã dạy" suy từ các buổi dạy.
+* **Lưu = một commit** (git data API: blobs → tree → commit → cập nhật nhánh `force: false`). Nhánh vừa đổi ở nơi khác →
+  đọc lại mục lục, làm lại (không mất bài của máy kia). Bài bị sửa ở nơi khác kể từ lúc mở (so sha `bai.json`, sha tính
+  ngay ở máy theo kiểu git) → hỏi: ghi đè / lưu thành bài mới / mở bản trên kho. Ảnh đã có không gửi lại; ảnh không dùng
+  bị xoá.
+* **Cửa sổ kho** (`Ctrl+K`): thẻ bài có ảnh thu nhỏ (vẽ bằng chính bộ vẽ, ở bảng vẽ ẩn), tìm không dấu trên tên, nguồn,
+  chủ đề, thẻ, chữ trong đề/lời giải; lọc chủ đề/nguồn/độ khó/trạng thái/đã dạy; sắp xếp; chọn nhiều bài → mở, tạo buổi.
+  Nút ⋯: sửa thông tin, các phiên bản cũ (mở bản cũ thành tab mới), thêm vào buổi, xoá.
+* **Buổi dạy**: từ các tab đang mở (tab chưa có trong kho thành bài mới) hoặc từ các bài chọn trong kho; sắp thứ tự;
+  mở buổi = mở đủ bài (bài đang mở không mở trùng); xuất **phiếu LaTeX cho cả buổi** (`toLatexSet`: mỗi bài một mục,
+  chỉ đề hoặc kèm lời giải, hình TikZ, ảnh đề tải kèm).
+* **Mất mạng**: lần lưu vào hàng chờ trong IndexedDB, nút kho báo *Chưa đồng bộ (n)*, tự lưu lên khi trình duyệt báo có
+  mạng / mỗi phút / lúc mở trang.
+* **Nhập**: tệp `.json` cũ (một hình hoặc nhiều tab), các tab đang mở, hoặc các bài ví dụ – một commit cho cả lượt.
+
+## 3. Kiểm thử
+
+* `tests/fake-github.mjs`: GitHub giả cài đúng các API dùng tới (contents, git data, commits), sha tệp tính đúng kiểu
+  git; dùng trong Node (`fetchFn`) và trong trình duyệt (`page.route`).
+* `tests/kho.test.mjs` (7 test): mã bài, repo trống, lưu/mở có ảnh và thu nhỏ, một commit mỗi lần lưu, không gửi lại ảnh
+  đã có, xoá ảnh thừa, phát hiện sửa ở máy khác, **hai máy lưu cùng lúc không mất bài**, nhiều hình một bài, nhập hàng
+  loạt một commit, buổi dạy, xoá bài gỡ khỏi buổi, lịch sử + mở bản cũ, chủ đề, tìm kiếm/lọc/sắp xếp.
+* `tests/browser/smoke6.mjs` (11 kiểm tra – bước 1) và `smoke7.mjs` (22 kiểm tra – kho, gõ/bấm như người dùng: kết nối
+  với token sai rồi đúng, Ctrl+S bài mới với tên/nguồn tự điền, lưu tiếp không hỏi, máy khác sửa → hỏi → ghi đè, mất
+  mạng → hàng chờ → có mạng tự lưu, nhập 22 bài ví dụ, Ctrl+K tìm "brocard"/lọc IMO/mở, 3 tab thành buổi dạy, phiếu
+  .tex cho buổi, mở buổi không trùng).
+* `npm test` 141 test đạt; `npm run test:browser` đạt.
+* Dựng thử lại 23 bài qua giao diện mới (có menu Kho, nút kho): 23/23 đúng. `npm run test:perf`: ×1 6,78 ms/khung,
+  ×4 31,8 ms, p95 16,7–16,8 ms – trong ngưỡng, như bản 1.4 (kho không chạy gì khi kéo điểm).
+
+## 4. Hạn chế
+
+* Cần mạng để lưu/mở kho; bài **mới** cần kết nối được kho lần đầu (khi mất mạng, tạm lưu ra tệp).
+* Token nằm trong trình duyệt của máy (chỉ nên dùng máy riêng); token hết hạn thì tạo token mới và dán lại.
+* Trang artifact của claude.ai chặn gọi GitHub – kho chỉ dùng được trên GitHub Pages hoặc khi mở `index.html` trên máy.
+* Chưa có phần cho học sinh (đã hoãn theo yêu cầu); kho thiết kế sẵn để sau này làm một trang chỉ đọc đề và hình.
