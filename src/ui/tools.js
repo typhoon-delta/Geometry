@@ -25,7 +25,7 @@ const TRI = ['Chọn đỉnh thứ nhất', 'Chọn đỉnh thứ hai', 'Chọn 
 const VTX = ['Chọn đỉnh A (đỉnh đối diện cạnh cần xét)', 'Chọn đỉnh B', 'Chọn đỉnh C'];
 
 export const TOOLS = [
-  T('move', 'Chọn / kéo', 'Cơ bản', '↖', [], ['Kéo điểm hoặc nhãn; bấm để chọn đối tượng; kéo nền để dời hình, lăn chuột để phóng to/thu nhỏ'], null),
+  T('move', 'Chọn / kéo', 'Cơ bản', '↖', [], ['Kéo điểm hoặc nhãn (giữ Shift khi kéo: đoạn nối với điểm nằm ngang/thẳng đứng/bước 15°); bấm để chọn đối tượng; kéo nền để dời hình, lăn chuột để phóng to/thu nhỏ'], null),
   T('point', 'Điểm', 'Cơ bản', '•', ['point'], ['Bấm vào chỗ trống: điểm tự do · bấm lên đường/đường tròn: điểm trên đối tượng · bấm gần chỗ cắt nhau: giao điểm'], () => []),
   T('intersect', 'Giao điểm', 'Cơ bản', '✕', ['curve', 'curve'], ['Chọn đường thứ nhất (hoặc bấm ngay chỗ hai đường cắt nhau)', 'Chọn đường thứ hai'], null),
   T('midpoint', 'Trung điểm', 'Cơ bản', '◦', ['point', 'point'], ['Chọn điểm thứ nhất (hoặc bấm vào một đoạn thẳng)', 'Chọn điểm thứ hai'], one('midpoint'), { segmentShortcut: true }),

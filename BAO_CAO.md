@@ -680,7 +680,14 @@ máy chiếu.
    (có nhắc); TikZ ghi chú là ảnh không được xuất. Ảnh lớn hơn 1600 px được thu nhỏ khi dán (PNG giữ PNG để chữ trong ảnh
    chụp đề còn nét).
 
-Kiểm thử: `npm test` 127 test; `npm run test:browser` đạt, thêm `tests/browser/smoke4.mjs` (đối xứng A, B qua C ra
+4. **Giữ Shift để căn hướng.** Khi đang dựng, giữ Shift lúc bấm chỗ trống để tạo điểm: hướng từ điểm đã chọn (của lần
+   dùng công cụ đó) tới điểm mới được bắt về bội số của 15°, giữ nguyên khoảng cách; nằm ngang/thẳng đứng thì chép đúng
+   toạ độ của điểm mốc nên đường nằm ngang tuyệt đối. Hình xem trước cũng căn theo. Với công cụ Chọn, giữ Shift khi kéo
+   một điểm tự do: bắt hướng theo các điểm nối với nó bằng đoạn/tia/đường thẳng (lấy điểm làm dịch ít nhất). Dùng Shift
+   (thay vì một phím chữ) vì phím chữ đang dùng để gõ tên điểm và là quy ước quen thuộc của các phần mềm vẽ.
+
+Kiểm thử: `npm test` 127 test; `npm run test:browser` đạt, thêm `tests/browser/smoke4.mjs` (Shift: đoạn nằm ngang
+khi bấm, bắt 15° khi kéo; đối xứng A, B qua C ra
 A′, B′, ảnh của A′ ra A″; tab: mở, đổi, hoàn tác riêng từng tab, đặt tên, mở ví dụ ở tab mới; dán ảnh qua sự kiện
 paste thật, kéo ảnh, vẽ điểm lên trên ảnh, lưu/mở tệp có ảnh, khoá làm nền, bản nháp khôi phục mọi tab và ảnh sau khi
 tải lại trang); `npm run test:perf` đạt (6,44 ms/khung ×1, p95 16,8 ms ×4 – không đổi).

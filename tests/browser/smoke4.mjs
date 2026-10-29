@@ -16,6 +16,30 @@ export async function run({ page, ok, shot, state, tool, clickAt }) {
   st = await state();
   ok(st.steps[st.n - 1].name === "A''", 'ảnh của A′ có tên A″');
 
+  // ---- giữ Shift: căn hướng (đường nằm ngang/thẳng đứng/bước 15°) ----
+  await page.evaluate(() => __app.newTab());
+  await tool('segment');
+  await clickAt(-3, -1);
+  await page.keyboard.down('Shift');
+  await clickAt(2.5, -0.8);
+  await page.keyboard.up('Shift');
+  let pts = await page.evaluate(() => __app.doc.steps.filter((s) => s.type === 'free_point').map((s) => s.params));
+  ok(pts.length === 2 && pts[0].y === pts[1].y, `Shift khi bấm điểm thứ hai: đoạn nằm ngang (y = ${pts.map((p) => p.y).join(', ')})`);
+  await tool('move');
+  const B = await page.evaluate(() => { const s = __app.doc.steps[1]; const r = __app.view.canvas.getBoundingClientRect(); const q = __app.toScreen(__app.values.get(s.id)); return { x: r.left + q.x, y: r.top + q.y }; });
+  await page.keyboard.down('Shift');
+  await page.mouse.move(B.x, B.y);
+  await page.mouse.down();
+  await page.mouse.move(B.x - 60, B.y - 190, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  pts = await page.evaluate(() => __app.doc.steps.filter((s) => s.type === 'free_point').map((s) => s.params));
+  const k = (Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x) * 12) / Math.PI;
+  ok(Math.abs(k - Math.round(k)) < 1e-5 && JSON.stringify(pts[1]) !== JSON.stringify(pts[0]), `Shift khi kéo: đoạn bắt về bội số 15° (${(k * 15).toFixed(4)}°)`);
+  await page.evaluate(() => { __app.closeTab(__app.tabIdx); }); // không chờ: hộp thoại xác nhận đang mở
+  await page.click('.modal .primary');
+  await page.waitForFunction(() => __app.tabs.length === 1);
+
   // ---- nhiều tab ----
   const n0 = st.n;
   await page.click('#tab-new');

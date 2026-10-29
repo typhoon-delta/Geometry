@@ -56,7 +56,9 @@ Trình duyệt khuyên dùng: Chrome, Edge, Firefox hoặc Safari bản mới.
 
 Chọn công cụ rồi bấm lên bảng vẽ; thanh trạng thái cho biết cần chọn gì tiếp.
 
-* **Bấm vào chỗ trống** khi công cụ cần một điểm: tạo **điểm tự do**.
+* **Bấm vào chỗ trống** khi công cụ cần một điểm: tạo **điểm tự do**. Giữ **`Shift`** khi bấm thì hướng từ điểm vừa
+  chọn tới điểm mới được bắt về bội số của 15° – vd dựng tam giác: chọn B, giữ Shift chọn C → cạnh BC nằm ngang
+  thật chính xác (hình xem trước cũng được căn theo).
 * **Bấm lên một đường thẳng/đường tròn**: tạo **điểm trên đối tượng** (kéo được nhưng chỉ chạy trên đối tượng đó).
 * **Bấm gần chỗ hai đường cắt nhau**: tạo **giao điểm**.
 * Công cụ *Giao điểm*: bấm thẳng vào chỗ cắt, hoặc chọn lần lượt hai đường (tạo mọi giao điểm còn thiếu).
@@ -98,7 +100,8 @@ lưu trong trình duyệt; *Xuất/Nhập* để mang sang máy khác. Nút ✕ 
 
 ### Kéo thả, chọn, sửa
 
-* Công cụ **Chọn / kéo**: kéo điểm tự do hoặc điểm trên đối tượng; kéo **nhãn** để dời nhãn; kéo nền để dời cả
+* Công cụ **Chọn / kéo**: kéo điểm tự do hoặc điểm trên đối tượng (giữ **`Shift`** khi kéo điểm tự do: đoạn/đường
+  nối với điểm đó được bắt về nằm ngang, thẳng đứng hoặc bội số của 15°); kéo **nhãn** để dời nhãn; kéo nền để dời cả
   hình; lăn chuột (hoặc chụm hai ngón trên màn hình cảm ứng) để phóng to/thu nhỏ.
 * Bấm vào đối tượng (trên hình hoặc trong bảng các bước) để chọn; giữ `Shift` để chọn nhiều. Thẻ thuộc tính
   cho đổi **tên**, **màu**, nét đứt, độ dày, tô nền nhạt, số cung/số vạch của dấu, ẩn đối tượng…
@@ -185,6 +188,7 @@ LaTeX. Chỉ cần `\usepackage{tikz}`. Đổi kích thước bằng cách sửa
 | `Ctrl+Z` / `Ctrl+Y` | Hoàn tác / làm lại |
 | gõ chữ / `F2` | Đặt tên điểm đang chọn (vd điểm vừa dựng) |
 | `Ctrl+V` | Dán ảnh vào hình |
+| giữ `Shift` khi bấm / kéo điểm | Căn hướng: đường nằm ngang, thẳng đứng, bước 15° |
 | `Home` | Thu phóng vừa hình |
 | `Delete` | Xoá đối tượng đang chọn |
 | `Esc` | Huỷ thao tác / bỏ chọn / thoát trình chiếu |

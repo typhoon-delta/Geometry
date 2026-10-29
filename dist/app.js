@@ -2901,7 +2901,7 @@
   };
   var TRI2 = ["Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 hai", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 ba"];
   var TOOLS = [
-    T2("move", "Ch\u1ECDn / k\xE9o", "C\u01A1 b\u1EA3n", "\u2196", [], ["K\xE9o \u0111i\u1EC3m ho\u1EB7c nh\xE3n; b\u1EA5m \u0111\u1EC3 ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng; k\xE9o n\u1EC1n \u0111\u1EC3 d\u1EDDi h\xECnh, l\u0103n chu\u1ED9t \u0111\u1EC3 ph\xF3ng to/thu nh\u1ECF"], null),
+    T2("move", "Ch\u1ECDn / k\xE9o", "C\u01A1 b\u1EA3n", "\u2196", [], ["K\xE9o \u0111i\u1EC3m ho\u1EB7c nh\xE3n (gi\u1EEF Shift khi k\xE9o: \u0111o\u1EA1n n\u1ED1i v\u1EDBi \u0111i\u1EC3m n\u1EB1m ngang/th\u1EB3ng \u0111\u1EE9ng/b\u01B0\u1EDBc 15\xB0); b\u1EA5m \u0111\u1EC3 ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng; k\xE9o n\u1EC1n \u0111\u1EC3 d\u1EDDi h\xECnh, l\u0103n chu\u1ED9t \u0111\u1EC3 ph\xF3ng to/thu nh\u1ECF"], null),
     T2("point", "\u0110i\u1EC3m", "C\u01A1 b\u1EA3n", "\u2022", ["point"], ["B\u1EA5m v\xE0o ch\u1ED7 tr\u1ED1ng: \u0111i\u1EC3m t\u1EF1 do \xB7 b\u1EA5m l\xEAn \u0111\u01B0\u1EDDng/\u0111\u01B0\u1EDDng tr\xF2n: \u0111i\u1EC3m tr\xEAn \u0111\u1ED1i t\u01B0\u1EE3ng \xB7 b\u1EA5m g\u1EA7n ch\u1ED7 c\u1EAFt nhau: giao \u0111i\u1EC3m"], () => []),
     T2("intersect", "Giao \u0111i\u1EC3m", "C\u01A1 b\u1EA3n", "\u2715", ["curve", "curve"], ["Ch\u1ECDn \u0111\u01B0\u1EDDng th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m ngay ch\u1ED7 hai \u0111\u01B0\u1EDDng c\u1EAFt nhau)", "Ch\u1ECDn \u0111\u01B0\u1EDDng th\u1EE9 hai"], null),
     T2("midpoint", "Trung \u0111i\u1EC3m", "C\u01A1 b\u1EA3n", "\u25E6", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("midpoint"), { segmentShortcut: true }),
@@ -3813,8 +3813,42 @@
         const t = paramOf(this.values.get(c), P2);
         return this.addSteps([{ type: "point_on", args: [c], params: { t } }])[0];
       }
-      const Q = this.snap(P2);
+      const anchors = this.shiftSnap ? this.pickAnchors() : [];
+      const Q = anchors.length ? this.angleSnap(P2, anchors) : this.snap(P2);
       return this.addSteps([{ type: "free_point", args: [], params: { x: Q.x, y: Q.y } }])[0];
+    }
+    /**
+     * Giữ Shift (bản 1.3): bắt hướng từ một điểm mốc tới P về bội số của 15° (0°, 15°, …, 90°…) – đường nằm ngang,
+     * thẳng đứng, nghiêng 45°… thật chính xác. Nhiều mốc: lấy mốc làm P dịch ít nhất. Giữ nguyên khoảng cách tới mốc.
+     */
+    angleSnap(P2, anchors) {
+      const step = Math.PI / 12;
+      let best = null;
+      for (const A of anchors) {
+        const r = Math.hypot(P2.x - A.x, P2.y - A.y);
+        if (r < 1e-9) continue;
+        const a = Math.round(Math.atan2(P2.y - A.y, P2.x - A.x) / step) * step;
+        const Q = { x: round6(A.x + r * Math.cos(a)), y: round6(A.y + r * Math.sin(a)) };
+        if (Math.abs(Math.sin(a)) < 1e-12) Q.y = A.y;
+        if (Math.abs(Math.cos(a)) < 1e-12) Q.x = A.x;
+        const d = Math.hypot(Q.x - P2.x, Q.y - P2.y);
+        if (!best || d < best.d) best = { d, Q };
+      }
+      return best ? best.Q : this.snap(P2);
+    }
+    /** Các điểm đã chọn trong lần dùng công cụ hiện tại (mốc để căn hướng khi giữ Shift). */
+    pickAnchors() {
+      return this.picks.map((id) => this.values.get(id)).filter((v) => v && v.kind === "point");
+    }
+    /** Các điểm nối với điểm id bằng một đoạn/tia/đường thẳng đã vẽ (mốc để căn hướng khi kéo với Shift). */
+    dragAnchors(id) {
+      const out = [];
+      for (const s of this.doc.steps) {
+        if (!["segment", "line", "ray"].includes(s.type) || !s.args.includes(id)) continue;
+        const o = this.values.get(s.args[0] === id ? s.args[1] : s.args[0]);
+        if (o) out.push(o);
+      }
+      return out;
     }
     snap(P2) {
       if (!this.grid) return { x: round6(P2.x), y: round6(P2.y) };
@@ -3853,7 +3887,8 @@
       const i = Math.min(this.picks.length, t.hints.length - 1);
       const sel = this.selection.size === 1 && !this.picks.length ? stepById(this.doc, [...this.selection][0]) : null;
       const tip = sel && sel.name && kinds(this.doc).get(sel.id) === "point" ? ` \xB7 G\xF5 ch\u1EEF \u0111\u1EC3 \u0111\u1EB7t t\xEAn ${sel.name}` : "";
-      el.textContent = msg || `${t.label}: ${t.hints[i] || ""}${tip}`;
+      const shiftTip = this.picks.length && this.toolId !== "move" && this.pickAnchors().length ? " \xB7 gi\u1EEF Shift: c\u0103n h\u01B0\u1EDBng theo b\u01B0\u1EDBc 15\xB0 (n\u1EB1m ngang, th\u1EB3ng \u0111\u1EE9ng\u2026)" : "";
+      el.textContent = msg || `${t.label}: ${t.hints[i] || ""}${shiftTip}${tip}`;
     }
     neededTypes(tool) {
       if (tool.inputs[0] === "...point") return ["point"];
@@ -3866,7 +3901,8 @@
       }
       return rem;
     }
-    toolClick(sx, sy) {
+    toolClick(sx, sy, shift = false) {
+      this.shiftSnap = shift;
       const tool = TOOL_BY_ID[this.toolId];
       const hits = this.hitTest(sx, sy).filter((h) => h.kind !== "mark");
       this.beginTx();
@@ -4005,6 +4041,10 @@
           const ev = lastEvent;
           const { sx, sy } = this.eventPos(ev);
           this.mouse = this.toUser(sx, sy);
+          if (ev.shiftKey && this.picks.length && this.toolId !== "move") {
+            const an = this.pickAnchors();
+            if (an.length) this.mouse = this.angleSnap(this.mouse, an);
+          }
           if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
           const hits = this.hitTest(sx, sy);
           let cursor = "";
@@ -4083,7 +4123,8 @@
       if (this.toolId !== "move" && this.mode === "edit") {
         e.stopPropagation();
         e.preventDefault();
-        this.toolClick(sx, sy);
+        this.toolClick(sx, sy, e.shiftKey);
+        this.shiftSnap = false;
         return;
       }
       const hits = this.hitTest(sx, sy);
@@ -4139,9 +4180,10 @@
       if (info.kind === "point" && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
       if (info.kind === "point") this.dragUpdater = makeUpdater(this.doc, [info.id]);
       let pending = null;
+      const anchors = info.kind === "point" && step.type === "free_point" ? this.dragAnchors(info.id) : [];
       const apply = () => {
         if (!pending) return;
-        const { sx, sy } = pending;
+        const { sx, sy, shift } = pending;
         pending = null;
         this.mouse = this.toUser(sx, sy);
         if (info.kind === "label") {
@@ -4153,7 +4195,7 @@
         }
         const target = { x: this.mouse.x + info.grab.x, y: this.mouse.y + info.grab.y };
         if (step.type === "free_point") {
-          const Q = this.snap(target);
+          const Q = shift && anchors.length ? this.angleSnap(target, anchors) : this.snap(target);
           step.params = { ...step.params || {}, x: Q.x, y: Q.y };
         } else if (step.type === "point_on") {
           const c = this.values.get(step.args[0]);
@@ -4163,7 +4205,7 @@
       };
       this.view.frameHooks.push(apply);
       const move = (ev) => {
-        pending = this.eventPos(ev);
+        pending = { ...this.eventPos(ev), shift: ev.shiftKey };
         this.view.requestDraw();
       };
       const up = () => {

@@ -482,8 +482,46 @@ export class App {
       const t = G.paramOf(this.values.get(c), P);
       return this.addSteps([{ type: 'point_on', args: [c], params: { t } }])[0];
     }
-    const Q = this.snap(P);
+    const anchors = this.shiftSnap ? this.pickAnchors() : [];
+    const Q = anchors.length ? this.angleSnap(P, anchors) : this.snap(P);
     return this.addSteps([{ type: 'free_point', args: [], params: { x: Q.x, y: Q.y } }])[0];
+  }
+
+  /**
+   * Giữ Shift (bản 1.3): bắt hướng từ một điểm mốc tới P về bội số của 15° (0°, 15°, …, 90°…) – đường nằm ngang,
+   * thẳng đứng, nghiêng 45°… thật chính xác. Nhiều mốc: lấy mốc làm P dịch ít nhất. Giữ nguyên khoảng cách tới mốc.
+   */
+  angleSnap(P, anchors) {
+    const step = Math.PI / 12;
+    let best = null;
+    for (const A of anchors) {
+      const r = Math.hypot(P.x - A.x, P.y - A.y);
+      if (r < 1e-9) continue;
+      const a = Math.round(Math.atan2(P.y - A.y, P.x - A.x) / step) * step;
+      const Q = { x: round6(A.x + r * Math.cos(a)), y: round6(A.y + r * Math.sin(a)) };
+      // làm tròn 6 chữ số có thể làm lệch hướng: nằm ngang/thẳng đứng thì chép đúng toạ độ của mốc
+      if (Math.abs(Math.sin(a)) < 1e-12) Q.y = A.y;
+      if (Math.abs(Math.cos(a)) < 1e-12) Q.x = A.x;
+      const d = Math.hypot(Q.x - P.x, Q.y - P.y);
+      if (!best || d < best.d) best = { d, Q };
+    }
+    return best ? best.Q : this.snap(P);
+  }
+
+  /** Các điểm đã chọn trong lần dùng công cụ hiện tại (mốc để căn hướng khi giữ Shift). */
+  pickAnchors() {
+    return this.picks.map((id) => this.values.get(id)).filter((v) => v && v.kind === 'point');
+  }
+
+  /** Các điểm nối với điểm id bằng một đoạn/tia/đường thẳng đã vẽ (mốc để căn hướng khi kéo với Shift). */
+  dragAnchors(id) {
+    const out = [];
+    for (const s of this.doc.steps) {
+      if (!['segment', 'line', 'ray'].includes(s.type) || !s.args.includes(id)) continue;
+      const o = this.values.get(s.args[0] === id ? s.args[1] : s.args[0]);
+      if (o) out.push(o);
+    }
+    return out;
   }
 
   snap(P) {
@@ -523,7 +561,8 @@ export class App {
     const i = Math.min(this.picks.length, t.hints.length - 1);
     const sel = this.selection.size === 1 && !this.picks.length ? stepById(this.doc, [...this.selection][0]) : null;
     const tip = sel && sel.name && kinds(this.doc).get(sel.id) === 'point' ? ` · Gõ chữ để đặt tên ${sel.name}` : '';
-    el.textContent = msg || `${t.label}: ${t.hints[i] || ''}${tip}`;
+    const shiftTip = this.picks.length && this.toolId !== 'move' && this.pickAnchors().length ? ' · giữ Shift: căn hướng theo bước 15° (nằm ngang, thẳng đứng…)' : '';
+    el.textContent = msg || `${t.label}: ${t.hints[i] || ''}${shiftTip}${tip}`;
   }
 
   neededTypes(tool) {
@@ -538,7 +577,8 @@ export class App {
     return rem;
   }
 
-  toolClick(sx, sy) {
+  toolClick(sx, sy, shift = false) {
+    this.shiftSnap = shift;
     const tool = TOOL_BY_ID[this.toolId];
     const hits = this.hitTest(sx, sy).filter((h) => h.kind !== 'mark');
     this.beginTx();
@@ -691,6 +731,8 @@ export class App {
         const ev = lastEvent;
         const { sx, sy } = this.eventPos(ev);
         this.mouse = this.toUser(sx, sy);
+        // giữ Shift khi đang dựng: hình xem trước cũng được căn hướng
+        if (ev.shiftKey && this.picks.length && this.toolId !== 'move') { const an = this.pickAnchors(); if (an.length) this.mouse = this.angleSnap(this.mouse, an); }
         if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
         const hits = this.hitTest(sx, sy);
         let cursor = '';
@@ -771,7 +813,8 @@ export class App {
     if (this.toolId !== 'move' && this.mode === 'edit') {
       e.stopPropagation();
       e.preventDefault();
-      this.toolClick(sx, sy);
+      this.toolClick(sx, sy, e.shiftKey);
+      this.shiftSnap = false;
       return;
     }
 
@@ -833,9 +876,10 @@ export class App {
     if (info.kind === 'point' && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
     if (info.kind === 'point') this.dragUpdater = makeUpdater(this.doc, [info.id]);
     let pending = null;
+    const anchors = info.kind === 'point' && step.type === 'free_point' ? this.dragAnchors(info.id) : [];
     const apply = () => {
       if (!pending) return;
-      const { sx, sy } = pending;
+      const { sx, sy, shift } = pending;
       pending = null;
       this.mouse = this.toUser(sx, sy);
       if (info.kind === 'label') {
@@ -847,7 +891,7 @@ export class App {
       }
       const target = { x: this.mouse.x + info.grab.x, y: this.mouse.y + info.grab.y };
       if (step.type === 'free_point') {
-        const Q = this.snap(target);
+        const Q = shift && anchors.length ? this.angleSnap(target, anchors) : this.snap(target);
         step.params = { ...(step.params || {}), x: Q.x, y: Q.y };
       } else if (step.type === 'point_on') {
         const c = this.values.get(step.args[0]);
@@ -857,7 +901,7 @@ export class App {
     };
     this.view.frameHooks.push(apply);
     const move = (ev) => {
-      pending = this.eventPos(ev);
+      pending = { ...this.eventPos(ev), shift: ev.shiftKey };
       this.view.requestDraw();
     };
     const up = () => {
