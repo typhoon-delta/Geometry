@@ -1,0 +1,81 @@
+# CẤU HÌNH PHÒNG THÍ NGHIỆM HÌNH HỌC
+# Sửa bằng Notepad rồi lưu lại (giữ đúng dấu = và dấu ngoặc). Dòng bắt đầu bằng # là ghi chú.
+# Lần chạy sau sẽ dùng giá trị mới. Muốn quay về mặc định: xoá tệp này, chạy lại sẽ dùng giá trị sẵn có trong mã.
+
+[chay]
+mau = 16                 # số cấu hình mẫu (tam giác ngẫu nhiên) để kiểm tra mỗi quan hệ
+hat_giong_mau = 7        # hạt giống của các cấu hình mẫu (đổi số này → bộ tam giác mẫu khác)
+dung_sai = 1e-7          # dung sai tương đối khi dò quan hệ
+do_sau = 3               # độ sâu tối đa (số lớp phép dựng chồng lên cấu hình gốc)
+so_buoc_toi_da = 6       # số bước dựng mới tối đa của một đối tượng
+ngan_sach_lop = [700, 1600, 1600]       # số phép dựng thử tối đa ở mỗi lớp của một vòng
+ti_le_thoi_gian_lop = [0.25, 0.4, 0.35] # tỉ lệ thời gian của vòng dành cho mỗi lớp
+diem_toi_da = 900        # vũ trụ quá số điểm này thì kết thúc vòng
+thoi_gian_vong = 150     # số giây cho một vòng khám phá
+so_tram = 6              # số "trạm" (đối tượng trong sự kiện đẹp) mang sang vòng sau làm điểm xuất phát
+luu_moi = 60             # lưu tiến độ mỗi bao nhiêu giây
+bao_cao_moi = 1800       # sinh lại báo cáo mỗi bao nhiêu giây (để lỡ tắt máy vẫn có báo cáo)
+so_su_kien_luu = 4000    # giữ tối đa bao nhiêu sự kiện (điểm cao nhất) cho mỗi lần chạy
+
+[newclid]
+bat = true               # false: không dùng Newclid
+gioi_han_giay = 30       # giới hạn thời gian cho MỖI mục tiêu
+tong_gioi_han_giay = 120 # giới hạn tổng cho một sự kiện (nhiều mục tiêu)
+so_tien_trinh = 2        # số bài chạy song song (máy 4 nhân: 2; máy 8 nhân: 4)
+nguong_diem = 6.0        # chỉ gửi Newclid các sự kiện có điểm sơ bộ ≥ ngưỡng này
+goi_y_diem_phu = "khong" # chỗ cắm mô hình ngôn ngữ gợi ý điểm phụ (xem lab/prover/goi_y.py)
+
+[trong_so]
+# Điểm "lạ" = tổng (trọng số × đặc trưng). Phản hồi "hay"/"chán" trong báo cáo sẽ tự chỉnh thêm.
+# -- loại quan hệ (đặc trưng = 1 nếu đúng loại)
+loai_tiep_xuc = 2.5
+loai_dong_quy = 2.5
+loai_dong_vien = 2.0
+loai_thang_hang = 2.0
+loai_tren_duong_tron = 2.0
+loai_tren_duong_thang = 1.5
+loai_song_song = 1.2
+loai_vuong_goc = 1.2
+loai_trung_nhau = 1.5
+loai_trung_duong = 0.3
+# -- kết quả Newclid
+newclid_chung_minh_duoc = -4.0      # chứng minh được ngay = tầm thường (hạ hạng)
+newclid_mot_phan = 1.5              # chứng minh được một phần các mục tiêu
+newclid_khong_chung_minh_duoc = 4.0 # bộ suy diễn bão hoà mà không chứng minh được = ứng viên sâu
+newclid_het_gio = 3.0               # quá thời gian
+do_dai_chung_minh = 0.04            # cộng theo số dòng chứng minh (tối đa 60 dòng) khi chứng minh được
+# -- cấu trúc
+xa_nhau = 3.0            # các đối tượng ở xa nhau trong cây dựng (0..1)
+dac_biet = 1.2           # mỗi đối tượng dính đường tròn ngoại tiếp/nội tiếp/Euler hoặc O, I, H (tối đa 3)
+dac_biet_phu = 0.4       # mỗi đối tượng là G, N (tối đa 2)
+it_buoc = 2.5            # ít bước dựng (1 = rất ít, 0 = nhiều)
+diem_tu_do = -0.3        # mỗi điểm tuỳ ý (điểm trên đường) trong hình
+so_diem = -0.15          # mỗi điểm trong phát biểu quá 4 điểm (sự kiện dài dòng)
+
+[trong_so_phep_dung]
+# Ưu tiên của từng phép dựng khi mở rộng (1 = bình thường, 0 = không dùng)
+midpoint = 0.7
+foot = 1.3
+reflect_point = 0.6
+reflect_line = 1.0
+circumcenter = 1.0
+orthocenter = 1.0
+incenter = 1.0
+centroid = 0.6
+isogonal = 1.0
+ll = 1.2
+lc = 1.4
+cc = 1.4
+point_on = 1.0
+circle3 = 1.0
+line = 0.8
+tangent = 1.0
+perp = 1.0
+parallel = 0.8
+diameter = 0.8
+
+[bao_cao]
+dia_chi_web = "https://typhoon-delta.github.io/Geometry/"  # công cụ web để mở hình (link #h=…)
+so_su_kien = 150         # số sự kiện đưa vào báo cáo
+cong_may_chu = 8765      # cổng của máy chủ nhỏ khi xem báo cáo (python -m lab bao-cao)
+hoc_toc_do = 0.15        # tốc độ học từ phản hồi

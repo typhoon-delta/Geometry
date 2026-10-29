@@ -14,6 +14,9 @@ mạng: bộ vẽ canvas tự viết, toàn bộ mã nằm trong `dist/app.js`).
 * Chia sẻ bằng link, lưu/mở tệp `.json`, tự lưu nháp.
 * **Khám phá**: tự tìm các quan hệ ẩn (thẳng hàng, đồng viên, đồng quy, tiếp xúc…).
 * Xuất mã **TikZ** để dán vào LaTeX.
+* **Phòng thí nghiệm** (`lab/`, Python, chạy trên máy cá nhân): tự khám phá qua đêm các sự kiện hình học "lạ"
+  để chế đề, thử chứng minh bằng Newclid, sáng hôm sau có báo cáo HTML kèm link mở thẳng hình trong công cụ.
+  Hướng dẫn cài đặt cho Windows: [`lab/HUONG_DAN.md`](lab/HUONG_DAN.md).
 
 ---
 
@@ -164,6 +167,8 @@ src/io/codec.js       mã hoá hình vào URL
 src/ui/               GIAO DIỆN: view.js + render.js (bộ vẽ canvas), tools.js (công cụ cơ bản),
                       library.js (menu Công cụ), app.js, panels.js…
 scripts/              công cụ dòng lệnh: kham-pha.mjs, tikz.mjs
+lab/                  PHÒNG THÍ NGHIỆM Python (vòng khám phá tự chạy, cầu nối Newclid, báo cáo) – lab/HUONG_DAN.md
+reports/              báo cáo HTML do phòng thí nghiệm sinh ra (không đưa lên git)
 examples/             hình mẫu dạng JSON
 tests/                test lõi, khám phá, TikZ, từng công cụ trong menu, công cụ tự tạo (node --test);
                       test trình duyệt và test hiệu năng (Playwright)
