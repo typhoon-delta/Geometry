@@ -54,29 +54,30 @@ export const MACROS = {
  */
 export function tokenize(src) {
   const out = [];
-  let i = 0, buf = '';
-  const flush = () => { if (buf) { out.push({ t: 'text', v: buf }); buf = ''; } };
+  let i = 0, buf = '', raw = '';
+  const flush = () => { if (raw) { out.push({ t: 'text', v: buf, raw }); buf = raw = ''; } };
   while (i < src.length) {
     const c = src[i];
-    if (c === '\\' && src[i + 1] === '$') { buf += '$'; i += 2; continue; }
+    if (c === '\\' && src[i + 1] === '$') { buf += '$'; raw += '\\$'; i += 2; continue; }
     if (c === '\\' && src[i + 1] === '[') {
       const j = src.indexOf('\\]', i + 2);
-      if (j >= 0) { flush(); out.push({ t: 'dmath', v: src.slice(i + 2, j) }); i = j + 2; continue; }
+      if (j >= 0) { flush(); out.push({ t: 'dmath', v: src.slice(i + 2, j), o: '\\[', c: '\\]' }); i = j + 2; continue; }
     }
     if (c === '$' && src[i + 1] === '$') {
       const j = src.indexOf('$$', i + 2);
-      if (j >= 0) { flush(); out.push({ t: 'dmath', v: src.slice(i + 2, j) }); i = j + 2; continue; }
+      if (j >= 0) { flush(); out.push({ t: 'dmath', v: src.slice(i + 2, j), o: '$$', c: '$$' }); i = j + 2; continue; }
     }
     if (c === '$') {
       let j = i + 1;
       while (j < src.length && !(src[j] === '$' && src[j - 1] !== '\\')) j++;
-      if (j < src.length) { flush(); out.push({ t: 'math', v: src.slice(i + 1, j) }); i = j + 1; continue; }
+      if (j < src.length) { flush(); out.push({ t: 'math', v: src.slice(i + 1, j), o: '$', c: '$' }); i = j + 1; continue; }
     }
     if (c === '!' && src.startsWith('![](img:', i)) {
       const j = src.indexOf(')', i);
-      if (j > 0) { flush(); out.push({ t: 'img', v: src.slice(i + 8, j) }); i = j + 1; continue; }
+      if (j > 0) { flush(); out.push({ t: 'img', v: src.slice(i + 8, j), o: '![](img:', c: ')' }); i = j + 1; continue; }
     }
     buf += c;
+    raw += c;
     i++;
   }
   flush();
@@ -93,15 +94,37 @@ function inlineText(s) {
  * rê chuột vào thì tô sáng đối tượng. names: [{name, id}]. Bỏ qua tên lệnh (\angle…) và nội dung \text{…}.
  */
 export function linkNames(tex, names) {
-  if (!names || !names.length) return tex;
+  return mapNames(tex, names, (f, id) => `\\htmlData{p=${id}}{${f}}`);
+}
+
+/** Các dạng viết của tên điểm (in hoa): A, I_A và I_{A}, B'… → [[dạng, id]] xếp dài trước. */
+function nameForms(names) {
   const forms = [];
-  for (const { name, id } of names) {
+  for (const { name, id } of names || []) {
     if (!name || !/^[A-Z]/.test(name)) continue; // chỉ điểm đặt tên bằng chữ in hoa (A, I_A, M_{BC}, B')
     forms.push([name, id]);
     const m = /^(.+?)_([^{}])('*)$/.exec(name);
     if (m) forms.push([`${m[1]}_{${m[2]}}${m[3]}`, id]);
   }
-  forms.sort((a, b) => b[0].length - a[0].length);
+  return forms.sort((a, b) => b[0].length - a[0].length);
+}
+
+/** Tên điểm khớp tại vị trí i (dài nhất trước, không cắt giữa chỉ số dưới / dấu phẩy) → [dạng, id] hoặc null. */
+function nameAt(tex, i, forms) {
+  if (!/[A-Z]/.test(tex[i])) return null;
+  for (const [f, id] of forms) if (tex.startsWith(f, i)) {
+    // sau tên mà còn "_" hay "'" thì tên dài hơn mới đúng (vd I_A chứ không phải I)
+    const nx = tex[i + f.length];
+    if (nx === '_' || nx === "'") continue;
+    return [f, id];
+  }
+  return null;
+}
+
+/** Duyệt công thức, thay mỗi tên điểm bằng fn(dạng, id). Bỏ qua tên lệnh (\\angle…) và nội dung \\text{…}. */
+function mapNames(tex, names, fn) {
+  const forms = nameForms(names);
+  if (!forms.length) return tex;
   let out = '', i = 0;
   while (i < tex.length) {
     if (tex[i] === '\\') {
@@ -117,18 +140,9 @@ export function linkNames(tex, names) {
       i += cmd.length;
       continue;
     }
-    let hit = null;
-    if (/[A-Z]/.test(tex[i])) {
-      for (const [f, id] of forms) if (tex.startsWith(f, i)) {
-        // không cắt giữa chỉ số dưới: sau tên mà còn "_" thì tên dài hơn mới đúng (vd I_A chứ không phải I)
-        const nx = tex[i + f.length];
-        if (nx === '_' || nx === "'") continue;
-        hit = [f, id];
-        break;
-      }
-    }
+    const hit = nameAt(tex, i, forms);
     if (hit) {
-      out += `\\htmlData{p=${hit[1]}}{${hit[0]}}`;
+      out += fn(hit[0], hit[1]);
       i += hit[0].length;
     } else {
       out += tex[i];
@@ -136,6 +150,35 @@ export function linkNames(tex, names) {
     }
   }
   return out;
+}
+
+/**
+ * Đổi tên điểm trong văn bản khung chữ (khi đổi tên điểm trên hình). names: tên CŨ của mọi điểm [{name, id}];
+ * renames: Map id → tên mới (đổi nhiều tên cùng lúc, vd đổi chỗ hai tên). Đổi trong công thức, và trong chữ thường chỉ
+ * ở những "từ" ghép hoàn toàn từ tên điểm (vd "tam giác ABC") – không đụng tới "Ta", "Gọi"…
+ */
+export function renameInText(text, names, renames) {
+  if (!text || !renames || !renames.size) return text;
+  const forms = nameForms(names);
+  const sub = (f, id) => (renames.has(id) ? renames.get(id) : f);
+  return tokenize(text).map((tk) => {
+    if (tk.t === 'math' || tk.t === 'dmath') return tk.o + mapNames(tk.v, names, sub) + tk.c;
+    if (tk.t === 'img') return tk.o + tk.v + tk.c;
+    return tk.raw.replace(/(^|[^\\\p{L}\d_])([A-Z][A-Za-z0-9_'{}]*)(?![\p{L}\d_'{}])/gu, (all, pre, word) => {
+      // từ phải tách hết thành tên điểm, mới đổi
+      const parts = [];
+      for (let i = 0; i < word.length;) {
+        const hit = nameAt(word, i, forms);
+        if (!hit) return all;
+        parts.push(hit);
+        i += hit[0].length;
+      }
+      if (!parts.some(([, id]) => renames.has(id))) return all;
+      const w = parts.map(([f, id]) => sub(f, id)).join('');
+      // tên mới có chỉ số/phẩy mà nằm ngoài công thức thì bọc $…$ để hiện đúng (H → $H_1$)
+      return pre + (/[_'{}]/.test(w) ? `$${w}$` : w);
+    });
+  }).join('');
 }
 
 function matchBrace(s, i) {

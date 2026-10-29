@@ -177,7 +177,10 @@ chèn vào chữ.
   `;tgnt` tứ giác nội tiếp… Bắt đầu bằng `;` để không đụng bộ gõ tiếng Việt (Telex/VNI).
 * `Tab` nhảy qua các ô trống `{}` và ra khỏi `$…$`; `Ctrl+M` bọc `$…$`; `Ctrl+Shift+M` `$$…$$`; `Ctrl+Space` gợi ý
   tên điểm; gõ `\` gợi ý lệnh LaTeX.
-* **Bấm vào một điểm trên hình** khi đang soạn: chèn tên điểm đó vào chữ.
+* **Bấm vào một điểm trên hình** khi đang soạn: chèn tên điểm đó vào chữ (ngoài công thức thì tự bọc `$…$`; bấm A, B, C
+  liền nhau ra `$ABC$`).
+* **Đổi tên điểm** trên hình thì tên trong mọi khung chữ đổi theo (trong công thức, và các từ chỉ gồm tên điểm như
+  "tam giác ABC"; không đụng chữ thường như "Ta có"). Một lần `Ctrl+Z` trả lại cả tên lẫn chữ.
 * `Ctrl+Enter`: sang **bước** mới (dòng `---`); `Esc` hoặc bấm ra ngoài: xong.
 
 **Bước và trình bày.** Dòng `---` chia lời giải thành các bước. Khi trình bày (▶), bước *k* hiện ở khung trình bày

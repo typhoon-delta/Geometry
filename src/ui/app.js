@@ -13,6 +13,7 @@ import { createMacro, macroTool, validMacro, USER_MENU } from '../core/macro.js'
 import { isDraggableType, PALETTE, setTheme } from '../core/styles.js';
 import { confirmDialog, promptDialog, toast } from './dialog.js';
 import { renderStepList, renderProps, renderToolOptions } from './panels.js';
+import { renameInText } from '../text/markup.js';
 
 const HISTORY_MAX = 200;
 
@@ -1002,7 +1003,14 @@ export class App {
     if (!name || name === s.name) return false;
     const other = this.doc.steps.find((x) => x.name === name && x.id !== id);
     const old = s.name;
-    this.commit(() => {
+    // đang soạn khung chữ: lưu trước, để chữ trong bộ soạn cũng được đổi tên
+    if (this.textBoxes && this.textBoxes.editing) this.textBoxes.stopEdit(true);
+    this.commit((doc) => {
+      // tên điểm trong các khung chữ (đề, lời giải, ghi chú) đổi theo – cùng một bước hoàn tác
+      const k = kinds(doc);
+      const pts = doc.steps.filter((x) => k.get(x.id) === 'point' && x.name).map((x) => ({ name: x.name, id: x.id }));
+      const ren = new Map([[id, name], ...(other ? [[other.id, old]] : [])]);
+      for (const b of doc.boxes || []) b.text = renameInText(b.text, pts, ren);
       if (other) other.name = old;
       s.name = name;
     });

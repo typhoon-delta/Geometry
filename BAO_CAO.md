@@ -715,6 +715,12 @@ giao diện cho đẹp hơn**.
 * **Bước**: dòng `---` (tuỳ chọn `@k`) chia lời giải; khi trình bày bước *k* hiện ở khung *k* (cùng nhịp với các bước
   dựng), bước mới hiện có hiệu ứng nhẹ; số khung trình bày kéo dài theo lời giải.
 * **Tên điểm trong công thức** được bọc `\htmlData{p=id}` khi hiển thị: rê chuột lên tên thì đối tượng sáng lên.
+* **Đổi tên điểm → chữ đổi theo** (`renameInText` trong `src/text/markup.js`, gọi trong `setName` – cùng một bước hoàn
+  tác, cả khi đổi chỗ hai tên). Trong công thức: đổi mọi tên khớp (dài nhất trước, không cắt `I_A` thành `I`, bỏ qua
+  `\text{…}` và tên lệnh). Trong chữ thường: chỉ đổi "từ" tách được hết thành tên điểm ("tam giác ABC"), không đụng
+  "Ta", "Cho", "Gọi"; tên mới có chỉ số mà nằm ngoài công thức thì được bọc `$…$`. Bấm điểm khi đang soạn: ngoài công thức
+  tự bọc `$…$`, bấm liền nhau thì gộp vào công thức vừa chèn (`$ABC$`). Thêm sau khi dùng thử: tên điểm trước đây chỉ là
+  chữ, đổi tên điểm thì lời giải sai tên.
 * **Xuất phiếu LaTeX** (`src/export/latex.js`): đề + hình TikZ + lời giải đánh số theo bước + ảnh đề tải kèm.
 
 ## 2. Bộ soạn gõ nhanh (CodeMirror 6, soạn ngay trong khung, xem trước bên dưới)
@@ -758,9 +764,9 @@ Viết lại `css/style.css` thành một hệ thống thống nhất dựa trê
 
 ## 4. Kiểm thử
 
-* `npm test`: 134 test (133 đạt, 1 bỏ qua vì máy không có pdflatex), thêm `tests/van-ban.test.mjs` (chia bước, khung
+* `npm test`: 135 test (134 đạt, 1 bỏ qua vì máy không có pdflatex), thêm `tests/van-ban.test.mjs` (chia bước, khung
   trình bày, gắn tên điểm, tự đổi/gõ tắt, xuất LaTeX).
-* `npm run test:browser`: đạt, thêm `tests/browser/smoke5.mjs` – 26 kiểm tra: `Ctrl+Enter` tạo khung, gõ thật với tự đổi
+* `npm run test:browser`: đạt, thêm `tests/browser/smoke5.mjs` – 32 kiểm tra (cả bấm điểm tự bọc `$…$`, đổi tên điểm → chữ đổi theo, phím chuyển tab): `Ctrl+Enter` tạo khung, gõ thật với tự đổi
   và gõ tắt, bấm điểm chèn tên, công thức không lỗi, tên gắn hình, rê chuột tô sáng, kéo/đổi cỡ chữ/đổi cách gắn (khung
   gắn hình đi theo khi phóng), `Ctrl+V` ảnh thành khung Đề bài, trình bày hiện dần từng bước, lưu/mở tệp có khung và
   ảnh, xuất `.tex` (có TikZ, `\includegraphics`, `\item`), xoá/hoàn tác. `smoke4` đổi sang chèn ảnh nền qua menu.

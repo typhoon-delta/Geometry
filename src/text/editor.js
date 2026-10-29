@@ -114,6 +114,20 @@ export function createEditor(parent, opts) {
       view.dispatch({ changes: { from: r.from, to: r.to, insert: str }, selection: { anchor: r.from + str.length } });
       view.focus();
     },
+    /**
+     * Chèn tên điểm (bấm điểm trên hình). Ngoài công thức thì bọc $…$; ngay sau một công thức vừa đóng thì chèn vào
+     * trong công thức đó – bấm A, B, C liền nhau ra $ABC$ chứ không phải $A$$B$$C$.
+     */
+    insertName(name) {
+      const r = view.state.selection.main;
+      const b = before(view.state, r.from);
+      let ins = name, at = r.from, cur;
+      if (inMath(b)) cur = at + ins.length;
+      else if (r.empty && b.endsWith('$') && !b.endsWith('$$') && inMath(b.slice(0, -1))) { at = r.from - 1; cur = r.from + ins.length; }
+      else { ins = `$${name}$`; cur = at + ins.length; }
+      view.dispatch({ changes: { from: at, to: at === r.from ? r.to : at, insert: ins }, selection: { anchor: cur } });
+      view.focus();
+    },
     destroy: () => view.destroy(),
   };
 }

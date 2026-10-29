@@ -3395,8169 +3395,6 @@
     });
   }
 
-  // src/ui/app.js
-  var HISTORY_MAX = 200;
-  var App = class {
-    constructor() {
-      this.doc = emptyDoc();
-      this.values = /* @__PURE__ */ new Map();
-      this.undoStack = [];
-      this.redoStack = [];
-      this.selection = /* @__PURE__ */ new Set();
-      this.highlight = /* @__PURE__ */ new Set();
-      this.toolId = "move";
-      this.picks = [];
-      this.tx = null;
-      this.mode = "edit";
-      this.frameIdx = 0;
-      this.projector = false;
-      this.grid = false;
-      this.mouse = { x: 0, y: 0 };
-      this.markDefaults = { color: null, arcs: 1, ticks: 1, polyColor: null };
-      this.theme = loadPref("theme", "mono");
-      setTheme(this.theme);
-      this.listeners = { change: [] };
-      this.images = /* @__PURE__ */ new Map();
-      this.imageSel = null;
-      this.typeToRename = true;
-      this.fitKey = "Home";
-    }
-    // ================= khởi tạo =================
-    mount() {
-      this.view = new CanvasView(document.getElementById("board"));
-      this.view.setBoundingBox([-8, 6, 8, -6]);
-      this.renderer = new Renderer(this.view);
-      this.renderer.trimLines = loadPref("trim", "1") === "1";
-      this.initTabs();
-      this.stage = document.getElementById("stage");
-      this.buildToolbar();
-      this.bindPointer();
-      this.bindKeys();
-      this.bindButtons();
-      this.setTool("move");
-      this.refresh();
-    }
-    on(evt, fn) {
-      var _a2;
-      ((_a2 = this.listeners)[evt] || (_a2[evt] = [])).push(fn);
-    }
-    emit(evt) {
-      for (const fn of this.listeners[evt] || []) fn(this);
-    }
-    // ================= tài liệu & lịch sử =================
-    /** Thay toàn bộ tài liệu (mở file, link...). */
-    loadDoc(doc2, { keepHistory = false } = {}) {
-      if (keepHistory) this.pushUndo(JSON.stringify(this.doc));
-      else {
-        this.undoStack = [];
-        this.redoStack = [];
-      }
-      this.doc = clone(doc2);
-      this.takeImages(this.doc);
-      this.imageSel = null;
-      this.selection.clear();
-      this.highlight.clear();
-      this.relation = null;
-      this.cancelTool();
-      if (doc2.view && Array.isArray(doc2.view.bbox)) this.view.setBoundingBox(doc2.view.bbox);
-      this.refresh();
-      this.emit("load");
-      this.emit("change");
-    }
-    // ================= ảnh dán vào hình (bản 1.3) =================
-    // doc.images = [{id, x, y, w, h, opacity?, locked?}] – (x, y) là góc trên-trái theo toạ độ hình (y hướng lên),
-    // w × h theo đơn vị hình nên ảnh phóng/dời theo hình. Dữ liệu ảnh (data URL) giữ trong this.images; khi lưu tệp /
-    // nháp thì gắn vào doc.imageData (withImageData), khi mở thì lấy ra (takeImages).
-    registerImage(id, src) {
-      if (this.images.has(id) || typeof src !== "string") return;
-      const img = new Image();
-      const rec = { src, img, ready: false };
-      img.onload = () => {
-        rec.ready = true;
-        this.view?.requestDraw();
-      };
-      img.src = src;
-      this.images.set(id, rec);
-    }
-    takeImages(doc2) {
-      if (doc2 && doc2.imageData) {
-        for (const [id, src] of Object.entries(doc2.imageData)) this.registerImage(id, src);
-        delete doc2.imageData;
-      }
-    }
-    withImageData(doc2) {
-      const ids = (doc2.images || []).map((im) => im.id);
-      for (const b of doc2.boxes || []) for (const m of String(b.text || "").matchAll(/!\[\]\(img:([A-Za-z0-9_-]+)\)/g)) ids.push(m[1]);
-      if (!ids.length) return doc2;
-      const data = {};
-      for (const id of ids) {
-        const r = this.images.get(id);
-        if (r) data[id] = r.src;
-      }
-      return { ...doc2, imageData: data };
-    }
-    /** Ảnh (không khoá) tại vị trí màn hình; handle = true nếu trúng ô đổi cỡ ở góc dưới phải. Ảnh trên cùng trước. */
-    imageAt(sx, sy) {
-      const list = this.doc.images || [];
-      for (let i = list.length - 1; i >= 0; i--) {
-        const im = list[i];
-        if (im.locked) continue;
-        const a = this.toScreen({ x: im.x, y: im.y }), b = this.toScreen({ x: im.x + im.w, y: im.y - im.h });
-        if (Math.abs(sx - b.x) <= 9 && Math.abs(sy - b.y) <= 9 && this.imageSel === im.id) return { id: im.id, handle: true };
-        if (sx >= a.x && sx <= b.x && sy >= a.y && sy <= b.y) return { id: im.id, handle: false };
-      }
-      return null;
-    }
-    selectImage(id) {
-      this.imageSel = id;
-      if (id) this.selection.clear();
-      this.refresh();
-    }
-    /** Kéo ảnh (dời) hoặc kéo ô góc dưới phải (đổi cỡ, giữ tỉ lệ). */
-    startImageDrag(e, id, resize) {
-      const im = (this.doc.images || []).find((x) => x.id === id);
-      if (!im) return;
-      const start2 = JSON.stringify(this.doc);
-      const p0 = this.eventPos(e);
-      const P0 = this.toUser(p0.sx, p0.sy);
-      const o = { x: im.x, y: im.y, w: im.w, h: im.h };
-      this.drag = { kind: "image", id };
-      const move = (ev) => {
-        const { sx, sy } = this.eventPos(ev);
-        const P2 = this.toUser(sx, sy);
-        if (resize) {
-          const w = Math.max(20 / this.view.scale, o.w + (P2.x - P0.x));
-          im.w = w;
-          im.h = w * o.h / o.w;
-        } else {
-          im.x = o.x + P2.x - P0.x;
-          im.y = o.y + P2.y - P0.y;
-        }
-        this.view.requestDraw();
-      };
-      const up = () => {
-        window.removeEventListener("pointermove", move, true);
-        window.removeEventListener("pointerup", up, true);
-        window.removeEventListener("pointercancel", up, true);
-        this.drag = null;
-        if (JSON.stringify(this.doc) !== start2) {
-          this.pushUndo(start2);
-          this.afterChange();
-        }
-      };
-      window.addEventListener("pointermove", move, true);
-      window.addEventListener("pointerup", up, true);
-      window.addEventListener("pointercancel", up, true);
-    }
-    setImageProp(id, patch) {
-      this.commit((doc2) => {
-        const im = (doc2.images || []).find((x) => x.id === id);
-        if (im) Object.assign(im, patch);
-      });
-    }
-    deleteImage(id) {
-      this.commit((doc2) => {
-        doc2.images = (doc2.images || []).filter((x) => x.id !== id);
-        if (!doc2.images.length) delete doc2.images;
-      });
-      this.imageSel = null;
-      this.refresh();
-    }
-    // ================= nhiều tab hình (bản 1.3) =================
-    // Mỗi tab giữ hình, lịch sử hoàn tác/làm lại và khung nhìn riêng. Tab đang mở dùng trực tiếp this.doc,
-    // this.undoStack… (như trước); khi đổi tab thì cất vào this.tabs[i] rồi lấy tab kia ra.
-    initTabs() {
-      this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null }];
-      this.tabIdx = 0;
-    }
-    stashTab() {
-      const t2 = this.tabs[this.tabIdx];
-      Object.assign(t2, { doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: this.view.getBoundingBox() });
-    }
-    /** Hiện tab i (đã cất tab đang mở). */
-    showTab(i) {
-      const t2 = this.tabs[i];
-      this.tabIdx = i;
-      this.doc = t2.doc;
-      this.undoStack = t2.undo;
-      this.redoStack = t2.redo;
-      this.selection.clear();
-      this.highlight.clear();
-      this.relation = null;
-      this.imageSel = null;
-      this.cancelTool();
-      if (t2.bbox) this.view.setBoundingBox(t2.bbox);
-      else if (t2.doc.view && Array.isArray(t2.doc.view.bbox)) this.view.setBoundingBox(t2.doc.view.bbox);
-      else this.view.setBoundingBox([-8, 6, 8, -6]);
-      this.refresh();
-      if (!t2.bbox && !t2.doc.view && t2.doc.steps.length) this.zoomFit();
-      this.emit("load");
-      this.emit("change");
-    }
-    switchTab(i) {
-      if (i === this.tabIdx || !this.tabs[i]) return;
-      this.stashTab();
-      this.showTab(i);
-    }
-    /** Mở một hình ở tab mới (doc = null: hình trống). */
-    newTab(doc2 = null) {
-      this.stashTab();
-      const d = doc2 ? clone(doc2) : emptyDoc();
-      this.takeImages(d);
-      this.tabs.push({ doc: d, undo: [], redo: [], bbox: null });
-      this.showTab(this.tabs.length - 1);
-    }
-    async closeTab(i) {
-      const t2 = i === this.tabIdx ? { doc: this.doc } : this.tabs[i];
-      const n = t2.doc.steps.length + (t2.doc.images?.length || 0);
-      if (n && !await confirmDialog("\u0110\xF3ng h\xECnh", `\u0110\xF3ng h\xECnh <b>${escapeHTML(t2.doc.title || "ch\u01B0a \u0111\u1EB7t t\xEAn")}</b>? H\xECnh ch\u01B0a l\u01B0u t\u1EC7p s\u1EBD m\u1EA5t.`, "\u0110\xF3ng")) return;
-      this.stashTab();
-      const cur2 = this.tabIdx;
-      this.tabs.splice(i, 1);
-      if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null });
-      const next = i < cur2 ? cur2 - 1 : i === cur2 ? Math.min(i, this.tabs.length - 1) : cur2;
-      this.showTab(next);
-    }
-    /** Mở hình (tệp, ví dụ, link): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. */
-    openDoc(doc2) {
-      if (!this.doc.steps.length && !(this.doc.images || []).length) this.loadDoc(doc2);
-      else this.newTab(doc2);
-    }
-    pushUndo(snapshot) {
-      this.undoStack.push(snapshot);
-      if (this.undoStack.length > HISTORY_MAX) this.undoStack.shift();
-      this.redoStack = [];
-    }
-    /** Thay đổi tài liệu như một bước hoàn tác được. mutate(doc) sửa trực tiếp doc. */
-    commit(mutate) {
-      const before = this.tx ?? JSON.stringify(this.doc);
-      mutate(this.doc);
-      if (!this.tx) this.pushUndo(before);
-      this.afterChange();
-    }
-    afterChange() {
-      for (const id of [...this.selection]) if (!stepById(this.doc, id)) this.selection.delete(id);
-      if (this.imageSel && (this.selection.size || !(this.doc.images || []).some((im) => im.id === this.imageSel))) this.imageSel = null;
-      if (this.relation && !this.relation.ids.every((id) => stepById(this.doc, id))) {
-        this.relation = null;
-        this.highlight.clear();
-      }
-      this.refresh();
-      this.emit("change");
-    }
-    beginTx() {
-      if (!this.tx) this.tx = JSON.stringify(this.doc);
-    }
-    endTx() {
-      if (this.tx) {
-        if (this.tx !== JSON.stringify(this.doc)) this.pushUndo(this.tx);
-        this.tx = null;
-      }
-    }
-    undo() {
-      this.cancelTool();
-      if (!this.undoStack.length) return toast("Kh\xF4ng c\xF2n g\xEC \u0111\u1EC3 ho\xE0n t\xE1c");
-      this.redoStack.push(JSON.stringify(this.doc));
-      this.doc = JSON.parse(this.undoStack.pop());
-      this.afterChange();
-    }
-    redo() {
-      this.cancelTool();
-      if (!this.redoStack.length) return toast("Kh\xF4ng c\xF2n g\xEC \u0111\u1EC3 l\xE0m l\u1EA1i");
-      this.undoStack.push(JSON.stringify(this.doc));
-      this.doc = JSON.parse(this.redoStack.pop());
-      this.afterChange();
-    }
-    /**
-     * Thêm các bước từ đặc tả [{type,args,params,name,style}]. Đối số '$k' = id của bước thứ k vừa thêm.
-     * Các bước sau bước đầu được gộp chung khung trình bày. Trả về danh sách id.
-     */
-    addSteps(specs, { join = true } = {}) {
-      return addSpecs(this.doc, specs, { join });
-    }
-    /** Tên hiển thị của một đối tượng (dùng khi công cụ đặt tên kết quả, vd I_A). */
-    name(id) {
-      return stepById(this.doc, id)?.name || "";
-    }
-    /** Tham số số của công cụ đang dùng (góc quay, tỉ số vị tự…), chỉnh ở thẻ tuỳ chọn. */
-    opt(key, def) {
-      const p = this.toolParams && this.toolParams[this.toolId] || {};
-      return key in p ? p[key] : def;
-    }
-    nameUsed(name2, exceptId) {
-      return this.doc.steps.some((s) => s.name === name2 && s.id !== exceptId);
-    }
-    // ================= tính toán & vẽ =================
-    visibleSet() {
-      if (this.mode !== "present") return null;
-      const fr = frames(this.doc);
-      const set = /* @__PURE__ */ new Set();
-      for (let i = 0; i <= Math.min(this.frameIdx, fr.length - 1); i++) for (const id of fr[i]) set.add(id);
-      return set;
-    }
-    refresh() {
-      this.values = evaluate(this.doc);
-      this.renderer.scale = this.projector ? 1.9 : 1;
-      this.renderer.grid = this.grid;
-      this.renderer.setScene(this.doc, this.values, {
-        theme: this.theme,
-        visible: this.visibleSet(),
-        selected: this.mode === "present" ? /* @__PURE__ */ new Set() : this.selection,
-        highlight: this.highlight,
-        images: this.images,
-        imageSel: this.mode === "present" ? null : this.imageSel
-      });
-      this.renderer.clearExtra();
-      this.drawRelationOverlay?.();
-      this.renderPanels();
-      this.emit("refresh");
-    }
-    /** Tô sáng tạm (rê chuột lên tên điểm trong khung chữ); null: trở lại quan hệ đang tô (nếu có). */
-    setHover(ids) {
-      this.highlight = new Set(ids || (this.relation ? this.relation.ids : []));
-      this.refresh();
-    }
-    /** Số khung trình bày: khung của hình, kéo dài thêm nếu lời giải còn bước ở các khung sau. */
-    frameCount() {
-      return Math.max(frames(this.doc).length, this.textBoxes ? this.textBoxes.lastFrame() + 1 : 0);
-    }
-    /** Cập nhật nhanh khi kéo: chỉ tính lại các bước phụ thuộc (nếu có bộ cập nhật), rồi vẽ lại. */
-    quickUpdate() {
-      if (this.dragUpdater) this.dragUpdater(this.values);
-      else this.values = evaluate(this.doc);
-      this.renderer.update(this.values);
-    }
-    renderPanels() {
-      renderStepList(this);
-      renderProps(this);
-      renderToolOptions(this);
-      for (const id of ["btn-undo", "menu-undo"]) {
-        const b = document.getElementById(id);
-        if (b) b.disabled = !this.undoStack.length;
-      }
-      for (const id of ["btn-redo", "menu-redo"]) {
-        const b = document.getElementById(id);
-        if (b) b.disabled = !this.redoStack.length;
-      }
-      this.updatePresentBar();
-    }
-    // ================= toạ độ & chọn đối tượng =================
-    toScreen(P2) {
-      return this.view.toScreen(P2);
-    }
-    toUser(sx, sy) {
-      return this.view.toUser(sx, sy);
-    }
-    eventPos(e) {
-      const r = this.boardRect || (this.boardRect = this.view.canvas.getBoundingClientRect());
-      return { sx: e.clientX - r.left, sy: e.clientY - r.top };
-    }
-    /** Các đối tượng gần vị trí màn hình (sx, sy), điểm trước, rồi theo khoảng cách. */
-    hitTest(sx, sy) {
-      const vis = this.visibleSet();
-      const k = kinds(this.doc);
-      const P2 = this.toUser(sx, sy);
-      const px = 1 / this.view.scale;
-      const f = this.projector ? 1.6 : 1;
-      const out = [];
-      let order = 0;
-      for (const s of this.doc.steps) {
-        order++;
-        if (s.hidden || vis && !vis.has(s.id)) continue;
-        const v = this.values.get(s.id);
-        const kind = k.get(s.id);
-        if (!v || kind === "mark") continue;
-        let d = distToObject(v, P2) / px;
-        const rg = kind === "line" && !this.renderer.ghostLines && this.renderer.lineRanges.get(s.id);
-        if (rg) d = dist(P2, pointOn({ ...v, sub: "line" }, Math.max(rg[0], Math.min(rg[1], lineParam(P2, v))))) / px;
-        if (kind === "point" && d <= 11 * f) out.push({ id: s.id, kind, d, pri: 0, order });
-        else if ((kind === "line" || kind === "circle") && d <= 7 * f) out.push({ id: s.id, kind, d, pri: 1, order });
-      }
-      for (const s of this.doc.steps) {
-        if (s.hidden || vis && !vis.has(s.id) || k.get(s.id) !== "mark") continue;
-        const v = this.values.get(s.id);
-        if (!v) continue;
-        const d = markDistance(v, P2, px * f) / px;
-        if (d <= 9 * f) out.push({ id: s.id, kind: "mark", d, pri: 2 });
-      }
-      out.sort((a, b) => a.pri - b.pri || (Math.abs(a.d - b.d) < 0.75 ? (b.order || 0) - (a.order || 0) : a.d - b.d));
-      return out;
-    }
-    figureScale() {
-      let xs = [], ys = [];
-      for (const v of this.values.values()) if (v && v.kind === "point") {
-        xs.push(v.x);
-        ys.push(v.y);
-      }
-      if (xs.length < 2) return 10;
-      return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1e-6);
-    }
-    /** Điểm đã có trùng (về số) với P. */
-    existingPointAt(P2, tolPx = 0.5) {
-      const k = kinds(this.doc);
-      const tol = Math.max(1e-9 * this.figureScale(), tolPx / this.view.scale);
-      for (const s of this.doc.steps) {
-        if (k.get(s.id) !== "point") continue;
-        const v = this.values.get(s.id);
-        if (v && dist(v, P2) < tol) return s.id;
-      }
-      return null;
-    }
-    /**
-     * Tạo giao điểm của hai đường c1, c2. near: toạ độ chuột (chọn nghiệm gần nhất) hoặc null (tạo mọi nghiệm).
-     * Nếu một nghiệm trùng điểm đã có thì nghiệm còn lại được dựng bằng "giao điểm thứ hai" (bền vững hơn
-     * chọn theo chỉ số). Trả về danh sách id điểm (mới hoặc có sẵn).
-     */
-    createIntersections(c1, c2, near = null) {
-      const v1 = this.values.get(c1), v2 = this.values.get(c2);
-      const roots = intersect(v1, v2);
-      if (!roots.length) {
-        toast("Hai \u0111\u01B0\u1EDDng n\xE0y kh\xF4ng c\u1EAFt nhau (\u1EDF v\u1ECB tr\xED hi\u1EC7n t\u1EA1i)");
-        return [];
-      }
-      const existing = roots.map((r) => this.existingPointAt(r, 0.01));
-      let idx = roots.map((_, i) => i);
-      if (near) idx = [idx.reduce((a, b) => dist(roots[a], near) <= dist(roots[b], near) ? a : b)];
-      const out = [];
-      for (const i of idx) {
-        if (existing[i]) {
-          out.push(existing[i]);
-          continue;
-        }
-        const other = roots.length === 2 ? existing[1 - i] : null;
-        const spec = other ? { type: "intersection_other", args: [c1, c2, other] } : { type: "intersection", args: [c1, c2], params: roots.length === 2 ? { which: i } : void 0 };
-        out.push(...this.addSteps([spec]));
-        this.values = evaluate(this.doc);
-      }
-      return out;
-    }
-    /** Cặp đường cắt nhau gần chỗ bấm nhất (nhiều cặp cùng chỗ: cặp dựng sau cùng). */
-    crossingPair(curves, P2) {
-      const px = 1 / this.view.scale;
-      const cs = curves.slice(0, 5);
-      let best = null;
-      for (let i = 0; i < cs.length; i++)
-        for (let j = i + 1; j < cs.length; j++)
-          for (const r of intersect(this.values.get(cs[i].id), this.values.get(cs[j].id))) {
-            const d = dist(r, P2) / px, rec = Math.min(cs[i].order || 0, cs[j].order || 0);
-            if (!best || d < best.d - 0.75 || Math.abs(d - best.d) <= 0.75 && rec > best.rec) best = { d, rec, ids: [cs[i].id, cs[j].id] };
-          }
-      return best ? best.ids : [curves[0].id, curves[1].id];
-    }
-    /** Lấy (hoặc tạo) một điểm tại vị trí bấm: điểm có sẵn / giao điểm / điểm trên đường / điểm tự do. */
-    resolvePoint(sx, sy, hits) {
-      const pHit = hits.find((h) => h.kind === "point");
-      if (pHit) return pHit.id;
-      const P2 = this.toUser(sx, sy);
-      const curves = hits.filter((h) => h.kind === "line" || h.kind === "circle").slice(0, 4);
-      const px = 1 / this.view.scale;
-      let best = null;
-      for (let i = 0; i < curves.length; i++)
-        for (let j = i + 1; j < curves.length; j++)
-          for (const r of intersect(this.values.get(curves[i].id), this.values.get(curves[j].id))) {
-            const d = dist(r, P2) / px;
-            const rec = Math.min(curves[i].order || 0, curves[j].order || 0);
-            if (d < 14 && (!best || d < best.d - 0.75 || Math.abs(d - best.d) <= 0.75 && rec > best.rec)) best = { d, rec, a: curves[i].id, b: curves[j].id };
-          }
-      if (best) return this.createIntersections(best.a, best.b, P2)[0] ?? null;
-      if (curves.length) {
-        const c = curves[0].id;
-        const t2 = paramOf(this.values.get(c), P2);
-        return this.addSteps([{ type: "point_on", args: [c], params: { t: t2 } }])[0];
-      }
-      const anchors = this.shiftSnap ? this.pickAnchors() : [];
-      const Q = anchors.length ? this.angleSnap(P2, anchors) : this.snap(P2);
-      return this.addSteps([{ type: "free_point", args: [], params: { x: Q.x, y: Q.y } }])[0];
-    }
-    /**
-     * Giữ Shift (bản 1.3): bắt hướng từ một điểm mốc tới P về bội số của 15° (0°, 15°, …, 90°…) – đường nằm ngang,
-     * thẳng đứng, nghiêng 45°… thật chính xác. Nhiều mốc: lấy mốc làm P dịch ít nhất. Giữ nguyên khoảng cách tới mốc.
-     */
-    angleSnap(P2, anchors) {
-      const step = Math.PI / 12;
-      let best = null;
-      for (const A of anchors) {
-        const r = Math.hypot(P2.x - A.x, P2.y - A.y);
-        if (r < 1e-9) continue;
-        const a = Math.round(Math.atan2(P2.y - A.y, P2.x - A.x) / step) * step;
-        const Q = { x: round6(A.x + r * Math.cos(a)), y: round6(A.y + r * Math.sin(a)) };
-        if (Math.abs(Math.sin(a)) < 1e-12) Q.y = A.y;
-        if (Math.abs(Math.cos(a)) < 1e-12) Q.x = A.x;
-        const d = Math.hypot(Q.x - P2.x, Q.y - P2.y);
-        if (!best || d < best.d) best = { d, Q };
-      }
-      return best ? best.Q : this.snap(P2);
-    }
-    /** Các điểm đã chọn trong lần dùng công cụ hiện tại (mốc để căn hướng khi giữ Shift). */
-    pickAnchors() {
-      return this.picks.map((id) => this.values.get(id)).filter((v) => v && v.kind === "point");
-    }
-    /** Các điểm nối với điểm id bằng một đoạn/tia/đường thẳng đã vẽ (mốc để căn hướng khi kéo với Shift). */
-    dragAnchors(id) {
-      const out = [];
-      for (const s of this.doc.steps) {
-        if (!["segment", "line", "ray"].includes(s.type) || !s.args.includes(id)) continue;
-        const o = this.values.get(s.args[0] === id ? s.args[1] : s.args[0]);
-        if (o) out.push(o);
-      }
-      return out;
-    }
-    snap(P2) {
-      if (!this.grid) return { x: round6(P2.x), y: round6(P2.y) };
-      return { x: Math.round(P2.x * 2) / 2, y: Math.round(P2.y * 2) / 2 };
-    }
-    // ================= công cụ =================
-    setTool(id) {
-      this.cancelTool();
-      this.toolId = id;
-      this.markActiveTool(id);
-      this.stage.classList.toggle("tool-active", id !== "move");
-      this.rememberTool(id);
-      this.renderer.ghostLines = id !== "move" && this.mode === "edit";
-      this.view.requestDraw();
-      this.showHint();
-      renderToolOptions(this);
-      renderProps(this);
-    }
-    cancelTool() {
-      this.picks = [];
-      this.renderer?.clearExtra();
-      if (this.tx) {
-        this.endTx();
-        this.refresh();
-      }
-      this.showHint();
-    }
-    showHint(msg) {
-      const el = document.getElementById("hint");
-      if (!el) return;
-      if (this.mode === "present") {
-        el.textContent = "Ch\u1EBF \u0111\u1ED9 tr\xECnh b\xE0y: \u2190 \u2192 (ho\u1EB7c PageUp/PageDown) \u0111\u1EC3 chuy\u1EC3n khung. V\u1EABn k\xE9o \u0111\u01B0\u1EE3c \u0111i\u1EC3m t\u1EF1 do.";
-        return;
-      }
-      const t2 = TOOL_BY_ID[this.toolId];
-      const i = Math.min(this.picks.length, t2.hints.length - 1);
-      const sel = this.selection.size === 1 && !this.picks.length ? stepById(this.doc, [...this.selection][0]) : null;
-      const tip = sel && sel.name && kinds(this.doc).get(sel.id) === "point" ? ` \xB7 G\xF5 ch\u1EEF \u0111\u1EC3 \u0111\u1EB7t t\xEAn ${sel.name}` : "";
-      const shiftTip = this.picks.length && this.toolId !== "move" && this.pickAnchors().length ? " \xB7 gi\u1EEF Shift: c\u0103n h\u01B0\u1EDBng theo b\u01B0\u1EDBc 15\xB0 (n\u1EB1m ngang, th\u1EB3ng \u0111\u1EE9ng\u2026)" : "";
-      el.textContent = msg || `${t2.label}: ${t2.hints[i] || ""}${shiftTip}${tip}`;
-    }
-    neededTypes(tool) {
-      if (tool.inputs[0] === "...point") return ["point"];
-      if (!tool.anyOrder) return [tool.inputs[this.picks.length]];
-      const k = kinds(this.doc);
-      const rem = [...tool.inputs];
-      for (const p of this.picks) {
-        const j = rem.findIndex((t2) => argAccepts(t2, k.get(p)));
-        if (j >= 0) rem.splice(j, 1);
-      }
-      return rem;
-    }
-    toolClick(sx, sy, shift2 = false) {
-      this.shiftSnap = shift2;
-      const tool = TOOL_BY_ID[this.toolId];
-      const hits = this.hitTest(sx, sy).filter((h) => h.kind !== "mark");
-      this.beginTx();
-      if (tool.id === "point") {
-        const id2 = this.resolvePoint(sx, sy, hits);
-        this.endTx();
-        this.selection = new Set(id2 ? [id2] : []);
-        this.afterChange();
-        return;
-      }
-      if (tool.id === "intersect") {
-        const curves = hits.filter((h) => h.kind === "line" || h.kind === "circle");
-        if (!this.picks.length && curves.length >= 2) {
-          const n0 = this.doc.steps.length;
-          const [c1, c2] = this.crossingPair(curves, this.toUser(sx, sy));
-          this.createIntersections(c1, c2, this.toUser(sx, sy));
-          this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
-          return this.finishTool();
-        }
-        const c = curves.find((h) => !this.picks.includes(h.id));
-        if (!c) return this.showHint("H\xE3y b\u1EA5m v\xE0o m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng ho\u1EB7c \u0111\u01B0\u1EDDng tr\xF2n");
-        this.picks.push(c.id);
-        if (this.picks.length === 2) {
-          const n0 = this.doc.steps.length;
-          this.createIntersections(this.picks[0], this.picks[1], null);
-          this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
-          return this.finishTool();
-        }
-        this.selection = new Set(this.picks);
-        this.refresh();
-        return this.showHint();
-      }
-      if (tool.segmentShortcut && !this.picks.length && hits.length && hits[0].kind === "line") {
-        const s = stepById(this.doc, hits[0].id);
-        if (s.type === "segment") {
-          this.picks = [...s.args];
-          return this.completeTool(tool);
-        }
-      }
-      const need = this.neededTypes(tool);
-      let chosen = hits.find((h) => need.some((t2) => argAccepts(t2, h.kind)));
-      let id = chosen?.id;
-      if (!id && need.some((t2) => argAccepts(t2, "point"))) id = this.resolvePoint(sx, sy, hits);
-      if (!id) return this.showHint(`H\xE3y ch\u1ECDn ${need.map(typeName).join(" ho\u1EB7c ")}`);
-      if (tool.inputs[0] === "...point") {
-        if (this.picks.length >= 3 && id === this.picks[0]) return this.completeTool(tool);
-        if (this.picks.includes(id)) return;
-        this.picks.push(id);
-      } else {
-        if (this.picks.includes(id) && !tool.allowRepeat) return this.showHint("\u0110\u1ED1i t\u01B0\u1EE3ng n\xE0y \u0111\xE3 \u0111\u01B0\u1EE3c ch\u1ECDn, h\xE3y ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng kh\xE1c");
-        this.picks.push(id);
-        if (tool.anyOrder && this.picks.length === tool.inputs.length) {
-          const kk = kinds(this.doc);
-          const ordered = [];
-          const rest = [...this.picks];
-          for (const t2 of tool.inputs) {
-            const j = rest.findIndex((p) => argAccepts(t2, kk.get(p)));
-            ordered.push(rest.splice(j, 1)[0]);
-          }
-          this.picks = ordered;
-        }
-        if (this.picks.length === tool.inputs.length) return this.completeTool(tool);
-      }
-      this.selection = new Set(this.picks);
-      this.refresh();
-      this.startPreview(tool);
-      this.showHint();
-    }
-    /** Điểm vừa dựng nằm ngoài khung nhìn → nhắc cách thu phóng (không tự đổi khung nhìn của người dùng). */
-    warnOutOfView() {
-      const ids = [...this.selection];
-      const out = ids.some((id) => {
-        const v = this.values.get(id);
-        if (!v || v.kind !== "point") return false;
-        const q = this.toScreen(v);
-        return q.x < 0 || q.y < 0 || q.x > this.view.W || q.y > this.view.H;
-      });
-      if (out) toast("\u0110i\u1EC3m v\u1EEBa d\u1EF1ng n\u1EB1m ngo\xE0i khung nh\xECn \u2013 nh\u1EA5n Home (ho\u1EB7c Hi\u1EC3n th\u1ECB \u203A Thu ph\xF3ng v\u1EEBa h\xECnh) \u0111\u1EC3 th\u1EA5y c\u1EA3 h\xECnh", 4200);
-    }
-    completeTool(tool) {
-      const specs = tool.make(this.picks, this);
-      const ids = this.addSteps(specs);
-      const k = kinds(this.doc);
-      const pts = ids.filter((id) => k.get(id) === "point" && !stepById(this.doc, id).hidden);
-      this.selection = new Set(pts.length === 1 ? pts : ids.slice(0, 1));
-      this.finishTool();
-    }
-    finishTool() {
-      this.picks = [];
-      this.renderer.clearExtra();
-      this.endTx();
-      if (this.toolId === "intersect") this.selection = new Set(this.lastCreatedPoints && this.lastCreatedPoints.length === 1 ? this.lastCreatedPoints : []);
-      this.lastCreatedPoints = null;
-      this.afterChange();
-      this.warnOutOfView();
-      this.showHint();
-    }
-    markStyle(kind) {
-      const m = this.markDefaults;
-      const c = (x) => x ? { color: x } : {};
-      if (kind === "angle") return { ...c(m.color), arcs: m.arcs };
-      if (kind === "segment") return { ...c(m.color), ticks: m.ticks };
-      return { ...c(m.polyColor) };
-    }
-    startPreview(tool) {
-      this.renderer.clearExtra();
-      if (!tool.preview || !this.picks.length) return;
-      const r = this.renderer;
-      const pts = this.picks.map((id) => () => this.values.get(id));
-      const mouse = () => this.mouse;
-      if (["segment", "line", "ray", "circle"].includes(tool.preview)) r.addExtra({ type: tool.preview, pts: [pts[0], mouse] });
-      else if (tool.preview === "polygon") r.addExtra({ type: "polyline", pts: [...pts, mouse] });
-    }
-    // ================= chuột / cảm ứng =================
-    bindPointer() {
-      const canvas = this.view.canvas;
-      const wrap = this.stage;
-      const resetRect = () => {
-        this.boardRect = null;
-      };
-      window.addEventListener("resize", resetRect);
-      window.addEventListener("scroll", resetRect, true);
-      this.view.onViewChange(resetRect);
-      if (typeof ResizeObserver !== "undefined") new ResizeObserver(resetRect).observe(canvas);
-      wrap.addEventListener("pointerdown", (e) => this.onPointerDown(e), true);
-      let hoverPending = false;
-      let lastEvent = null;
-      wrap.addEventListener("pointermove", (e) => {
-        if (this.drag) return;
-        lastEvent = e;
-        if (hoverPending) return;
-        hoverPending = true;
-        requestAnimationFrame(() => {
-          hoverPending = false;
-          if (this.drag || !lastEvent) return;
-          const ev = lastEvent;
-          const { sx, sy } = this.eventPos(ev);
-          this.mouse = this.toUser(sx, sy);
-          if (ev.shiftKey && this.picks.length && this.toolId !== "move") {
-            const an = this.pickAnchors();
-            if (an.length) this.mouse = this.angleSnap(this.mouse, an);
-          }
-          if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
-          const hits = this.hitTest(sx, sy);
-          let cursor = "";
-          if (this.toolId === "move" || this.mode === "present") {
-            const h = hits[0];
-            if (h && h.kind === "point" && isDraggableType(stepById(this.doc, h.id).type)) cursor = "grab";
-            else if (h && this.mode === "edit") cursor = "pointer";
-            else if (this.mode === "edit" && this.labelAt(ev)) cursor = "move";
-          } else cursor = hits.length ? "pointer" : "crosshair";
-          canvas.style.cursor = cursor;
-        });
-      });
-      canvas.addEventListener("wheel", (e) => {
-        e.preventDefault();
-        const { sx, sy } = this.eventPos(e);
-        const dy = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
-        this.view.zoomAt(sx, sy, Math.exp(-dy * 15e-4));
-      }, { passive: false });
-      canvas.addEventListener("dblclick", (e) => {
-        if (this.mode === "present") return;
-        const { sx, sy } = this.eventPos(e);
-        const h = this.hitTest(sx, sy)[0];
-        if (h && h.kind === "point") this.inlineRename(h.id, null);
-      });
-    }
-    /** Nhãn điểm tại vị trí chuột (để kéo nhãn). */
-    labelAt(e) {
-      const { sx, sy } = this.eventPos(e);
-      for (const [id, b] of this.renderer.labelBoxes) {
-        if (sx >= b.x - 2 && sx <= b.x + b.w + 2 && sy >= b.y - 2 && sy <= b.y + b.h + 2) return id;
-      }
-      return null;
-    }
-    /** Dời hình bằng cách kéo nền (một ngón/chuột) hoặc chụm hai ngón để phóng (màn hình cảm ứng). */
-    startPan(e) {
-      const pointers = this.panPointers || (this.panPointers = /* @__PURE__ */ new Map());
-      pointers.set(e.pointerId, this.eventPos(e));
-      if (this.panning) return;
-      this.panning = true;
-      const move = (ev) => {
-        if (!pointers.has(ev.pointerId)) return;
-        const prev = [...pointers.values()];
-        const before = pointers.get(ev.pointerId);
-        const now = this.eventPos(ev);
-        pointers.set(ev.pointerId, now);
-        if (pointers.size >= 2) {
-          const [a0, b0] = prev, [a1, b1] = [...pointers.values()];
-          const d0 = Math.hypot(a0.sx - b0.sx, a0.sy - b0.sy), d1 = Math.hypot(a1.sx - b1.sx, a1.sy - b1.sy);
-          if (d0 > 5) this.view.zoomAt((a1.sx + b1.sx) / 2, (a1.sy + b1.sy) / 2, d1 / d0);
-        } else this.view.panBy(now.sx - before.sx, now.sy - before.sy);
-      };
-      const up = (ev) => {
-        pointers.delete(ev.pointerId);
-        if (pointers.size) return;
-        this.panning = false;
-        window.removeEventListener("pointermove", move, true);
-        window.removeEventListener("pointerup", up, true);
-        window.removeEventListener("pointercancel", up, true);
-      };
-      window.addEventListener("pointermove", move, true);
-      window.addEventListener("pointerup", up, true);
-      window.addEventListener("pointercancel", up, true);
-    }
-    onPointerDown(e) {
-      if (!e.target.closest("#board")) return;
-      if (e.button !== void 0 && e.button !== 0) return;
-      if (document.querySelector(".modal-back")) return;
-      this.boardRect = null;
-      const { sx, sy } = this.eventPos(e);
-      if (sx < 0 || sy < 0 || sx > this.view.W || sy > this.view.H) return;
-      if (this.panning) {
-        this.startPan(e);
-        return;
-      }
-      this.mouse = this.toUser(sx, sy);
-      if (this.toolId !== "move" && this.mode === "edit") {
-        e.stopPropagation();
-        e.preventDefault();
-        this.toolClick(sx, sy, e.shiftKey);
-        this.shiftSnap = false;
-        return;
-      }
-      const hits = this.hitTest(sx, sy);
-      const lab = this.mode === "edit" && !(hits[0] && hits[0].kind === "point" && hits[0].d < 5) ? this.labelAt(e) : null;
-      if (lab) {
-        e.stopPropagation();
-        e.preventDefault();
-        const s = stepById(this.doc, lab);
-        const off = s.style && s.style.labelOffset || this.renderer.labelOffsets.get(lab) || [9, 9];
-        this.startDrag(e, { kind: "label", id: lab, start: JSON.stringify(this.doc), sx, sy, off: [...off] });
-        return;
-      }
-      const h = hits[0];
-      const step = h ? stepById(this.doc, h.id) : null;
-      if (h && h.kind === "point" && isDraggableType(step.type)) {
-        e.stopPropagation();
-        e.preventDefault();
-        this.startDrag(e, { kind: "point", id: h.id, start: JSON.stringify(this.doc) });
-        if (this.mode === "edit") this.select(h.id, e.shiftKey, false);
-        return;
-      }
-      if (h) {
-        e.stopPropagation();
-        e.preventDefault();
-        if (this.mode === "edit") this.select(h.id, e.shiftKey);
-        return;
-      }
-      const imh = this.mode === "edit" ? this.imageAt(sx, sy) : null;
-      if (imh) {
-        e.stopPropagation();
-        e.preventDefault();
-        if (this.imageSel !== imh.id) this.selectImage(imh.id);
-        this.startImageDrag(e, imh.id, imh.handle);
-        return;
-      }
-      e.preventDefault();
-      if (this.mode === "edit" && (this.selection.size || this.imageSel) && !e.shiftKey) {
-        this.selection.clear();
-        this.imageSel = null;
-        this.refresh();
-      }
-      this.startPan(e);
-    }
-    /**
-     * Kéo điểm hoặc nhãn. Sự kiện chuột chỉ ghi lại vị trí mới nhất; việc tính lại và vẽ được gom
-     * vào requestAnimationFrame (≤ 1 lần mỗi khung hình) và chỉ tính lại các bước phụ thuộc vào điểm
-     * đang kéo. Ghi lịch sử hoàn tác, đặt lại nhãn tự động, lưu nháp… chỉ làm một lần khi thả chuột.
-     */
-    startDrag(e, info) {
-      this.drag = info;
-      const step = stepById(this.doc, info.id);
-      const P0 = this.values.get(info.id);
-      if (info.kind === "point" && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
-      if (info.kind === "point") this.dragUpdater = makeUpdater(this.doc, [info.id]);
-      let pending = null;
-      const anchors = info.kind === "point" && step.type === "free_point" ? this.dragAnchors(info.id) : [];
-      const apply = () => {
-        if (!pending) return;
-        const { sx, sy, shift: shift2 } = pending;
-        pending = null;
-        this.mouse = this.toUser(sx, sy);
-        if (info.kind === "label") {
-          const sc = this.projector ? 1.9 : 1;
-          const off = [round12(info.off[0] + (sx - info.sx) / sc), round12(info.off[1] - (sy - info.sy) / sc)];
-          step.style = { ...step.style || {}, labelOffset: off };
-          this.renderer.setLabelOffset(info.id, off);
-          return;
-        }
-        const target = { x: this.mouse.x + info.grab.x, y: this.mouse.y + info.grab.y };
-        if (step.type === "free_point") {
-          const Q = shift2 && anchors.length ? this.angleSnap(target, anchors) : this.snap(target);
-          step.params = { ...step.params || {}, x: Q.x, y: Q.y };
-        } else if (step.type === "point_on") {
-          const c = this.values.get(step.args[0]);
-          if (c) step.params = { ...step.params || {}, t: round9(paramOf(c, target)) };
-        }
-        this.quickUpdate();
-      };
-      this.view.frameHooks.push(apply);
-      const move = (ev) => {
-        pending = { ...this.eventPos(ev), shift: ev.shiftKey };
-        this.view.requestDraw();
-      };
-      const up = () => {
-        window.removeEventListener("pointermove", move, true);
-        window.removeEventListener("pointerup", up, true);
-        window.removeEventListener("pointercancel", up, true);
-        apply();
-        this.view.frameHooks = this.view.frameHooks.filter((f) => f !== apply);
-        this.drag = null;
-        this.dragUpdater = null;
-        if (JSON.stringify(this.doc) !== info.start) {
-          this.pushUndo(info.start);
-          this.afterChange();
-        }
-      };
-      window.addEventListener("pointermove", move, true);
-      window.addEventListener("pointerup", up, true);
-      window.addEventListener("pointercancel", up, true);
-    }
-    select(id, additive = false, rerender = true) {
-      this.imageSel = null;
-      if (additive) {
-        if (this.selection.has(id)) this.selection.delete(id);
-        else this.selection.add(id);
-      } else this.selection = /* @__PURE__ */ new Set([id]);
-      if (rerender) this.refresh();
-      else this.renderPanels();
-    }
-    // ================= sửa đối tượng =================
-    async renameStep(id) {
-      const s = stepById(this.doc, id);
-      if (!s || !s.name) return;
-      const v = await promptDialog("\u0110\u1ED5i t\xEAn", s.name, "G\xF5 nh\u01B0 c\xF4ng th\u1EE9c: I_A \u2192 I v\u1EDBi ch\u1EC9 s\u1ED1 A, X_{AB} \u2192 ch\u1EC9 s\u1ED1 AB, B' \u2192 B ph\u1EA9y, A1 \u2192 A\u2081.");
-      if (v == null) return;
-      this.setName(id, v.trim());
-    }
-    /**
-     * Đặt tên ngay trên hình: ô nhập nhỏ hiện cạnh nhãn. Mở bằng cách GÕ CHỮ khi đang chọn một điểm (vd điểm vừa
-     * dựng), F2, hoặc nháy đúp. Enter/bấm ra ngoài: lưu; Esc: bỏ.
-     */
-    inlineRename(id, first = null) {
-      const s = stepById(this.doc, id);
-      const v = this.values.get(id);
-      if (!s || !s.name || !v || this.mode !== "edit") return;
-      document.querySelector(".inline-name")?.remove();
-      const inp = document.createElement("input");
-      inp.className = "inline-name";
-      inp.type = "text";
-      inp.spellcheck = false;
-      inp.value = first ?? s.name;
-      inp.title = "G\xF5 nh\u01B0 c\xF4ng th\u1EE9c: I_A, X_{AB}, B', A1 \u2192 A\u2081. Enter \u0111\u1EC3 l\u01B0u, Esc \u0111\u1EC3 b\u1ECF.";
-      const p = this.toScreen(v);
-      const off = this.renderer.labelOffsets.get(id) || [9, 9];
-      const sc = this.projector ? 1.9 : 1;
-      inp.style.left = Math.max(4, Math.min(this.view.W - 90, p.x + off[0] * sc - 20)) + "px";
-      inp.style.top = Math.max(4, Math.min(this.view.H - 30, p.y - off[1] * sc - 13)) + "px";
-      this.stage.appendChild(inp);
-      let done = false;
-      const finish = (save) => {
-        if (done) return;
-        done = true;
-        const val = inp.value.trim();
-        inp.remove();
-        if (save && val) this.setName(id, val);
-        this.showHint();
-      };
-      inp.addEventListener("keydown", (e) => {
-        e.stopPropagation();
-        if (e.key === "Enter") {
-          e.preventDefault();
-          finish(true);
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          finish(false);
-        }
-      });
-      inp.addEventListener("blur", () => finish(true));
-      inp.focus();
-      if (first == null) inp.select();
-      else inp.setSelectionRange(inp.value.length, inp.value.length);
-    }
-    /** Đổi tên; nếu tên đã thuộc đối tượng khác thì ĐỔI CHỖ hai tên (vd tam giác vuông dựng ở A mà đề cần vuông ở C). */
-    setName(id, name2) {
-      const s = stepById(this.doc, id);
-      if (!name2 || name2 === s.name) return false;
-      const other = this.doc.steps.find((x) => x.name === name2 && x.id !== id);
-      const old = s.name;
-      this.commit(() => {
-        if (other) other.name = old;
-        s.name = name2;
-      });
-      if (other) toast(`\u0110\xE3 \u0111\u1ED5i ch\u1ED7 t\xEAn: ${name2} \u2194 ${old}`);
-      return true;
-    }
-    setStyle(ids, patch) {
-      this.commit((doc2) => {
-        for (const id of ids) {
-          const s = stepById(doc2, id);
-          if (s) s.style = { ...s.style || {}, ...patch };
-        }
-      });
-    }
-    setStepProp(id, key, value) {
-      this.commit((doc2) => {
-        const s = stepById(doc2, id);
-        if (!s) return;
-        if (value === false || value == null) delete s[key];
-        else s[key] = value;
-      });
-    }
-    setParams(id, patch) {
-      this.commit((doc2) => {
-        const s = stepById(doc2, id);
-        s.params = { ...s.params || {}, ...patch };
-      });
-    }
-    async deleteSteps(ids) {
-      ids = ids.filter((id) => stepById(this.doc, id));
-      if (!ids.length) return;
-      const dep = [...dependents(this.doc, ids)];
-      if (dep.length) {
-        const names = dep.map((d) => `<b>${escapeHTML(describe(this.doc, d) || d)}</b>`).join(", ");
-        const ok = await confirmDialog("Xo\xE1 \u0111\u1ED1i t\u01B0\u1EE3ng", `Xo\xE1 ${ids.map((i) => `<b>${escapeHTML(describe(this.doc, i))}</b>`).join(", ")} s\u1EBD xo\xE1 k\xE8m <b>${dep.length}</b> \u0111\u1ED1i t\u01B0\u1EE3ng ph\u1EE5 thu\u1ED9c: ${names}.<br>Ti\u1EBFp t\u1EE5c?`, "Xo\xE1");
-        if (!ok) return;
-      }
-      this.commit((doc2) => {
-        const { doc: nd } = removeSteps(doc2, ids);
-        doc2.steps = nd.steps;
-      });
-      this.selection.clear();
-      this.refresh();
-    }
-    /** Tô sáng một quan hệ do bộ khám phá tìm ra (null để bỏ). */
-    setRelation(rel2) {
-      this.relation = rel2;
-      this.highlight = new Set(rel2 ? rel2.ids : []);
-      this.refresh();
-    }
-    // ================= trình bày / trình chiếu =================
-    setMode(mode) {
-      this.cancelTool();
-      this.mode = mode;
-      document.body.classList.toggle("presenting", mode === "present");
-      if (mode === "present") {
-        this.frameIdx = 0;
-        this.selection.clear();
-        this.renderer.ghostLines = false;
-      } else this.setTool(this.toolId);
-      this.refresh();
-      this.showHint();
-    }
-    gotoFrame(i) {
-      const n = this.frameCount();
-      this.frameIdx = Math.max(0, Math.min(n - 1, i));
-      this.refresh();
-    }
-    updatePresentBar() {
-      const lab = document.getElementById("frame-label");
-      if (!lab) return;
-      const n = this.frameCount();
-      lab.textContent = n ? `Khung ${Math.min(this.frameIdx + 1, n)} / ${n}` : "Ch\u01B0a c\xF3 b\u01B0\u1EDBc n\xE0o";
-      document.getElementById("btn-prev").disabled = this.frameIdx <= 0;
-      document.getElementById("btn-next").disabled = this.frameIdx >= n - 1;
-    }
-    async setProjector(on) {
-      this.projector = on;
-      document.body.classList.toggle("projector", on);
-      try {
-        if (on && !document.fullscreenElement) await document.documentElement.requestFullscreen();
-        if (!on && document.fullscreenElement) await document.exitFullscreen();
-      } catch {
-      }
-      setTimeout(() => {
-        this.view.resize();
-        this.boardRect = null;
-        this.refresh();
-      }, 80);
-    }
-    setThemeId(id) {
-      this.theme = setTheme(id);
-      savePref("theme", this.theme);
-      this.updateMenuChecks();
-      this.refresh();
-    }
-    /** Hiện/ẩn bảng các bước dựng (mặc định ẩn để dành chỗ cho bảng vẽ). */
-    togglePanel(show = !document.body.classList.contains("panel-open"), remember = true) {
-      document.body.classList.toggle("panel-open", !!show);
-      if (remember) savePref("panel", show ? "1" : "0");
-      this.updateMenuChecks();
-      setTimeout(() => {
-        this.view.resize();
-        this.boardRect = null;
-      }, 0);
-    }
-    updateMenuChecks() {
-      document.querySelectorAll("[data-theme]").forEach((b) => b.classList.toggle("on", b.dataset.theme === this.theme));
-      document.getElementById("btn-grid")?.classList.toggle("on", this.grid);
-      document.getElementById("btn-trim")?.classList.toggle("on", !!this.renderer?.trimLines);
-      document.getElementById("menu-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
-      document.getElementById("btn-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
-    }
-    toggleGrid() {
-      this.grid = !this.grid;
-      this.renderer.grid = this.grid;
-      this.updateMenuChecks();
-      this.view.requestDraw();
-    }
-    zoomFit() {
-      const pts = [];
-      const vis = this.visibleSet();
-      for (const s of this.doc.steps) {
-        if (s.hidden || vis && !vis.has(s.id)) continue;
-        const v = this.values.get(s.id);
-        if (!v) continue;
-        if (v.kind === "point") pts.push(v);
-        if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
-      }
-      for (const im of this.doc.images || []) pts.push({ x: im.x, y: im.y }, { x: im.x + im.w, y: im.y - im.h });
-      if (!pts.length) return this.view.setBoundingBox([-8, 6, 8, -6]);
-      const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-      let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-      const m = Math.max(x2 - x1, y2 - y1, 1) * 0.1;
-      [x1, x2, y1, y2] = [x1 - m, x2 + m, y1 - m, y2 + m];
-      const W = this.view.W, H = this.view.H;
-      const per = Math.max((x2 - x1) / W, (y2 - y1) / H);
-      const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
-      this.view.setBoundingBox([cx - per * W / 2, cy + per * H / 2, cx + per * W / 2, cy - per * H / 2]);
-    }
-    // ================= bàn phím & nút =================
-    bindKeys() {
-      document.addEventListener("keydown", (e) => {
-        if (document.querySelector(".modal-back")) return;
-        const tag = (e.target.tagName || "").toLowerCase();
-        if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
-        const ctrl = e.ctrlKey || e.metaKey;
-        if (ctrl && e.key === "Enter" && this.mode === "edit" && this.textBoxes) {
-          e.preventDefault();
-          this.textBoxes.editSolution();
-          return;
-        }
-        if (e.altKey && !ctrl && this.tabs.length > 1) {
-          const d = /^Digit([1-9])$/.exec(e.code);
-          const n = this.tabs.length;
-          if (d) {
-            e.preventDefault();
-            this.switchTab(Math.min(+d[1], n) - 1);
-            return;
-          }
-          if (e.key === "PageDown" || e.key === "PageUp") {
-            e.preventDefault();
-            this.switchTab((this.tabIdx + (e.key === "PageDown" ? 1 : n - 1)) % n);
-            return;
-          }
-        }
-        if (ctrl && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
-          e.preventDefault();
-          this.undo();
-          return;
-        }
-        if (ctrl && (e.key === "y" || e.key === "Y" || (e.key === "z" || e.key === "Z") && e.shiftKey)) {
-          e.preventDefault();
-          this.redo();
-          return;
-        }
-        if (this.mode === "present") {
-          if (["ArrowRight", "PageDown", " ", "ArrowDown"].includes(e.key)) {
-            e.preventDefault();
-            this.gotoFrame(this.frameIdx + 1);
-          } else if (["ArrowLeft", "PageUp", "ArrowUp"].includes(e.key)) {
-            e.preventDefault();
-            this.gotoFrame(this.frameIdx - 1);
-          } else if (e.key === "Home") this.gotoFrame(0);
-          else if (e.key === "End") this.gotoFrame(1e9);
-          else if (e.key === "Escape" && !this.projector) this.setMode("edit");
-          return;
-        }
-        if (!ctrl && !e.altKey && this.selection.size === 1 && !this.picks.length && (e.key === "F2" || e.key.length === 1 && /[\p{L}\d_'{}]/u.test(e.key))) {
-          const id = [...this.selection][0];
-          if (kinds(this.doc).get(id) === "point" && stepById(this.doc, id)?.name) {
-            e.preventDefault();
-            this.inlineRename(id, e.key === "F2" ? null : e.key);
-            return;
-          }
-        }
-        if (e.key === "Home") {
-          e.preventDefault();
-          this.zoomFit();
-          return;
-        }
-        if (e.key === "Escape") {
-          if (this.picks.length) this.cancelTool();
-          else if (this.toolId !== "move") this.setTool("move");
-          else {
-            this.selection.clear();
-            this.imageSel = null;
-            this.setRelation(null);
-          }
-        } else if (e.key === "Enter" && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === "...point") {
-          this.completeTool(TOOL_BY_ID[this.toolId]);
-        } else if ((e.key === "Delete" || e.key === "Backspace") && this.selection.size) {
-          e.preventDefault();
-          this.deleteSteps([...this.selection]);
-        } else if ((e.key === "Delete" || e.key === "Backspace") && this.imageSel) {
-          e.preventDefault();
-          this.deleteImage(this.imageSel);
-        }
-      });
-      document.addEventListener("fullscreenchange", () => {
-        if (!document.fullscreenElement && this.projector) this.setProjector(false);
-      });
-    }
-    /** Nạp công cụ tự tạo (lưu trong trình duyệt) và gắn vào menu "Công cụ › 7. Công cụ của tôi". */
-    loadUserTools() {
-      let list = [];
-      try {
-        list = JSON.parse(loadPref("tools", "[]"));
-      } catch {
-        list = [];
-      }
-      this.userTools = Array.isArray(list) ? list.filter(validMacro) : [];
-      for (const id of Object.keys(TOOL_BY_ID)) if (TOOL_BY_ID[id].user) delete TOOL_BY_ID[id];
-      for (const d of this.userTools) TOOL_BY_ID[d.id] = macroTool(d);
-      const userIds = this.userTools.map((d) => d.id);
-      this.toolbarGroups = TOOLBAR.map((g) => g.id === "library" ? { ...g, tools: [...g.tools, ...userIds], submenus: [...g.submenus, USER_MENU] } : g);
-    }
-    saveUserTools() {
-      savePref("tools", JSON.stringify(this.userTools));
-      this.loadUserTools();
-      this.buildToolbar();
-      this.markActiveTool(this.toolId);
-    }
-    async userToolAction(action, arg) {
-      if (action === "create") {
-        const r0 = createMacro(this.doc, [...this.selection], "x");
-        if (!r0.ok) return toast(r0.error, 5e3);
-        const name2 = await promptDialog("T\u1EA1o c\xF4ng c\u1EE5 m\u1EDBi", "", `\u0110\u1EA7u v\xE0o: ${r0.tool.inputs.length} (${r0.tool.inputs.map((t2) => ({ point: "\u0111i\u1EC3m", line: "\u0111\u01B0\u1EDDng th\u1EB3ng", circle: "\u0111\u01B0\u1EDDng tr\xF2n" })[t2]).join(", ")}); ${r0.tool.steps.length} b\u01B0\u1EDBc d\u1EF1ng. \u0110\u1EB7t t\xEAn cho c\xF4ng c\u1EE5:`);
-        if (!name2 || !name2.trim()) return;
-        r0.tool.label = name2.trim();
-        this.userTools.push(r0.tool);
-        this.saveUserTools();
-        toast(`\u0110\xE3 t\u1EA1o c\xF4ng c\u1EE5 "${r0.tool.label}" (C\xF4ng c\u1EE5 \u203A ${USER_MENU})`, 4e3);
-      } else if (action === "delete") {
-        const d = this.userTools.find((x) => x.id === arg);
-        if (!d || !await confirmDialog("Xo\xE1 c\xF4ng c\u1EE5", `Xo\xE1 c\xF4ng c\u1EE5 <b>${escapeHTML(d.label)}</b>?`, "Xo\xE1")) return;
-        this.userTools = this.userTools.filter((x) => x.id !== arg);
-        if (this.toolId === arg) this.setTool("move");
-        this.saveUserTools();
-      } else if (action === "export") {
-        if (!this.userTools.length) return toast("Ch\u01B0a c\xF3 c\xF4ng c\u1EE5 t\u1EF1 t\u1EA1o n\xE0o");
-        const blob = new Blob([JSON.stringify({ format: "hinh-hoc-dong-cong-cu", version: 1, tools: this.userTools }, null, 1)], { type: "application/json" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "cong-cu-cua-toi.json";
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          URL.revokeObjectURL(a.href);
-          a.remove();
-        }, 1e3);
-      } else if (action === "import") {
-        const inp = document.createElement("input");
-        inp.type = "file";
-        inp.accept = ".json,application/json";
-        inp.onchange = async () => {
-          try {
-            const data = JSON.parse(await inp.files[0].text());
-            const list = (Array.isArray(data) ? data : data.tools || []).filter(validMacro);
-            if (!list.length) throw new Error("T\u1EC7p kh\xF4ng ch\u1EE9a c\xF4ng c\u1EE5 h\u1EE3p l\u1EC7");
-            for (const d of list) {
-              this.userTools = this.userTools.filter((x) => x.id !== d.id);
-              this.userTools.push(d);
-            }
-            this.saveUserTools();
-            toast(`\u0110\xE3 nh\u1EADp ${list.length} c\xF4ng c\u1EE5`);
-          } catch (e) {
-            toast("Kh\xF4ng nh\u1EADp \u0111\u01B0\u1EE3c: " + e.message, 5e3);
-          }
-        };
-        inp.click();
-      }
-    }
-    buildToolbar() {
-      const host = document.getElementById("tools");
-      if (!this.toolbarGroups) this.loadUserTools();
-      const groups = this.toolbarGroups;
-      this.groupCurrent = this.groupCurrent || {};
-      for (const g of groups) if (!this.groupCurrent[g.id]) this.groupCurrent[g.id] = g.tools[0];
-      host.innerHTML = groups.map((g) => {
-        const many = g.tools.length > 1 || g.menu;
-        const btn = (id) => {
-          const t2 = TOOL_BY_ID[id];
-          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t2.label)}"><span class="ti">${t2.icon}</span><span class="tl">${escapeHTML(t2.label)}</span></button>`;
-        };
-        const items = g.submenus ? g.submenus.map((m) => {
-          const ids = g.tools.filter((id) => TOOL_BY_ID[id].menu === m);
-          let list = ids.map(btn).join("");
-          if (m === USER_MENU) {
-            list = ids.map((id) => `<div class="user-tool">${btn(id)}<button class="tool-del" data-del="${id}" title="Xo\xE1 c\xF4ng c\u1EE5 n\xE0y">\u2715</button></div>`).join("") + (ids.length ? '<div class="menu-sep"></div>' : '<div class="note" style="padding:4px 8px">Ch\u01B0a c\xF3 c\xF4ng c\u1EE5 n\xE0o. Ch\u1ECDn c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng k\u1EBFt qu\u1EA3 tr\xEAn h\xECnh (Shift \u0111\u1EC3 ch\u1ECDn nhi\u1EC1u, c\xF3 th\u1EC3 ch\u1ECDn c\u1EA3 \u0111\u1ED1i t\u01B0\u1EE3ng ban \u0111\u1EA7u) r\u1ED3i b\u1EA5m "T\u1EA1o c\xF4ng c\u1EE5".</div>') + '<button class="tool-action" data-action="create">\uFF0B T\u1EA1o c\xF4ng c\u1EE5 t\u1EEB c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng \u0111ang ch\u1ECDn\u2026</button><button class="tool-action" data-action="export">Xu\u1EA5t c\xE1c c\xF4ng c\u1EE5 ra t\u1EC7p\u2026</button><button class="tool-action" data-action="import">Nh\u1EADp c\xF4ng c\u1EE5 t\u1EEB t\u1EC7p\u2026</button>';
-          }
-          return `<div class="sub"><button class="sub-title">${escapeHTML(m)}<span class="caret">\u203A</span></button><div class="sub-pop">${list}</div></div>`;
-        }).join("") + (g.extraHTML ? g.extraHTML(this) : "") : g.tools.map(btn).join("");
-        return `<div class="tb-group" data-group="${g.id}">
-          <button class="tb-btn" data-group="${g.id}" title="${escapeHTML(g.label)}">${ICONS[g.icon] || ""}${many ? '<span class="tb-more"></span>' : ""}</button>
-          ${many ? `<div class="flyout"><div class="flyout-title">${escapeHTML(g.label)}</div>${items}</div>` : ""}
-        </div>`;
-      }).join("") + '<div id="tb-recent" class="tb-recent" title="C\xF4ng c\u1EE5 v\u1EEBa d\xF9ng"></div>';
-      this.renderRecent();
-      const closeAll = () => host.querySelectorAll(".tb-group.open, .sub.open").forEach((x) => x.classList.remove("open"));
-      if (this.toolbarBound) return;
-      this.toolbarBound = true;
-      host.addEventListener("mouseover", (e) => {
-        const st = e.target.closest(".sub-title");
-        if (!st || st.parentElement.classList.contains("open")) return;
-        st.parentElement.parentElement.querySelectorAll(".sub.open").forEach((x) => x.classList.remove("open"));
-        st.parentElement.classList.add("open");
-      });
-      host.onclick = (e) => {
-        const act = e.target.closest("[data-action], [data-del]");
-        if (act) {
-          closeAll();
-          this.userToolAction(act.dataset.action || "delete", act.dataset.del);
-          return;
-        }
-        const rc = e.target.closest("[data-recent]");
-        if (rc) {
-          closeAll();
-          this.setTool(rc.dataset.recent);
-          return;
-        }
-        const tb = e.target.closest(".tb-btn");
-        const tl = e.target.closest(".tool");
-        const st = e.target.closest(".sub-title");
-        if (st) {
-          const subEl = st.parentElement;
-          subEl.parentElement.querySelectorAll(".sub.open").forEach((x) => x !== subEl && x.classList.remove("open"));
-          subEl.classList.add("open");
-          return;
-        }
-        if (tl) {
-          const g2 = tl.closest(".tb-group").dataset.group;
-          this.groupCurrent[g2] = tl.dataset.tool;
-          closeAll();
-          this.setTool(tl.dataset.tool);
-          return;
-        }
-        if (!tb) return;
-        const gEl = tb.closest(".tb-group");
-        const g = this.toolbarGroups.find((x) => x.id === tb.dataset.group);
-        const wasOpen = gEl.classList.contains("open");
-        closeAll();
-        if (g.menu) {
-          if (!wasOpen) {
-            gEl.classList.add("open");
-            g.menu(gEl.querySelector(".flyout"), this, closeAll);
-          }
-          return;
-        }
-        if (!g.submenus) this.setTool(this.groupCurrent[g.id]);
-        if (g.tools.length > 1 && !wasOpen) gEl.classList.add("open");
-      };
-      document.addEventListener("pointerdown", (e) => {
-        if (e.target.closest("#tools") || !host.querySelector(".tb-group.open")) return;
-        closeAll();
-        if (e.target.closest("#board")) {
-          e.stopPropagation();
-          e.preventDefault();
-        }
-      }, true);
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closeAll();
-      });
-    }
-    /** Công cụ vừa dùng (tối đa 6) – hiện ở cuối thanh công cụ dọc, chọn lại bằng MỘT lần bấm. */
-    rememberTool(id) {
-      if (!this.recentTools) {
-        try {
-          this.recentTools = JSON.parse(loadPref("recent", "[]"));
-        } catch {
-          this.recentTools = [];
-        }
-      }
-      if (id !== "move" && TOOL_BY_ID[id]) {
-        this.recentTools = [id, ...this.recentTools.filter((x) => x !== id)].slice(0, 6);
-        savePref("recent", JSON.stringify(this.recentTools));
-      }
-      this.renderRecent();
-    }
-    renderRecent() {
-      const host = document.getElementById("tb-recent");
-      if (!host) return;
-      const list = (this.recentTools || []).filter((id) => TOOL_BY_ID[id]);
-      host.innerHTML = list.map((id) => `<button class="tb-rc${id === this.toolId ? " active" : ""}" data-recent="${id}" title="${escapeHTML(TOOL_BY_ID[id].label)}">${TOOL_BY_ID[id].icon}</button>`).join("");
-      host.style.display = list.length ? "" : "none";
-    }
-    /** Đánh dấu công cụ đang dùng trên thanh công cụ. */
-    markActiveTool(id) {
-      const groups = this.toolbarGroups || TOOLBAR;
-      this.groupCurrent || (this.groupCurrent = {});
-      document.querySelectorAll("#tools .tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === id));
-      for (const g of groups) {
-        const on = g.tools.includes(id) || !!(g.isActive && g.isActive(id));
-        if (g.tools.includes(id)) this.groupCurrent[g.id] = id;
-        document.querySelector(`#tools .tb-group[data-group="${g.id}"]`)?.classList.toggle("active", on);
-      }
-    }
-    bindButtons() {
-      const on = (id, fn) => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener("click", fn);
-      };
-      for (const [id, ic2] of [["btn-undo", "undo"], ["btn-redo", "redo"], ["btn-explore", "explore"], ["btn-present", "present"], ["btn-projector", "projector"], ["btn-panel", "panel"]]) {
-        const b = document.getElementById(id);
-        if (b) b.innerHTML = ICONS[ic2];
-      }
-      const menus = [...document.querySelectorAll("#topbar .menu")];
-      const closeMenus = () => menus.forEach((m) => m.classList.remove("open"));
-      for (const m of menus) {
-        m.querySelector(".menu-btn").addEventListener("click", (e) => {
-          e.stopPropagation();
-          const open2 = m.classList.contains("open");
-          closeMenus();
-          if (!open2) m.classList.add("open");
-        });
-        m.querySelector(".menu-pop").addEventListener("click", (e) => {
-          if (e.target.closest("button")) closeMenus();
-        });
-        m.addEventListener("mouseenter", () => {
-          if (menus.some((x) => x.classList.contains("open")) && !m.classList.contains("open")) {
-            closeMenus();
-            m.classList.add("open");
-          }
-        });
-      }
-      document.addEventListener("pointerdown", (e) => {
-        if (e.target.closest("#topbar .menu") || !menus.some((m) => m.classList.contains("open"))) return;
-        closeMenus();
-        if (e.target.closest("#board")) {
-          e.stopPropagation();
-          e.preventDefault();
-        }
-      }, true);
-      on("btn-undo", () => this.undo());
-      on("btn-redo", () => this.redo());
-      on("menu-undo", () => this.undo());
-      on("menu-redo", () => this.redo());
-      document.querySelectorAll("[data-theme]").forEach((b) => b.addEventListener("click", () => this.setThemeId(b.dataset.theme)));
-      on("btn-panel", () => this.togglePanel());
-      on("menu-panel", () => this.togglePanel());
-      on("btn-close-panel", () => this.togglePanel(false));
-      this.togglePanel(loadPref("panel", "0") === "1", false);
-      this.updateMenuChecks();
-      on("btn-delete", () => this.deleteSteps([...this.selection]));
-      on("btn-grid", () => this.toggleGrid());
-      on("btn-trim", () => {
-        this.renderer.trimLines = !this.renderer.trimLines;
-        savePref("trim", this.renderer.trimLines ? "1" : "0");
-        this.updateMenuChecks();
-        this.refresh();
-      });
-      on("btn-fit", () => this.zoomFit());
-      on("btn-present", () => this.setMode(this.mode === "present" ? "edit" : "present"));
-      on("btn-projector", () => this.setProjector(!this.projector));
-      on("btn-prev", () => this.gotoFrame(this.frameIdx - 1));
-      on("btn-next", () => this.gotoFrame(this.frameIdx + 1));
-      on("btn-exit-present", () => {
-        if (this.projector) this.setProjector(false);
-        this.setMode("edit");
-      });
-      on("btn-new", () => this.newTab());
-      on("btn-unlock-images", () => {
-        if (!(this.doc.images || []).some((im) => im.locked)) return toast("Kh\xF4ng c\xF3 \u1EA3nh n\xE0o \u0111ang kho\xE1");
-        this.commit((doc2) => {
-          for (const im of doc2.images) delete im.locked;
-        });
-        toast("\u0110\xE3 m\u1EDF kho\xE1 c\xE1c \u1EA3nh \u2013 b\u1EA5m v\xE0o \u1EA3nh \u0111\u1EC3 d\u1EDDi, \u0111\u1ED5i c\u1EE1");
-      });
-    }
-  };
-  function loadPref(key, def) {
-    try {
-      return localStorage.getItem("hinh-hoc-dong:" + key) ?? def;
-    } catch {
-      return def;
-    }
-  }
-  function savePref(key, v) {
-    try {
-      localStorage.setItem("hinh-hoc-dong:" + key, v);
-    } catch {
-    }
-  }
-  var round6 = (v) => Math.round(v * 1e6) / 1e6;
-  var round9 = (v) => Math.round(v * 1e9) / 1e9;
-  var round12 = (v) => Math.round(v * 10) / 10;
-  var escapeHTML = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  function typeName(t2) {
-    return { point: "m\u1ED9t \u0111i\u1EC3m", line: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng", circle: "m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n", curve: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng/\u0111\u01B0\u1EDDng tr\xF2n", obj: "m\u1ED9t \u0111\u1ED1i t\u01B0\u1EE3ng", pl: "m\u1ED9t \u0111i\u1EC3m ho\u1EB7c \u0111\u01B0\u1EDDng th\u1EB3ng", "...point": "m\u1ED9t \u0111i\u1EC3m" }[t2] || t2;
-  }
-  function markDistance(v, P2, px) {
-    if (v.kind === "angle") return Math.abs(dist(v.B, P2) - 20 * px);
-    if (v.kind === "segmark") return dist(mid(v.A, v.B), P2);
-    if (v.kind === "polygon") return pointInPolygon(P2, v.pts) ? 0 : Infinity;
-    return Infinity;
-  }
-  function pointInPolygon(P2, pts) {
-    let inside = false;
-    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-      const a = pts[i], b = pts[j];
-      if (a.y > P2.y !== b.y > P2.y && P2.x < (b.x - a.x) * (P2.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
-    }
-    return inside;
-  }
-
-  // src/core/builder.js
-  var Builder = class {
-    constructor(doc2 = emptyDoc()) {
-      this.doc = doc2;
-    }
-    /** Thêm một bước; trả về id. */
-    add(type, args = [], params = void 0, name2 = void 0, extra = {}) {
-      const def = STEP_TYPES[type];
-      if (!def) throw new Error("Lo\u1EA1i b\u01B0\u1EDBc kh\xF4ng r\xF5: " + type);
-      const id = newId(this.doc);
-      const kind = def.kind === "same" ? kinds(this.doc).get(args[0]) : def.kind;
-      const step = { id, type, args: [...args] };
-      if (params && Object.keys(params).length) step.params = { ...params };
-      if (kind !== "mark") step.name = name2 || nextName(this.doc, kind);
-      Object.assign(step, extra);
-      this.doc.steps.push(step);
-      return id;
-    }
-    point(x, y, name2) {
-      return this.add("free_point", [], { x, y }, name2);
-    }
-  };
-
-  // src/core/examples.js
-  var triangle = (b) => {
-    const A = b.point(-0.6, 3.4, "A"), B = b.point(-3.4, -1.6, "B"), C2 = b.point(3.6, -1.6, "C");
-    b.add("segment", [A, B]);
-    b.add("segment", [B, C2]);
-    b.add("segment", [C2, A]);
-    return [A, B, C2];
-  };
-  var EXAMPLES = {
-    euler_line: {
-      title: "\u0110\u01B0\u1EDDng th\u1EB3ng Euler",
-      build() {
-        const b = new Builder();
-        const [A, B, C2] = triangle(b);
-        b.add("circumcircle", [A, B, C2]);
-        b.add("circumcenter", [A, B, C2], {}, "O");
-        b.add("centroid", [A, B, C2], {}, "G");
-        b.add("orthocenter", [A, B, C2], {}, "H");
-        return b.doc;
-      }
-    },
-    nine_point: {
-      title: "\u0110\u01B0\u1EDDng tr\xF2n Euler (9 \u0111i\u1EC3m)",
-      build() {
-        const b = new Builder();
-        const [A, B, C2] = triangle(b);
-        const H = b.add("orthocenter", [A, B, C2], {}, "H");
-        const D2 = b.add("altitude_foot", [A, B, C2], {}, "D");
-        const E = b.add("altitude_foot", [B, C2, A], {}, "E");
-        const F = b.add("altitude_foot", [C2, A, B], {}, "F");
-        b.add("segment", [A, D2], {}, void 0, { style: { dash: true } });
-        b.add("segment", [B, E], {}, void 0, { style: { dash: true } });
-        b.add("segment", [C2, F], {}, void 0, { style: { dash: true } });
-        const M12 = b.add("midpoint", [B, C2], {}, "M");
-        const M22 = b.add("midpoint", [C2, A], {}, "K");
-        const M32 = b.add("midpoint", [A, B], {}, "L");
-        b.add("midpoint", [A, H], {}, "X");
-        b.add("midpoint", [B, H], {}, "Y");
-        b.add("midpoint", [C2, H], {}, "Z");
-        b.add("circle_3pts", [M12, M22, M32], {}, "\u03C9", { style: { color: "#7e22ce" } });
-        return b.doc;
-      }
-    },
-    simson: {
-      title: "\u0110\u01B0\u1EDDng th\u1EB3ng Simson",
-      build() {
-        const b = new Builder();
-        const A = b.point(-0.6, 3.4, "A"), B = b.point(-3.4, -1.6, "B"), C2 = b.point(3.6, -1.6, "C");
-        const a = b.add("line", [B, C2]), bb = b.add("line", [C2, A]), c = b.add("line", [A, B]);
-        const w = b.add("circumcircle", [A, B, C2]);
-        const P2 = b.add("point_on", [w], { t: 2.2 }, "P");
-        b.add("projection", [P2, a], {}, "D");
-        b.add("projection", [P2, bb], {}, "E");
-        b.add("projection", [P2, c], {}, "F");
-        return b.doc;
-      }
-    },
-    miquel: {
-      title: "\u0110\u1ECBnh l\xFD Miquel",
-      build() {
-        const b = new Builder();
-        const [A, B, C2] = triangle(b);
-        const sAB = b.doc.steps[3].id, sBC = b.doc.steps[4].id, sCA = b.doc.steps[5].id;
-        const D2 = b.add("point_on", [sBC], { t: 0.4 }, "D");
-        const E = b.add("point_on", [sCA], { t: 0.35 }, "E");
-        const F = b.add("point_on", [sAB], { t: 0.55 }, "F");
-        const w1 = b.add("circle_3pts", [A, E, F]);
-        const w2 = b.add("circle_3pts", [B, F, D2]);
-        b.add("circle_3pts", [C2, D2, E]);
-        b.add("intersection_other", [w1, w2, F], {}, "M");
-        return b.doc;
-      }
-    },
-    dense: {
-      title: "H\xECnh d\xE0y (m\xF4 ph\u1ECFng \u0111\u1EC1 VMO, d\xF9ng \u0111o hi\u1EC7u n\u0103ng)",
-      build() {
-        const b = new Builder();
-        const A = b.point(0.6, 3.6, "A"), B = b.point(-1.4, -0.6, "B"), C2 = b.point(2.4, -0.6, "C");
-        const BC = b.add("line", [B, C2]);
-        b.add("segment", [A, B]);
-        b.add("segment", [A, C2]);
-        const eA = b.add("angle_bisector", [B, A, C2], { external: true }, void 0, { hidden: true });
-        const eB = b.add("angle_bisector", [A, B, C2], { external: true }, void 0, { hidden: true });
-        const eC = b.add("angle_bisector", [A, C2, B], { external: true }, void 0, { hidden: true });
-        const IA = b.add("intersection", [eB, eC], {}, "I_A");
-        const IB = b.add("intersection", [eA, eC], {}, "I_B");
-        const IC = b.add("intersection", [eA, eB], {}, "I_C");
-        const TA = b.add("projection", [IA, BC], {}, "T");
-        const Q = b.add("projection", [IB, BC], {}, "Q");
-        const P2 = b.add("projection", [IC, BC], {}, "P");
-        b.add("circle", [IA, TA]);
-        b.add("circle", [IB, Q]);
-        b.add("circle", [IC, P2]);
-        const w = b.add("circumcircle", [A, B, C2]);
-        const I = b.add("incenter", [A, B, C2], {}, "I", { hidden: true });
-        for (const [X, Y] of [[IC, IB], [IC, B], [IC, C2], [IB, B], [IB, C2], [IA, B], [IA, C2], [A, IA], [IC, P2], [IB, Q]]) b.add("segment", [X, Y]);
-        const lBIB = b.add("line", [B, IB], {}, void 0, { hidden: true });
-        const lCIC = b.add("line", [C2, IC], {}, void 0, { hidden: true });
-        const U = b.add("intersection_other", [lBIB, w, B], {}, "U");
-        const V = b.add("intersection_other", [lCIC, w, C2], {}, "V");
-        const XA = b.add("midpoint", [I, IA], {}, "X_A");
-        const XB = b.add("midpoint", [I, IB], {}, "X_B");
-        const XC = b.add("midpoint", [I, IC], {}, "X_C");
-        const sUV = b.add("segment", [U, V]);
-        const PA = b.add("projection", [A, sUV], {}, "P_A");
-        const PB = b.add("midpoint", [B, U], {}, "P_B");
-        const PC = b.add("midpoint", [C2, V], {}, "P_C");
-        const Bp = b.add("reflect", [B, lCIC], {}, "B'");
-        const Cp = b.add("reflect", [C2, lBIB], {}, "C'");
-        for (const [X, Y] of [
-          [A, U],
-          [A, V],
-          [IC, U],
-          [IB, V],
-          [V, IB],
-          [U, IC],
-          [A, XA],
-          [B, XB],
-          [C2, XC],
-          [PB, PC],
-          [PA, XA],
-          [XB, XC],
-          [B, Bp],
-          [C2, Cp],
-          [Cp, IA],
-          [Bp, IA],
-          [C2, Cp],
-          [B, PC],
-          [C2, PB],
-          [V, XB],
-          [U, XC],
-          [IA, U],
-          [IA, V],
-          [PB, XA],
-          [PC, XA]
-        ]) b.add("segment", [X, Y]);
-        const sAB = b.doc.steps[4].id, sAC = b.doc.steps[5].id;
-        const tp = [];
-        for (const X of [IA, IB, IC]) for (const l of [sAB, sAC]) tp.push(b.add("projection", [X, l]));
-        const mids = [[B, C2], [C2, A], [A, B]].map(([X, Y]) => b.add("midpoint", [X, Y]));
-        b.add("segment", [tp[0], tp[1]]);
-        b.add("segment", [mids[0], mids[1]]);
-        b.add("segment", [mids[1], mids[2]]);
-        b.add("nine_point_circle", [IA, IB, IC], {}, void 0, { hidden: true });
-        b.add("circle_3pts", [U, V, I]);
-        return b.doc;
-      }
-    }
-  };
-
-  // src/core/index.js
-  var core_exports = {};
-  __export(core_exports, {
-    FORMAT: () => FORMAT,
-    FREE_PARAM_TYPES: () => FREE_PARAM_TYPES,
-    STEP_TYPES: () => STEP_TYPES,
-    VERSION: () => VERSION,
-    argAccepts: () => argAccepts,
-    clone: () => clone,
-    computeStep: () => computeStep,
-    dependents: () => dependents,
-    describe: () => describe,
-    emptyDoc: () => emptyDoc,
-    evaluate: () => evaluate,
-    frames: () => frames,
-    geom: () => geom_exports,
-    indexOf: () => indexOf,
-    kinds: () => kinds,
-    makeUpdater: () => makeUpdater,
-    newId: () => newId,
-    nextName: () => nextName,
-    paramsOf: () => paramsOf,
-    removeSteps: () => removeSteps,
-    stepById: () => stepById,
-    validate: () => validate
-  });
-
-  // src/io/codec.js
-  var codec_exports = {};
-  __export(codec_exports, {
-    compactDoc: () => compactDoc,
-    decodeDoc: () => decodeDoc,
-    encodeDoc: () => encodeDoc,
-    parseDocJSON: () => parseDocJSON
-  });
-  function toB64url(bytes) {
-    let bin2 = "";
-    for (let i = 0; i < bytes.length; i += 32768) bin2 += String.fromCharCode(...bytes.subarray(i, i + 32768));
-    return btoa(bin2).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  }
-  function fromB64url(s) {
-    const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
-    const bin2 = atob(b64);
-    const out = new Uint8Array(bin2.length);
-    for (let i = 0; i < bin2.length; i++) out[i] = bin2.charCodeAt(i);
-    return out;
-  }
-  async function pipe(bytes, stream) {
-    const res = new Response(new Blob([bytes]).stream().pipeThrough(stream));
-    return new Uint8Array(await res.arrayBuffer());
-  }
-  function compactDoc(doc2) {
-    const out = { format: doc2.format, version: doc2.version };
-    if (doc2.title) out.title = doc2.title;
-    if (doc2.view) out.view = doc2.view;
-    if (doc2.images && doc2.images.length) out.images = doc2.images;
-    if (doc2.boxes && doc2.boxes.length) out.boxes = doc2.boxes;
-    if (doc2.imageData && Object.keys(doc2.imageData).length) out.imageData = doc2.imageData;
-    out.steps = doc2.steps.map((s) => {
-      const t2 = { id: s.id, type: s.type, args: s.args };
-      for (const k of ["params", "name", "style", "hidden", "joinPrev"]) {
-        const v = s[k];
-        if (v === void 0 || v === false || typeof v === "object" && v && !Array.isArray(v) && !Object.keys(v).length) continue;
-        t2[k] = v;
-      }
-      return t2;
-    });
-    return out;
-  }
-  async function encodeDoc(doc2) {
-    const json = JSON.stringify(compactDoc(doc2));
-    const bytes = new TextEncoder().encode(json);
-    if (typeof CompressionStream !== "undefined") {
-      try {
-        return "z" + toB64url(await pipe(bytes, new CompressionStream("deflate-raw")));
-      } catch {
-      }
-    }
-    return "j" + toB64url(bytes);
-  }
-  async function decodeDoc(code) {
-    let bytes;
-    try {
-      if (code[0] === "z") bytes = await pipe(fromB64url(code.slice(1)), new DecompressionStream("deflate-raw"));
-      else if (code[0] === "j") bytes = fromB64url(code.slice(1));
-      else throw new Error();
-    } catch {
-      throw new Error("Link h\xECnh b\u1ECB h\u1ECFng ho\u1EB7c b\u1ECB c\u1EAFt c\u1EE5t.");
-    }
-    return parseDocJSON(new TextDecoder().decode(bytes));
-  }
-  function parseDocJSON(text2) {
-    let doc2;
-    try {
-      doc2 = JSON.parse(text2);
-    } catch {
-      throw new Error("T\u1EC7p kh\xF4ng ph\u1EA3i JSON h\u1EE3p l\u1EC7.");
-    }
-    const errs = validate(doc2);
-    if (errs.length) throw new Error("H\xECnh kh\xF4ng h\u1EE3p l\u1EC7:\n" + errs.slice(0, 6).join("\n"));
-    return doc2;
-  }
-
-  // src/ui/share.js
-  init_dialog();
-  var DRAFT_KEY = "hinh-hoc-dong:nhap";
-  var TABS_KEY = "hinh-hoc-dong:nhap-tab";
-  var roundBox = (bb) => bb.map((v) => Math.round(v * 1e3) / 1e3);
-  function docWithView(app, withImages = true) {
-    const doc2 = { ...app.doc, view: { bbox: roundBox(app.view.getBoundingBox()) } };
-    return withImages ? app.withImageData(doc2) : doc2;
-  }
-  var draftWarned = false;
-  function saveDraft(app) {
-    try {
-      app.stashTab();
-      const tabs = app.tabs.map((t2, i) => app.withImageData(i === app.tabIdx ? docWithView(app, false) : { ...t2.doc, ...t2.bbox ? { view: { bbox: roundBox(t2.bbox) } } : {} }));
-      localStorage.setItem(TABS_KEY, JSON.stringify({ active: app.tabIdx, tabs }));
-    } catch {
-      if (!draftWarned && app.tabs.some((t2) => (t2.doc.images || []).length)) {
-        draftWarned = true;
-        toast("Kh\xF4ng l\u01B0u nh\xE1p \u0111\u01B0\u1EE3c (\u1EA3nh qu\xE1 l\u1EDBn) \u2013 h\xE3y l\u01B0u t\u1EC7p (Ctrl+S)", 5e3);
-      }
-    }
-  }
-  function loadDraft() {
-    try {
-      const t2 = localStorage.getItem(TABS_KEY);
-      if (t2) {
-        const d = JSON.parse(t2);
-        const tabs = (d.tabs || []).map((x) => {
-          try {
-            return parseDocJSON(JSON.stringify(x));
-          } catch {
-            return null;
-          }
-        }).filter(Boolean);
-        if (tabs.length) return { tabs, active: Math.min(Math.max(0, d.active | 0), tabs.length - 1) };
-      }
-      const old = localStorage.getItem(DRAFT_KEY);
-      return old ? { tabs: [parseDocJSON(old)], active: 0 } : null;
-    } catch {
-      return null;
-    }
-  }
-  async function shareLink(app) {
-    const code = await encodeDoc(docWithView(app, false));
-    if ((app.doc.images || []).length) toast("Link kh\xF4ng ch\u1EE9a \u1EA3nh \u0111\xE3 d\xE1n v\xE0o h\xECnh \u2013 mu\u1ED1n g\u1EEDi c\u1EA3 \u1EA3nh th\xEC l\u01B0u t\u1EC7p (Ctrl+S)", 6e3);
-    const base2 = location.href.split("#")[0];
-    const url = `${base2}#h=${code}`;
-    try {
-      history.replaceState(null, "", "#h=" + code);
-    } catch {
-    }
-    const warn = location.protocol === "file:" ? '<div class="modal-body">\u26A0 Trang \u0111ang m\u1EDF t\u1EEB t\u1EC7p tr\xEAn m\xE1y (file://). Link ch\u1EC9 d\xF9ng \u0111\u01B0\u1EE3c tr\xEAn m\xE1y n\xE0y; h\xE3y d\xF9ng b\u1EA3n tr\xEAn GitHub Pages \u0111\u1EC3 g\u1EEDi cho ng\u01B0\u1EDDi kh\xE1c.</div>' : "";
-    await textDialog("Link chia s\u1EBB h\xECnh", url, `<div class="modal-body">G\u1EEDi link n\xE0y: ng\u01B0\u1EDDi nh\u1EADn m\u1EDF ra s\u1EBD th\u1EA5y \u0111\xFAng h\xECnh (to\xE0n b\u1ED9 h\xECnh n\u1EB1m trong link, kh\xF4ng c\u1EA7n m\xE1y ch\u1EE7). \u0110\u1ED9 d\xE0i: ${url.length} k\xFD t\u1EF1.</div>${warn}`);
-  }
-  function saveFile(app) {
-    const doc2 = compactDoc(docWithView(app));
-    const text2 = JSON.stringify(doc2, null, 1);
-    const blob = new Blob([text2], { type: "application/json" });
-    const a = document.createElement("a");
-    a.download = `${fileSafeName(app.doc.title || "hinh")}.json`;
-    a.href = URL.createObjectURL(blob);
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(a.href);
-      a.remove();
-    }, 1e3);
-  }
-  function openFile(app) {
-    const inp = document.createElement("input");
-    inp.type = "file";
-    inp.accept = ".json,application/json";
-    inp.onchange = async () => {
-      const f = inp.files[0];
-      if (!f) return;
-      try {
-        const doc2 = parseDocJSON(await f.text());
-        if (!doc2.title) doc2.title = f.name.replace(/\.json$/i, "");
-        app.openDoc(doc2);
-        if (!doc2.view) app.zoomFit();
-        toast(`\u0110\xE3 m\u1EDF "${f.name}"`);
-      } catch (e) {
-        await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c t\u1EC7p", escapeBr(e.message), "OK");
-      }
-    };
-    inp.click();
-  }
-  function fileSafeName(title) {
-    const t2 = title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-    return t2 || "hinh";
-  }
-  var escapeBr = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
-  async function initShare(app) {
-    const m = /[#&]h=([A-Za-z0-9_-]+)/.exec(location.hash);
-    const d = loadDraft();
-    if (d && d.tabs.some((x) => x.steps.length || (x.images || []).length)) {
-      app.loadDoc(d.tabs[0]);
-      for (const x of d.tabs.slice(1)) app.newTab(x);
-      app.switchTab(d.active);
-      if (!m) toast("\u0110\xE3 kh\xF4i ph\u1EE5c " + (d.tabs.length > 1 ? `${d.tabs.length} h\xECnh \u0111ang m\u1EDF l\u1EA7n tr\u01B0\u1EDBc` : "b\u1EA3n nh\xE1p l\u1EA7n tr\u01B0\u1EDBc"));
-    }
-    if (m) {
-      try {
-        const doc2 = await decodeDoc(m[1]);
-        const same = app.tabs.findIndex((t2, i) => JSON.stringify((i === app.tabIdx ? app.doc : t2.doc).steps) === JSON.stringify(doc2.steps));
-        if (same >= 0) app.switchTab(same);
-        else {
-          app.openDoc(doc2);
-          if (!doc2.view) app.zoomFit();
-        }
-        toast("\u0110\xE3 m\u1EDF h\xECnh t\u1EEB link");
-      } catch (e) {
-        toast(e.message, 5e3);
-      }
-    }
-    let timer = null;
-    app.on("change", () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => saveDraft(app), 300);
-    });
-    app.view.onViewChange(() => {
-      clearTimeout(timer);
-      timer = setTimeout(() => saveDraft(app), 600);
-    });
-    window.addEventListener("beforeunload", () => saveDraft(app));
-  }
-
-  // src/explore/knowledge.js
-  var UF = class {
-    constructor() {
-      this.p = /* @__PURE__ */ new Map();
-    }
-    find(x) {
-      if (!this.p.has(x)) this.p.set(x, x);
-      let r = x;
-      while (this.p.get(r) !== r) r = this.p.get(r);
-      while (this.p.get(x) !== r) {
-        const n = this.p.get(x);
-        this.p.set(x, r);
-        x = n;
-      }
-      return r;
-    }
-    union(a, b) {
-      const ra = this.find(a), rb = this.find(b);
-      if (ra !== rb) this.p.set(ra, rb);
-      return ra !== rb;
-    }
-  };
-  var Knowledge = class {
-    /**
-     * @param doc  tài liệu
-     * @param rep  hàm id điểm → id đại diện (các điểm luôn trùng nhau gộp làm một)
-     */
-    constructor(doc2, rep = (x) => x) {
-      this.rep = rep;
-      this.lines = [];
-      this.circles = [];
-      this.dir = new UF();
-      this.perps = [];
-      this.tans = [];
-      const k = kinds(doc2);
-      this.kind = k;
-      for (const s of doc2.steps) {
-        const def = STEP_TYPES[s.type];
-        if (!def) continue;
-        const kind = k.get(s.id);
-        if (kind === "line") {
-          const i = this.newLine();
-          this.lines[i].objs.add(s.id);
-          if (s.type === "perp_bisector") this.addTag(i, "PB:" + sortKey(s.args.map(rep)));
-          if (s.type === "angle_bisector" && !(s.params && s.params.external)) this.addTag(i, abTag(s.args.map(rep)));
-        } else if (kind === "circle") {
-          const i = this.newCircle();
-          this.circles[i].objs.add(s.id);
-          if (s.type === "incircle") this.circles[i].tags.add("IC:" + sortKey(s.args.map(rep)));
-          if (s.type === "circumcircle" || s.type === "circle_3pts") for (const a of s.args) this.circles[i].pts.add(rep(a));
-        }
-      }
-      for (const s of doc2.steps) {
-        const def = STEP_TYPES[s.type];
-        if (!def || !def.facts) continue;
-        let facts = [];
-        try {
-          facts = def.facts(s, s.args.map((a) => k.get(a)), doc2) || [];
-        } catch {
-          facts = [];
-        }
-        for (const f of facts) this.addFact(f);
-      }
-      this.saturate();
-    }
-    newLine() {
-      this.lines.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
-      return this.lines.length - 1;
-    }
-    newCircle() {
-      this.circles.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
-      return this.circles.length - 1;
-    }
-    addTag(i, tag) {
-      this.lines[i].tags.add(tag);
-    }
-    /** Chỉ số thực thể đường thẳng ứng với tham chiếu (id đối tượng hoặc tham chiếu ảo). */
-    lineOf(ref) {
-      const L = this.lines;
-      if (typeof ref === "string") return L.findIndex((e) => e.alive && e.objs.has(ref));
-      if (ref.L) {
-        const [a, b] = ref.L.map(this.rep);
-        if (a === b) return -1;
-        let i = L.findIndex((e) => e.alive && e.pts.has(a) && e.pts.has(b));
-        if (i < 0) {
-          i = this.newLine();
-          L[i].pts.add(a);
-          L[i].pts.add(b);
-        }
-        return i;
-      }
-      if (ref.PB) return this.tagged("PB:" + sortKey(ref.PB.map(this.rep)), () => {
-        const j = this.lineOf({ L: ref.PB });
-        return j;
-      });
-      if (ref.AB) return this.tagged(abTag(ref.AB.map(this.rep)), null, this.rep(ref.AB[1]));
-      return -1;
-    }
-    tagged(tag, perpTo, through) {
-      let i = this.lines.findIndex((e) => e.alive && e.tags.has(tag));
-      if (i < 0) {
-        i = this.newLine();
-        this.lines[i].tags.add(tag);
-        if (through) this.lines[i].pts.add(through);
-      }
-      if (perpTo) {
-        const j = perpTo();
-        if (j >= 0) this.perps.push([i, j]);
-      }
-      return i;
-    }
-    circleOf(ref) {
-      const C2 = this.circles;
-      if (typeof ref === "string") return C2.findIndex((e) => e.alive && e.objs.has(ref));
-      if (ref.C) {
-        const ps = ref.C.map(this.rep);
-        if (new Set(ps).size < 3) return -1;
-        let i = C2.findIndex((e) => e.alive && ps.every((p) => e.pts.has(p)));
-        if (i < 0) {
-          i = this.newCircle();
-          ps.forEach((p) => C2[i].pts.add(p));
-        }
-        return i;
-      }
-      if (ref.IC) {
-        const tag = "IC:" + sortKey(ref.IC.map(this.rep));
-        let i = C2.findIndex((e) => e.alive && e.tags.has(tag));
-        if (i < 0) {
-          i = this.newCircle();
-          C2[i].tags.add(tag);
-        }
-        return i;
-      }
-      return -1;
-    }
-    curveOf(ref) {
-      if (typeof ref === "string") {
-        const kd = this.kind.get(ref);
-        if (kd === "line") return { t: "L", i: this.lineOf(ref) };
-        if (kd === "circle") return { t: "C", i: this.circleOf(ref) };
-        return null;
-      }
-      if (ref.C || ref.IC) return { t: "C", i: this.circleOf(ref) };
-      return { t: "L", i: this.lineOf(ref) };
-    }
-    addFact(f) {
-      if (f.on) {
-        const P2 = this.rep(f.on[0]);
-        const c = this.curveOf(f.on[1]);
-        if (!c || c.i < 0) return;
-        (c.t === "L" ? this.lines : this.circles)[c.i].pts.add(P2);
-      } else if (f.col) {
-        const ps = [...new Set(f.col.map(this.rep))];
-        if (ps.length < 2) return;
-        const i = this.lineOf({ L: [ps[0], ps[1]] });
-        ps.forEach((p) => this.lines[i].pts.add(p));
-      } else if (f.cyc) {
-        const ps = [...new Set(f.cyc.map(this.rep))];
-        if (ps.length < 3) return;
-        const i = this.circleOf({ C: ps.slice(0, 3) });
-        ps.forEach((p) => this.circles[i].pts.add(p));
-      } else if (f.par || f.perp) {
-        const [a, b] = (f.par || f.perp).map((r) => this.lineOf(r));
-        if (a < 0 || b < 0) return;
-        if (f.par) this.dir.union(a, b);
-        else this.perps.push([a, b]);
-      } else if (f.tan) {
-        const [a, b] = f.tan.map((r) => this.curveOf(r));
-        if (a && b && a.i >= 0 && b.i >= 0) this.tans.push([a, b]);
-      }
-    }
-    mergeLine(i, j) {
-      const a = this.lines[i], b = this.lines[j];
-      for (const p of b.pts) a.pts.add(p);
-      for (const o of b.objs) a.objs.add(o);
-      for (const t2 of b.tags) a.tags.add(t2);
-      b.alive = false;
-      this.dir.union(i, j);
-      this.perps = this.perps.map(([x, y]) => [x === j ? i : x, y === j ? i : y]);
-      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "L" && c.i === j ? { t: "L", i } : c));
-      this.redirect = this.redirect || /* @__PURE__ */ new Map();
-      this.redirect.set(j, i);
-    }
-    mergeCircle(i, j) {
-      const a = this.circles[i], b = this.circles[j];
-      for (const p of b.pts) a.pts.add(p);
-      for (const o of b.objs) a.objs.add(o);
-      for (const t2 of b.tags) a.tags.add(t2);
-      b.alive = false;
-      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "C" && c.i === j ? { t: "C", i } : c));
-    }
-    saturate() {
-      for (let round3 = 0; round3 < 20; round3++) {
-        let changed = false;
-        const perpOf = /* @__PURE__ */ new Map();
-        for (const [x, y] of this.perps) {
-          const rx = this.dir.find(x), ry = this.dir.find(y);
-          if (perpOf.has(ry)) changed = this.dir.union(perpOf.get(ry), rx) || changed;
-          else perpOf.set(ry, rx);
-          if (perpOf.has(rx)) changed = this.dir.union(perpOf.get(rx), ry) || changed;
-          else perpOf.set(rx, ry);
-        }
-        const L = this.lines;
-        for (let i = 0; i < L.length; i++) {
-          if (!L[i].alive) continue;
-          for (let j = i + 1; j < L.length; j++) {
-            if (!L[j].alive) continue;
-            let common = 0;
-            for (const p of L[j].pts) if (L[i].pts.has(p)) common++;
-            const sameTag = [...L[j].tags].some((t2) => L[i].tags.has(t2));
-            if (common >= 2 || sameTag || common >= 1 && this.dir.find(i) === this.dir.find(j)) {
-              this.mergeLine(i, j);
-              changed = true;
-            }
-          }
-        }
-        const C2 = this.circles;
-        for (let i = 0; i < C2.length; i++) {
-          if (!C2[i].alive) continue;
-          for (let j = i + 1; j < C2.length; j++) {
-            if (!C2[j].alive) continue;
-            let common = 0;
-            for (const p of C2[j].pts) if (C2[i].pts.has(p)) common++;
-            const sameTag = [...C2[j].tags].some((t2) => C2[i].tags.has(t2));
-            if (common >= 3 || sameTag) {
-              this.mergeCircle(i, j);
-              changed = true;
-            }
-          }
-        }
-        if (!changed) break;
-      }
-    }
-    // ---------- truy vấn ----------
-    pointOnLineObj(P2, lineId) {
-      const i = this.lineOf(lineId);
-      return i >= 0 && this.lines[i].pts.has(this.rep(P2));
-    }
-    pointOnCircleObj(P2, cId) {
-      const i = this.circleOf(cId);
-      return i >= 0 && this.circles[i].pts.has(this.rep(P2));
-    }
-    collinear(ps) {
-      const r = ps.map(this.rep);
-      return this.lines.some((e) => e.alive && r.every((p) => e.pts.has(p)));
-    }
-    concyclic(ps) {
-      const r = ps.map(this.rep);
-      return this.circles.some((e) => e.alive && r.every((p) => e.pts.has(p)));
-    }
-    sameLine(a, b) {
-      const i = this.lineOf(a), j = this.lineOf(b);
-      return i >= 0 && i === j;
-    }
-    sameCircle(a, b) {
-      const i = this.circleOf(a), j = this.circleOf(b);
-      return i >= 0 && i === j;
-    }
-    parallel(a, b) {
-      const i = this.lineOf(a), j = this.lineOf(b);
-      return i >= 0 && j >= 0 && this.dir.find(i) === this.dir.find(j);
-    }
-    perpendicular(a, b) {
-      const i = this.lineOf(a), j = this.lineOf(b);
-      if (i < 0 || j < 0) return false;
-      const ri = this.dir.find(i), rj = this.dir.find(j);
-      return this.perps.some(([x, y]) => {
-        const rx = this.dir.find(x), ry = this.dir.find(y);
-        return rx === ri && ry === rj || rx === rj && ry === ri;
-      });
-    }
-    tangent(a, b) {
-      const ca = this.curveOf(a), cb = this.curveOf(b);
-      if (!ca || !cb) return false;
-      const eq = (u, v) => u.t === v.t && u.i === v.i;
-      return this.tans.some(([x, y]) => eq(x, ca) && eq(y, cb) || eq(x, cb) && eq(y, ca));
-    }
-  };
-  var sortKey = (arr) => [...arr].sort().join(",");
-  var abTag = ([A, V, C2]) => `AB:${V}:${sortKey([A, C2])}`;
-
-  // src/explore/explorer.js
-  var DEFAULTS = {
-    samples: 12,
-    // số cấu hình ngẫu nhiên hợp lệ cần có (ngoài cấu hình gốc)
-    maxAttempts: 150,
-    // số lần thử tối đa (cấu hình suy biến bị loại)
-    perturb: 0.3,
-    // biên độ xê dịch điểm tự do, tính theo kích thước hình
-    tol: 1e-6,
-    // dung sai TƯƠNG ĐỐI theo kích thước hình
-    minSep: 0.012,
-    // hai điểm (vốn khác nhau) gần hơn minSep·kích thước → cấu hình suy biến
-    minAngle: 4,
-    // tam giác có góc < minAngle độ → suy biến
-    maxRadius: 25,
-    // đường tròn bán kính > maxRadius·kích thước → gần suy biến (3 điểm gần thẳng hàng)
-    seed: 12345,
-    maxPoints: 90
-    // giới hạn để tránh bùng nổ tổ hợp
-  };
-  function rng(seed) {
-    let a = seed >>> 0;
-    return () => {
-      a = a + 1831565813 >>> 0;
-      let t2 = a;
-      t2 = Math.imul(t2 ^ t2 >>> 15, t2 | 1);
-      t2 ^= t2 + Math.imul(t2 ^ t2 >>> 7, t2 | 61);
-      return ((t2 ^ t2 >>> 14) >>> 0) / 4294967296;
-    };
-  }
-  function figureScale(vals, pointIds) {
-    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-    for (const id of pointIds) {
-      const v = vals.get(id);
-      if (!v) continue;
-      x1 = Math.min(x1, v.x);
-      x2 = Math.max(x2, v.x);
-      y1 = Math.min(y1, v.y);
-      y2 = Math.max(y2, v.y);
-    }
-    const s = Math.hypot(x2 - x1, y2 - y1);
-    return Number.isFinite(s) && s > 1e-12 ? s : 1;
-  }
-  var TRIANGLE_TYPES = /* @__PURE__ */ new Set([
-    "circumcenter",
-    "orthocenter",
-    "incenter",
-    "centroid",
-    "nine_point_center",
-    "altitude_foot",
-    "incircle_touch",
-    "arc_midpoint",
-    "circle_3pts",
-    "circumcircle",
-    "incircle",
-    "nine_point_circle",
-    "angle_bisector",
-    "excenter",
-    "excircle",
-    "lemoine",
-    "kosnita",
-    "symmedian_foot",
-    "mixtilinear"
-  ]);
-  function findTriangles(doc2, kindOf, { strict = false, drawn = false } = {}) {
-    const tri2 = /* @__PURE__ */ new Map();
-    const addTri = (ids) => {
-      if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === "point")) return;
-      const key = [...ids].sort().join(",");
-      if (!tri2.has(key)) tri2.set(key, ids);
-    };
-    for (const s of doc2.steps)
-      if (!drawn && TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === "circle_3pts" || s.type === "angle_bisector"))) addTri(s.args);
-    const adj = /* @__PURE__ */ new Map();
-    const link = (a, b) => {
-      if (!adj.has(a)) adj.set(a, /* @__PURE__ */ new Set());
-      if (!adj.has(b)) adj.set(b, /* @__PURE__ */ new Set());
-      adj.get(a).add(b);
-      adj.get(b).add(a);
-    };
-    for (const s of doc2.steps) if (["line", "segment", "ray"].includes(s.type)) link(s.args[0], s.args[1]);
-    for (const [a, nb] of adj) for (const b of nb) for (const c of nb) if (a < b && b < c && adj.get(b).has(c)) addTri([a, b, c]);
-    return [...tri2.values()];
-  }
-  function randomOverrides(doc2, base2, scale, rand, perturb) {
-    const ov = /* @__PURE__ */ new Map();
-    for (const s of doc2.steps) {
-      const p = paramsOf(s);
-      if (s.type === "free_point") {
-        const r = perturb * scale * Math.sqrt(rand()), a = 2 * Math.PI * rand();
-        ov.set(s.id, { x: p.x + r * Math.cos(a), y: p.y + r * Math.sin(a) });
-      } else if (s.type === "point_on") {
-        const host = base2.get(s.args[0]);
-        if (!host) continue;
-        let t2 = p.t;
-        if (host.kind === "circle") t2 += (rand() * 2 - 1) * 0.9;
-        else if (host.sub === "segment") t2 = Math.min(0.92, Math.max(0.08, t2 + (rand() * 2 - 1) * 0.3));
-        else if (host.sub === "ray") t2 = Math.max(0.05, t2 * Math.exp((rand() * 2 - 1) * 0.5));
-        else t2 += (rand() * 2 - 1) * 0.4;
-        ov.set(s.id, { t: t2 });
-      }
-    }
-    return ov;
-  }
-  function degenerate(doc2, vals, ctx) {
-    const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments, tangentAtBase } = ctx;
-    const scale = figureScale(vals, pointIds);
-    for (const id of [...pointIds, ...curveIds]) if (!vals.get(id)) return "kh\xF4ng x\xE1c \u0111\u1ECBnh";
-    const sep = opts.minSep * scale;
-    for (let i = 0; i < pointIds.length; i++) {
-      const a = vals.get(pointIds[i]);
-      for (let j = i + 1; j < pointIds.length; j++) {
-        if (sameClassPairs.has(pointIds[i] + "|" + pointIds[j])) continue;
-        const d = dist(a, vals.get(pointIds[j]));
-        if (d < sep && (!baseDist || d < 0.3 * baseDist[i][j])) return "\u0111i\u1EC3m g\u1EA7n tr\xF9ng";
-      }
-    }
-    const sinMin = Math.sin(opts.minAngle * Math.PI / 180);
-    const ang = (P2, Q, R) => Math.abs(cross(sub(Q, P2), sub(R, P2))) / (dist(P2, Q) * dist(P2, R) + 1e-300);
-    for (const t2 of triangles) {
-      const [A, B, C2] = t2.map((a) => vals.get(a));
-      if (Math.min(ang(A, B, C2), ang(B, C2, A), ang(C2, A, B)) < sinMin) return "tam gi\xE1c d\u1EB9t";
-    }
-    if (onSegments) {
-      for (const [pid, sid] of onSegments) if (!insideSegment(vals.get(pid), vals.get(sid))) return "ra ngo\xE0i \u0111o\u1EA1n th\u1EB3ng";
-    }
-    if (baseShape) for (let i = 0; i < shapeTriangles.length; i++) {
-      const sh = triShape(shapeTriangles[i].map((a) => vals.get(a)));
-      if (baseShape[i].some((x, j) => x !== 0 && x !== sh[j])) return "\u0111\u1ED5i d\u1EA1ng tam gi\xE1c";
-    }
-    for (const s of doc2.steps) {
-      const v = vals.get(s.id);
-      if (v && v.kind === "circle" && v.r > opts.maxRadius * scale) return "\u0111\u01B0\u1EDDng tr\xF2n qu\xE1 l\u1EDBn";
-      if (s.type === "intersection" || s.type === "intersection_other") {
-        const r = intersect(vals.get(s.args[0]), vals.get(s.args[1]));
-        if (r.length === 2 && dist(r[0], r[1]) < sep * 2 && !(tangentAtBase && tangentAtBase.has(s.id))) return "g\u1EA7n ti\u1EBFp x\xFAc";
-        if (r.length === 1 && kindOf.get(s.args[0]) === "line" && kindOf.get(s.args[1]) === "line") {
-          const l1 = vals.get(s.args[0]), l2 = vals.get(s.args[1]);
-          if (Math.abs(cross(unit(l1.d), unit(l2.d))) < sinMin) return "hai \u0111\u01B0\u1EDDng g\u1EA7n song song";
-        }
-      }
-    }
-    return null;
-  }
-  var insideSegment = (P2, l) => {
-    const t2 = lineParam(P2, l);
-    return t2 > -1e-9 && t2 < 1 + 1e-9;
-  };
-  function pointsOnSegments(doc2, base2) {
-    const out = [];
-    const typeOf = new Map(doc2.steps.map((s) => [s.id, s.type]));
-    for (const s of doc2.steps) {
-      if (s.type !== "intersection" && s.type !== "intersection_other") continue;
-      const P2 = base2.get(s.id);
-      if (!P2) continue;
-      for (const a of s.args.slice(0, 2)) if (typeOf.get(a) === "segment" && base2.get(a) && insideSegment(P2, base2.get(a))) out.push([s.id, a]);
-    }
-    return out;
-  }
-  function triShape([A, B, C2]) {
-    const area = cross(sub(B, A), sub(C2, A));
-    const cosAt = (P2, Q, R) => dot(sub(Q, P2), sub(R, P2)) / (dist(P2, Q) * dist(P2, R) + 1e-300);
-    const sg = (c) => Math.abs(c) < 0.05 ? 0 : Math.sign(c);
-    return [Math.sign(area), sg(cosAt(A, B, C2)), sg(cosAt(B, C2, A)), sg(cosAt(C2, A, B))];
-  }
-  var T3 = {
-    coincide: (P2, Q, e) => dist(P2, Q) < e,
-    onLine: (P2, l, e) => distPointLine(P2, l) < e,
-    onCircle: (P2, c, e) => Math.abs(dist(P2, c.c) - c.r) < e,
-    collinear: (P2, Q, R, e) => distPointLine(R, lineThrough(P2, Q)) < e,
-    parallel: (l1, l2, e, s) => Math.abs(cross(unit(l1.d), unit(l2.d))) < e / s,
-    perpendicular: (l1, l2, e, s) => Math.abs(dot(unit(l1.d), unit(l2.d))) < e / s,
-    sameLine: (l1, l2, e, s) => T3.parallel(l1, l2, e, s) && distPointLine(l2.p, l1) < e,
-    sameCircle: (c1, c2, e) => dist(c1.c, c2.c) < e && Math.abs(c1.r - c2.r) < e,
-    tangentLC: (l, c, e) => Math.abs(distPointLine(c.c, l) - c.r) < e,
-    tangentCC: (c1, c2, e) => {
-      const d = dist(c1.c, c2.c);
-      if (d < e) return false;
-      return Math.abs(d - (c1.r + c2.r)) < e || Math.abs(d - Math.abs(c1.r - c2.r)) < e;
-    }
-  };
-  function explore(doc2, options = {}) {
-    const opts = { ...DEFAULTS, ...options };
-    const t0 = Date.now();
-    const kindOf = kinds(doc2);
-    const base2 = evaluate(doc2);
-    const pointIds = [], lineIds = [], circleIds = [];
-    for (const s of doc2.steps) {
-      if (!base2.get(s.id)) continue;
-      const kd = kindOf.get(s.id);
-      if (kd === "point") pointIds.push(s.id);
-      else if (kd === "line") lineIds.push(s.id);
-      else if (kd === "circle") circleIds.push(s.id);
-    }
-    if (pointIds.length > opts.maxPoints) pointIds.length = opts.maxPoints;
-    const curveIds = [...lineIds, ...circleIds];
-    const scale0 = figureScale(base2, pointIds);
-    const sameClassPairs = /* @__PURE__ */ new Set();
-    for (let i = 0; i < pointIds.length; i++)
-      for (let j = i + 1; j < pointIds.length; j++)
-        if (dist(base2.get(pointIds[i]), base2.get(pointIds[j])) < opts.tol * scale0) sameClassPairs.add(pointIds[i] + "|" + pointIds[j]);
-    const rand = rng(opts.seed);
-    const triangles = findTriangles(doc2, kindOf);
-    const baseDist = pointIds.map((a) => pointIds.map((b) => dist(base2.get(a), base2.get(b))));
-    const shapeTriangles = findTriangles(doc2, kindOf, { drawn: true });
-    const baseShape = shapeTriangles.map((t2) => t2.every((a) => base2.get(a)) ? triShape(t2.map((a) => base2.get(a))) : [0, 0, 0, 0]);
-    const tangentAtBase = new Set(doc2.steps.filter((s) => (s.type === "intersection" || s.type === "intersection_other") && (() => {
-      const r = intersect(base2.get(s.args[0]), base2.get(s.args[1]));
-      return r.length === 2 && dist(r[0], r[1]) < 1e-6 * scale0;
-    })()).map((s) => s.id));
-    const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments: pointsOnSegments(doc2, base2), tangentAtBase };
-    const samples = [{ vals: base2, scale: scale0 }];
-    let attempts = 0;
-    const rejected = {};
-    const baseDegenerate = degenerate(doc2, base2, { ...ctx, baseDist: null, baseShape: null, onSegments: null });
-    while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
-      attempts++;
-      const ov = randomOverrides(doc2, base2, scale0, rand, opts.perturb);
-      const vals = evaluate(doc2, ov);
-      const why = degenerate(doc2, vals, ctx);
-      if (why) {
-        rejected[why] = (rejected[why] || 0) + 1;
-        continue;
-      }
-      samples.push({ vals, scale: figureScale(vals, pointIds) });
-    }
-    const all = (fn) => samples.every(({ vals, scale }) => fn(vals, opts.tol * scale, scale));
-    const repOf = new Map(pointIds.map((id) => [id, id]));
-    const classes = [];
-    for (const id of pointIds) {
-      if (repOf.get(id) !== id) continue;
-      const cls = [id];
-      for (const j of pointIds) {
-        if (j === id || repOf.get(j) !== j || !sameClassPairs.has(id + "|" + j)) continue;
-        if (all((v, e) => T3.coincide(v.get(id), v.get(j), e))) {
-          cls.push(j);
-          repOf.set(j, id);
-        }
-      }
-      if (cls.length > 1) classes.push(cls);
-    }
-    const rep = (id) => repOf.get(id) || id;
-    const reps = pointIds.filter((id) => rep(id) === id);
-    const know = new Knowledge(doc2, rep);
-    const special = recognizeSpecial(doc2, samples, reps, circleIds, kindOf, opts, findTriangles(doc2, kindOf, { strict: true }));
-    const rel2 = [];
-    const name2 = (id) => stepById(doc2, id)?.name || id;
-    const desc = (id) => describe(doc2, id);
-    const list = (ids) => ids.map(name2).join(", ");
-    for (const cls of classes) rel2.push({ type: "coincide", ids: cls, text: `${cls.map(name2).join(" \u2261 ")} (tr\xF9ng nhau)` });
-    const lineRep = new Map(lineIds.map((id) => [id, id]));
-    for (let i = 0; i < lineIds.length; i++) {
-      const a = lineIds[i];
-      if (lineRep.get(a) !== a) continue;
-      for (let j = i + 1; j < lineIds.length; j++) {
-        const b = lineIds[j];
-        if (lineRep.get(b) !== b) continue;
-        if (all((v, e, s) => T3.sameLine(v.get(a), v.get(b), e, s))) {
-          lineRep.set(b, a);
-          if (!know.sameLine(a, b)) rel2.push({ type: "same_line", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
-        }
-      }
-    }
-    const circRep = new Map(circleIds.map((id) => [id, id]));
-    for (let i = 0; i < circleIds.length; i++) {
-      const a = circleIds[i];
-      if (circRep.get(a) !== a) continue;
-      for (let j = i + 1; j < circleIds.length; j++) {
-        const b = circleIds[j];
-        if (circRep.get(b) !== b) continue;
-        if (all((v, e) => T3.sameCircle(v.get(a), v.get(b), e))) {
-          circRep.set(b, a);
-          if (!know.sameCircle(a, b)) rel2.push({ type: "same_circle", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
-        }
-      }
-    }
-    const lines = lineIds.filter((id) => lineRep.get(id) === id);
-    const circles = circleIds.filter((id) => circRep.get(id) === id);
-    const v0 = base2, e0 = opts.tol * scale0;
-    const onLineSets = /* @__PURE__ */ new Map();
-    for (const l of lines) {
-      const on = reps.filter((P2) => T3.onLine(v0.get(P2), v0.get(l), e0) && all((v, e) => T3.onLine(v.get(P2), v.get(l), e)));
-      onLineSets.set(l, on);
-      const fresh = on.filter((P2) => !lineIdsSameAs(l, lineIds, lineRep).some((ll) => know.pointOnLineObj(P2, ll)));
-      if (fresh.length) rel2.push({ type: "on_line", ids: [l, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(l)}` });
-    }
-    const onCircleSets = /* @__PURE__ */ new Map();
-    for (const c of circles) {
-      const on = reps.filter((P2) => T3.onCircle(v0.get(P2), v0.get(c), e0) && all((v, e) => T3.onCircle(v.get(P2), v.get(c), e)));
-      onCircleSets.set(c, on);
-      const fresh = on.filter((P2) => !lineIdsSameAs(c, circleIds, circRep).some((cc) => know.pointOnCircleObj(P2, cc)));
-      if (fresh.length) rel2.push({ type: "on_circle", ids: [c, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(c)}` });
-    }
-    const seenCol = /* @__PURE__ */ new Set();
-    for (let i = 0; i < reps.length; i++)
-      for (let j = i + 1; j < reps.length; j++) {
-        const A = reps[i], B = reps[j];
-        const pa = v0.get(A), pb = v0.get(B);
-        const set = [A, B];
-        for (let k = 0; k < reps.length; k++) {
-          if (k === i || k === j) continue;
-          if (T3.collinear(pa, pb, v0.get(reps[k]), e0)) set.push(reps[k]);
-        }
-        if (set.length < 3) continue;
-        const verified = [A, B, ...set.slice(2).filter((C2) => all((v, e) => T3.collinear(v.get(A), v.get(B), v.get(C2), e)))];
-        if (verified.length < 3) continue;
-        const key = [...verified].sort().join(",");
-        if (seenCol.has(key)) continue;
-        seenCol.add(key);
-        if ([...onLineSets.values()].some((on) => verified.every((P2) => on.includes(P2)))) continue;
-        if (know.collinear(verified)) continue;
-        rel2.push({ type: "collinear", ids: sortByDoc(doc2, verified), text: `${list(sortByDoc(doc2, verified))} th\u1EB3ng h\xE0ng` });
-      }
-    const seenCyc = /* @__PURE__ */ new Set();
-    const nR = reps.length;
-    for (let i = 0; i < nR; i++)
-      for (let j = i + 1; j < nR; j++)
-        for (let k = j + 1; k < nR; k++) {
-          const A = reps[i], B = reps[j], C2 = reps[k];
-          const circ = circleThrough(v0.get(A), v0.get(B), v0.get(C2));
-          if (!circ || circ.r > opts.maxRadius * scale0) continue;
-          const set = [A, B, C2];
-          for (let m = k + 1; m < nR; m++) if (T3.onCircle(v0.get(reps[m]), circ, e0)) set.push(reps[m]);
-          if (set.length < 4) continue;
-          const key0 = set.join(",");
-          if (seenCyc.has("raw:" + key0)) continue;
-          const full = reps.filter((P2) => T3.onCircle(v0.get(P2), circ, e0));
-          const ok = full.filter((P2, idx) => idx < 3 || all((v, e) => {
-            const c = circleThrough(v.get(full[0]), v.get(full[1]), v.get(full[2]));
-            return c && T3.onCircle(v.get(P2), c, e);
-          }));
-          const key = [...ok].sort().join(",");
-          seenCyc.add("raw:" + key0);
-          if (ok.length < 4 || seenCyc.has(key)) continue;
-          seenCyc.add(key);
-          if ([...onCircleSets.values()].some((on) => ok.every((P2) => on.includes(P2)))) continue;
-          if (know.concyclic(ok)) continue;
-          const ids = sortByDoc(doc2, ok);
-          rel2.push({ type: "concyclic", ids, text: `${list(ids)} \u0111\u1ED3ng vi\xEAn` });
-        }
-    for (let i = 0; i < lines.length; i++)
-      for (let j = i + 1; j < lines.length; j++) {
-        const a = lines[i], b = lines[j];
-        if (T3.parallel(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T3.parallel(v.get(a), v.get(b), e, s)) && !know.parallel(a, b))
-          rel2.push({ type: "parallel", ids: [a, b], text: `${desc(a)} \u2225 ${desc(b)}` });
-        if (T3.perpendicular(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T3.perpendicular(v.get(a), v.get(b), e, s)) && !know.perpendicular(a, b))
-          rel2.push({ type: "perpendicular", ids: [a, b], text: `${desc(a)} \u22A5 ${desc(b)}` });
-      }
-    for (const l of lines)
-      for (const c of circles)
-        if (T3.tangentLC(v0.get(l), v0.get(c), e0) && all((v, e) => T3.tangentLC(v.get(l), v.get(c), e)) && !know.tangent(l, c))
-          rel2.push({ type: "tangent", ids: [l, c], text: `${desc(l)} ti\u1EBFp x\xFAc ${desc(c)}` });
-    for (let i = 0; i < circles.length; i++)
-      for (let j = i + 1; j < circles.length; j++) {
-        const a = circles[i], b = circles[j];
-        if (T3.tangentCC(v0.get(a), v0.get(b), e0) && all((v, e) => T3.tangentCC(v.get(a), v.get(b), e)) && !know.tangent(a, b))
-          rel2.push({ type: "tangent", ids: [a, b], text: `${desc(a)} ti\u1EBFp x\xFAc ${desc(b)}` });
-      }
-    const curves = [...lines, ...circles];
-    const seenConc = /* @__PURE__ */ new Set();
-    for (let i = 0; i < curves.length; i++)
-      for (let j = i + 1; j < curves.length; j++) {
-        const a = curves[i], b = curves[j];
-        for (const X of intersect(v0.get(a), v0.get(b))) {
-          if (dist(X, { x: 0, y: 0 }) > 1e6 || reps.some((P2) => dist(v0.get(P2), X) < 1e3 * e0)) continue;
-          if (pointIds.length && minDistToPoints(X, v0, pointIds) > 20 * scale0) continue;
-          const through = curves.filter((c) => c !== a && c !== b && onCurve(X, v0.get(c), e0));
-          if (!through.length) continue;
-          const set = [a, b, ...through];
-          const key = [...set].sort().join(",");
-          if (seenConc.has(key)) continue;
-          seenConc.add(key);
-          const ok = all((v, e) => intersect(v.get(a), v.get(b)).some((Y) => through.every((c) => onCurve(Y, v.get(c), e))));
-          if (!ok) continue;
-          const allLines = set.every((c) => kindOf.get(c) === "line");
-          rel2.push({ type: "concurrent", ids: set, text: allLines ? `${set.map(desc).join(", ")} \u0111\u1ED3ng quy` : `${set.map(desc).join(", ")} c\xF9ng \u0111i qua m\u1ED9t \u0111i\u1EC3m` });
-        }
-      }
-    const final = rel2.filter((r) => !((r.type === "collinear" || r.type === "concyclic") && rel2.some((o) => o !== r && o.type === r.type && o.ids.length > r.ids.length && r.ids.every((x) => o.ids.includes(x)))));
-    for (const r of final) {
-      r.score = scoreOf(r, doc2, kindOf, special);
-      const notes = [...new Set(r.ids.filter((id) => special.has(id) && !STEP_TYPES[stepById(doc2, id)?.type]?.tag).map((id) => `${describe(doc2, id)} l\xE0 ${special.get(id).label}`))];
-      if (notes.length) r.note = notes.join("; ");
-    }
-    final.sort((a, b) => b.score - a.score || a.ids.length - b.ids.length);
-    return {
-      relations: final,
-      stats: {
-        samples: samples.length - 1,
-        attempts,
-        rejected,
-        baseDegenerate,
-        points: reps.length,
-        lines: lines.length,
-        circles: circles.length,
-        ms: Date.now() - t0
-      }
-    };
-  }
-  function lineIdsSameAs(id, ids, repMap) {
-    return ids.filter((x) => repMap.get(x) === id);
-  }
-  function onCurve(P2, c, e) {
-    return c.kind === "line" ? T3.onLine(P2, c, e) : T3.onCircle(P2, c, e);
-  }
-  function minDistToPoints(X, vals, ids) {
-    let m = Infinity;
-    for (const id of ids) m = Math.min(m, dist(vals.get(id), X));
-    return m;
-  }
-  function sortByDoc(doc2, ids) {
-    const idx = new Map(doc2.steps.map((s, i) => [s.id, i]));
-    return [...ids].sort((a, b) => idx.get(a) - idx.get(b));
-  }
-  var BASE_SCORE = { tangent: 6, concurrent: 5, concyclic: 5, on_circle: 5, collinear: 5, on_line: 3.5, perpendicular: 3, parallel: 3, coincide: 3, same_line: 3, same_circle: 3 };
-  var SPECIAL_NAMES = /* @__PURE__ */ new Set(["O", "I", "H"]);
-  function specialWeight(step) {
-    const tag = STEP_TYPES[step.type]?.tag;
-    if (tag === "circumcircle" || tag === "incircle" || tag === "ninepoint") return 3;
-    if (tag === "O" || tag === "I" || tag === "H") return 3;
-    if (SPECIAL_NAMES.has(step.name)) return 2.5;
-    if (tag === "G" || tag === "N") return 2;
-    return 0;
-  }
-  function scoreOf(r, doc2, kindOf, recognized) {
-    let s = BASE_SCORE[r.type] || 2;
-    let special = 0;
-    for (const id of r.ids) special += Math.max(specialWeight(stepById(doc2, id) || {}), recognized.get(id)?.weight || 0);
-    s += Math.min(special, 7);
-    if (r.ids.some((id) => kindOf.get(id) === "circle")) s += 0.5;
-    return Math.round(s * 10) / 10;
-  }
-  function recognizeSpecial(doc2, samples, reps, circleIds, kindOf, opts, tri2) {
-    const out = /* @__PURE__ */ new Map();
-    const name2 = (id) => stepById(doc2, id)?.name || id;
-    let count = 0;
-    for (const [A, B, C2] of tri2) {
-      if (++count > 12) break;
-      const triName = name2(A) + name2(B) + name2(C2);
-      const at = (v) => [v.get(A), v.get(B), v.get(C2)];
-      const PTS = [
-        ["O", 3, "t\xE2m ngo\u1EA1i ti\u1EBFp", circumcenter],
-        ["H", 3, "tr\u1EF1c t\xE2m", orthocenter],
-        ["I", 3, "t\xE2m n\u1ED9i ti\u1EBFp", incenter],
-        ["G", 2, "tr\u1ECDng t\xE2m", centroid],
-        ["N", 2, "t\xE2m \u0111\u01B0\u1EDDng tr\xF2n Euler", ninePointCenter]
-      ];
-      for (const [, w, label, f] of PTS)
-        for (const P2 of reps) {
-          if (out.has(P2) && out.get(P2).weight >= w) continue;
-          if (samples.every(({ vals, scale }) => {
-            const X = f(...at(vals));
-            return X && dist(X, vals.get(P2)) < opts.tol * scale;
-          }))
-            out.set(P2, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
-        }
-      const CIRC = [
-        [3, "\u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", (a, b, c) => circleThrough(a, b, c)],
-        [3, "\u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp", (a, b, c) => circle(incenter(a, b, c), inradius(a, b, c))],
-        [3, "\u0111\u01B0\u1EDDng tr\xF2n Euler", (a, b, c) => circleThrough(mid(a, b), mid(b, c), mid(c, a))]
-      ];
-      for (const [w, label, f] of CIRC)
-        for (const c of circleIds) {
-          if (out.has(c)) continue;
-          if (samples.every(({ vals, scale }) => {
-            const X = f(...at(vals));
-            const Y = vals.get(c);
-            return X && Y && T3.sameCircle(X, Y, opts.tol * scale);
-          }))
-            out.set(c, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
-        }
-    }
-    return out;
-  }
-
-  // src/ui/explorePanel.js
-  init_dialog();
-  var TYPE_LABEL = {
-    collinear: "Th\u1EB3ng h\xE0ng",
-    concyclic: "\u0110\u1ED3ng vi\xEAn",
-    concurrent: "\u0110\u1ED3ng quy",
-    parallel: "Song song",
-    perpendicular: "Vu\xF4ng g\xF3c",
-    tangent: "Ti\u1EBFp x\xFAc",
-    on_circle: "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n",
-    on_line: "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng",
-    coincide: "Tr\xF9ng nhau",
-    same_line: "Tr\xF9ng nhau",
-    same_circle: "Tr\xF9ng nhau"
-  };
-  var esc3 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  function setupExplore(app) {
-    const pane = document.getElementById("tab-explore");
-    let result = null;
-    let stale = false;
-    let active = -1;
-    const render3 = () => {
-      let html = `<div class="explore-head">
-      <button id="btn-run-explore" class="primary">\u{1F50D} Kh\xE1m ph\xE1 h\xECnh n\xE0y</button>
-      <div class="note">X\xEA d\u1ECBch ng\u1EABu nhi\xEAn c\xE1c \u0111i\u1EC3m t\u1EF1 do nhi\u1EC1u l\u1EA7n, ch\u1EC9 gi\u1EEF quan h\u1EC7 \u0111\xFAng tr\xEAn <b>m\u1ECDi</b> m\u1EABu, b\u1ECF quan h\u1EC7 hi\u1EC3n nhi\xEAn t\u1EEB c\xE1ch d\u1EF1ng.</div>
-    </div>`;
-      if (result) {
-        const st = result.stats;
-        html += `<div class="explore-stats">${result.relations.length} quan h\u1EC7 \xB7 ${st.samples} m\u1EABu ng\u1EABu nhi\xEAn (${st.attempts} l\u1EA7n th\u1EED) \xB7 ${st.ms} ms${stale ? ' \xB7 <b class="stale">h\xECnh \u0111\xE3 thay \u0111\u1ED5i, h\xE3y kh\xE1m ph\xE1 l\u1EA1i</b>' : ""}</div>`;
-        if (st.samples < 5) html += `<div class="note warn">\xCDt m\u1EABu h\u1EE3p l\u1EC7 \u2013 h\xECnh c\xF3 th\u1EC3 g\u1EA7n suy bi\u1EBFn; k\u1EBFt qu\u1EA3 k\xE9m tin c\u1EADy.</div>`;
-        if (!result.relations.length) html += '<div class="empty">Kh\xF4ng t\xECm th\u1EA5y quan h\u1EC7 n\xE0o ngo\xE0i c\xE1c quan h\u1EC7 hi\u1EC3n nhi\xEAn.</div>';
-        html += '<div class="rel-list">' + result.relations.map((r, i) => `<div class="rel ${i === active ? "active" : ""}" data-i="${i}">
-          <span class="rel-score" title="\u0110i\u1EC3m x\u1EBFp h\u1EA1ng">${r.score}</span>
-          <div class="rel-body"><div class="rel-type">${TYPE_LABEL[r.type] || r.type}</div><div class="rel-text">${esc3(r.text)}</div>${r.note ? `<div class="rel-note">${esc3(r.note)}</div>` : ""}</div>
-        </div>`).join("") + "</div>";
-      }
-      pane.innerHTML = html;
-      pane.querySelector("#btn-run-explore").onclick = run2;
-      pane.querySelectorAll(".rel").forEach((el) => el.onclick = () => select(+el.dataset.i));
-    };
-    const run2 = () => {
-      const btn = pane.querySelector("#btn-run-explore");
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = "\u0110ang kh\xE1m ph\xE1\u2026";
-      }
-      app.togglePanel(true);
-      document.querySelector('[data-tab="tab-explore"]').click();
-      setTimeout(() => {
-        try {
-          result = explore(app.doc);
-          stale = false;
-          active = -1;
-          app.setRelation(null);
-          toast(`T\xECm th\u1EA5y ${result.relations.length} quan h\u1EC7`);
-        } catch (e) {
-          console.error(e);
-          toast("L\u1ED7i khi kh\xE1m ph\xE1: " + e.message, 5e3);
-        }
-        render3();
-      }, 30);
-    };
-    const select = (i) => {
-      active = active === i ? -1 : i;
-      app.setRelation(active >= 0 ? result.relations[active] : null);
-      render3();
-    };
-    app.on("load", () => {
-      result = null;
-      active = -1;
-      render3();
-    });
-    app.on("change", () => {
-      if (result && !stale) {
-        stale = true;
-        render3();
-      }
-    });
-    const top2 = document.getElementById("btn-explore");
-    if (top2) top2.onclick = run2;
-    render3();
-  }
-  function drawRelationOverlay(app) {
-    const r = app.relation;
-    if (!r) return;
-    const R = app.renderer;
-    const V = (id) => app.values.get(id);
-    const style = { color: "#f59e0b", width: 2.2, dash: true };
-    if (r.type === "collinear") {
-      const ids = r.ids;
-      let best = [ids[0], ids[1]], bd = -1;
-      for (const a of ids) for (const b of ids) {
-        const d = V(a) && V(b) ? dist(V(a), V(b)) : 0;
-        if (d > bd) {
-          bd = d;
-          best = [a, b];
-        }
-      }
-      R.addExtra({ type: "line", pts: best.map((id) => () => V(id)), style });
-    } else if (r.type === "concyclic") {
-      R.addExtra({ type: "circle3", pts: r.ids.slice(0, 3).map((id) => () => V(id)), style });
-    } else if (r.type === "concurrent") {
-      const common = () => {
-        const [a, b, ...rest] = r.ids.map(V);
-        if (!a || !b) return null;
-        let best = null, bd = Infinity;
-        for (const X of intersect(a, b)) {
-          const d = rest.reduce((s, c) => s + (c ? distToObject(c, X) : 1e9), 0);
-          if (d < bd) {
-            bd = d;
-            best = X;
-          }
-        }
-        return best;
-      };
-      R.addExtra({ type: "point", pts: [common], style: { color: "#f59e0b", fill: "#fde68a", size: 7 } });
-    }
-  }
-
-  // src/export/tikz.js
-  var NAMED_COLORS = Object.fromEntries([
-    ["#000000", "black"],
-    ["#111827", "black"],
-    ["#1f2937", "black"],
-    ...PALETTE.slice(1).map((c) => [c.hex, c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/[^A-Za-z]/g, "").toLowerCase()])
-  ]);
-  var PT_PER_PX = 0.4;
-  var f3 = (v) => {
-    const s = (Math.round(v * 1e3) / 1e3).toFixed(3).replace(/\.?0+$/, "");
-    return s === "-0" ? "0" : s;
-  };
-  var xy = (P2) => `(${f3(P2.x)}, ${f3(P2.y)})`;
-  function coordName(name2, used) {
-    let base2 = (name2 || "P").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/'/g, "p").replace(/[^A-Za-z0-9]/g, "");
-    if (!base2 || /^\d/.test(base2)) base2 = "P" + base2;
-    let n = base2, i = 2;
-    while (used.has(n)) n = base2 + "-" + i++;
-    used.add(n);
-    return n;
-  }
-  function anchorFor(off) {
-    const a = Math.atan2(off[1], off[0]) * 180 / Math.PI;
-    const dirs = ["right", "above right", "above", "above left", "left", "below left", "below", "below right"];
-    return dirs[(Math.round(a / 45) % 8 + 8) % 8];
-  }
-  function clipLine(l, box, tMin = -Infinity) {
-    let t0 = tMin, t1 = Infinity;
-    const { p, d } = l;
-    for (const [pp, dd, lo, hi] of [[p.x, d.x, box.x1, box.x2], [p.y, d.y, box.y1, box.y2]]) {
-      if (Math.abs(dd) < 1e-14) {
-        if (pp < lo || pp > hi) return null;
-        continue;
-      }
-      let a = (lo - pp) / dd, b = (hi - pp) / dd;
-      if (a > b) [a, b] = [b, a];
-      t0 = Math.max(t0, a);
-      t1 = Math.min(t1, b);
-    }
-    if (t0 >= t1) return null;
-    return [{ x: p.x + t0 * d.x, y: p.y + t0 * d.y }, { x: p.x + t1 * d.x, y: p.y + t1 * d.y }];
-  }
-  function toTikZ(doc2, opts = {}) {
-    const width = opts.width || 12;
-    const theme2 = opts.theme || "mono";
-    const vals = opts.values || evaluate(doc2);
-    const k = kinds(doc2);
-    const visible = doc2.steps.filter((s) => !s.hidden && vals.get(s.id));
-    const pts = [];
-    for (const s of visible) {
-      const v = vals.get(s.id);
-      if (v.kind === "point") pts.push(v);
-      if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
-    }
-    if (!pts.length) return "% H\xECnh tr\u1ED1ng\n";
-    let x1 = Math.min(...pts.map((p) => p.x)), x2 = Math.max(...pts.map((p) => p.x));
-    let y1 = Math.min(...pts.map((p) => p.y)), y2 = Math.max(...pts.map((p) => p.y));
-    const span = Math.max(x2 - x1, y2 - y1, 1e-6);
-    const m = span * 0.08;
-    const box = { x1: x1 - m, x2: x2 + m, y1: y1 - m, y2: y2 + m };
-    const unit2 = width / (box.x2 - box.x1);
-    const cm = (c) => c / unit2;
-    const colorDefs = /* @__PURE__ */ new Map();
-    const full = (s) => styleOf(s, k.get(s.id), theme2);
-    const hexName = (hex) => {
-      hex = hex.toLowerCase();
-      if (NAMED_COLORS[hex]) {
-        if (NAMED_COLORS[hex] !== "black") colorDefs.set(NAMED_COLORS[hex], hex);
-        return NAMED_COLORS[hex];
-      }
-      const nm = "c" + hex.replace("#", "");
-      colorDefs.set(nm, hex);
-      return nm;
-    };
-    const col = (s) => hexName(full(s).color || "#000000");
-    const baseWidth = styleOf({ type: "line" }, "line", theme2).width;
-    const opt = (...xs) => {
-      const o = xs.filter((x) => x && x !== "black");
-      return o.length ? `[${o.join(", ")}]` : "";
-    };
-    const lineOpts = (s) => {
-      const st = full(s);
-      const w = st.width && Math.abs(st.width - baseWidth) > 1e-9 ? `line width=${f3(st.width * PT_PER_PX)}pt` : "";
-      return opt(col(s), st.dash ? "dashed" : "", w);
-    };
-    const centerOf = /* @__PURE__ */ new Map();
-    for (const s of doc2.steps) if (s.type === "center" && !centerOf.has(s.args[0])) centerOf.set(s.args[0], s.id);
-    const used = /* @__PURE__ */ new Set();
-    const cname = /* @__PURE__ */ new Map();
-    for (const s of visible) if (k.get(s.id) === "point") cname.set(s.id, coordName(s.name, used));
-    for (const s of visible) if (k.get(s.id) === "mark" || ["segment", "circle"].includes(s.type)) for (const a of s.args) {
-      if (!cname.has(a) && vals.get(a)) cname.set(a, coordName(stepById(doc2, a)?.name || a, used));
-    }
-    const ref = (id) => `(${cname.get(id)})`;
-    const autoDirs = autoLabelDirs(doc2, vals);
-    const out = { coords: [], fills: [], circles: [], lines: [], marks: [], points: [], labels: [] };
-    for (const [id, n] of cname) out.coords.push(`\\coordinate (${n}) at ${xy(vals.get(id))};${stepById(doc2, id)?.hidden ? " % \u0111i\u1EC3m \u1EA9n" : ""}`);
-    for (const s of visible) {
-      const v = vals.get(s.id);
-      const st = full(s);
-      const kind = k.get(s.id);
-      if (kind === "circle") {
-        const cId = s.type === "circle" || s.type === "circle_radius" ? s.args[0] : centerOf.get(s.id);
-        const cAt = cId && cname.has(cId) ? cId : [...cname.keys()].find((id) => dist(vals.get(id), v.c) < 1e-9 * (1 + v.r));
-        const center = cAt ? ref(cAt) : xy(v.c);
-        const fill = st.fill || 0;
-        if (fill > 0) out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(fill)}] ${center} circle (${f3(v.r)});`);
-        out.circles.push(`\\draw${lineOpts(s)} ${center} circle (${f3(v.r)}); % ${s.name || ""}`);
-        if (st.showLabel && s.name) {
-          const P2 = { x: v.c.x + v.r * Math.cos(Math.PI / 4), y: v.c.y + v.r * Math.sin(Math.PI / 4) };
-          out.labels.push(`\\node[above right, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
-        }
-      } else if (kind === "line") {
-        const sub4 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
-        const desc = s.type === "line" || s.type === "segment" || s.type === "ray" ? s.args.map((a) => stepById(doc2, a)?.name).join("") : s.name;
-        if (sub4 === "segment" && s.type === "segment") out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
-        else if (sub4 === "segment") out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(add(v.p, v.d))};`);
-        else {
-          const rg = opts.trimLines ? trimmedRange(v, sub4, visible.filter((x) => k.get(x.id) === "point").map((x) => vals.get(x.id)), 1e-9 * (box.x2 - box.x1), cm(0.35), cm(1.1)) : null;
-          const seg = rg ? [add(v.p, mul(v.d, rg[0])), add(v.p, mul(v.d, rg[1]))] : clipLine(v, box, sub4 === "ray" ? 0 : -Infinity);
-          if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub4 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub4 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${desc}`);
-          if (seg && st.showLabel && s.name) {
-            const P2 = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
-            out.labels.push(`\\node[above, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
-          }
-        }
-      } else if (s.type === "polygon") {
-        const path2 = s.args.map(ref).join(" -- ") + " -- cycle";
-        out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.1)}] ${path2};`);
-        if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path2};`);
-      } else if (s.type === "angle_mark") {
-        out.marks.push(...angleMark(v, s, col(s), cm, ref));
-      } else if (s.type === "segment_mark") {
-        out.marks.push(...segMark(v, s, col(s), cm));
-      } else if (kind === "point") {
-        const r = f3((st.size || 3) * 0.5);
-        if (st.hollow) out.points.push(`\\filldraw[fill=white${col(s) === "black" ? "" : ", draw=" + col(s)}] ${ref(s.id)} circle (${r}pt);`);
-        else out.points.push(`\\fill${opt(hexName(st.fillColor || st.color))} ${ref(s.id)} circle (${r}pt);`);
-        const dir = st.labelOffset || (autoDirs.get(s.id) ? [autoDirs.get(s.id).x, autoDirs.get(s.id).y] : [1, 1]);
-        if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}, inner sep=1.5pt] at ${ref(s.id)} {${texLabel(s.name)}};`);
-      }
-    }
-    const L = [];
-    L.push(`% ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
-    L.push("% C\u1EA7n trong ph\u1EA7n m\u1EDF \u0111\u1EA7u: \\usepackage{tikz}");
-    L.push("% \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc h\xECnh: s\u1EEDa x=\u2026, y=\u2026 (\u0111\u01A1n v\u1ECB c\u1EE7a m\u1ED9t \xF4 to\u1EA1 \u0111\u1ED9).");
-    if (doc2.images && doc2.images.length) L.push(`% (${doc2.images.length} \u1EA3nh d\xE1n v\xE0o h\xECnh kh\xF4ng \u0111\u01B0\u1EE3c xu\u1EA5t sang TikZ)`);
-    L.push(`\\begin{tikzpicture}[x=${f3(unit2)}cm, y=${f3(unit2)}cm, line width=${f3(baseWidth * PT_PER_PX)}pt, line cap=round, line join=round]`);
-    if (colorDefs.size) {
-      L.push("  % M\xE0u");
-      for (const [n, hex] of colorDefs) L.push(`  \\definecolor{${n}}{HTML}{${hex.slice(1).toUpperCase()}}`);
-    }
-    const sec = (title, arr) => {
-      if (arr.length) {
-        L.push(`  % ${title}`);
-        for (const x of arr) L.push("  " + x);
-      }
-    };
-    sec("To\u1EA1 \u0111\u1ED9 c\xE1c \u0111i\u1EC3m", out.coords);
-    sec("T\xF4 n\u1EC1n", out.fills);
-    sec("\u0110\u01B0\u1EDDng tr\xF2n", out.circles);
-    sec("\u0110\u01B0\u1EDDng th\u1EB3ng, \u0111o\u1EA1n th\u1EB3ng, tia", out.lines);
-    sec("\u0110\xE1nh d\u1EA5u g\xF3c, \u0111o\u1EA1n b\u1EB1ng nhau", out.marks);
-    sec("\u0110i\u1EC3m", out.points);
-    sec("Nh\xE3n", out.labels);
-    L.push("\\end{tikzpicture}");
-    return L.join("\n") + "\n";
-  }
-  function angleMark(v, s, color, cm, ref) {
-    const { A, B, C: C2 } = v;
-    const st = s.style || {};
-    const a1 = Math.atan2(A.y - B.y, A.x - B.x);
-    let diff = Math.atan2(C2.y - B.y, C2.x - B.x) - a1;
-    while (diff <= -Math.PI) diff += 2 * Math.PI;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    const deg = (r) => f3(r * 180 / Math.PI);
-    const r0 = cm(0.45);
-    const vtx = ref(s.args[1]);
-    const o = color === "black" ? "" : `[${color}]`;
-    if (Math.abs(Math.abs(diff) - Math.PI / 2) < 1e-6 && st.right !== false) {
-      const r = r0 * 0.7;
-      return [`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) -- ++(${deg(a1 + diff)}:${f3(r)}) -- ++(${deg(a1 + Math.PI)}:${f3(r)}); % g\xF3c vu\xF4ng`];
-    }
-    const n = Math.max(1, Math.min(4, st.arcs || 1));
-    const outL = [];
-    for (let i = 0; i < n; i++) {
-      const r = r0 + i * cm(0.09);
-      outL.push(`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) arc[start angle=${deg(a1)}, end angle=${deg(a1 + diff)}, radius=${f3(r)}];`);
-    }
-    return outL;
-  }
-  function segMark(v, s, color, cm) {
-    const { A, B } = v;
-    const st = s.style || {};
-    const L = dist(A, B);
-    const u = { x: (B.x - A.x) / L, y: (B.y - A.y) / L };
-    const n = { x: -u.y, y: u.x };
-    const M = mid(A, B);
-    const kk = Math.max(1, Math.min(4, st.ticks || 1));
-    const h = cm(0.13), gap = cm(0.08);
-    const o = color === "black" ? "" : `[${color}]`;
-    const outL = [];
-    for (let i = 0; i < kk; i++) {
-      const off = (i - (kk - 1) / 2) * gap;
-      const c = { x: M.x + off * u.x, y: M.y + off * u.y };
-      outL.push(`\\draw${o} ${xy({ x: c.x - h * n.x, y: c.y - h * n.y })} -- ${xy({ x: c.x + h * n.x, y: c.y + h * n.y })};`);
-    }
-    return outL;
-  }
-
-  // src/ui/main.js
-  init_dialog();
-
-  // examples/thu-vien/muc-luc.json
-  var muc_luc_default = [
-    {
-      id: "imo2008-1",
-      nhom: "IMO",
-      ten: "IMO 2008 \u2013 B\xE0i 1",
-      de: "Tam gi\xE1c nh\u1ECDn ABC, tr\u1EF1c t\xE2m H. \u0110\u01B0\u1EDDng tr\xF2n t\xE2m l\xE0 trung \u0111i\u1EC3m BC \u0111i qua H c\u1EAFt \u0111\u01B0\u1EDDng th\u1EB3ng BC t\u1EA1i A\u2081, A\u2082; t\u01B0\u01A1ng t\u1EF1 B\u2081, B\u2082 (v\u1EDBi CA) v\xE0 C\u2081, C\u2082 (v\u1EDBi AB). Ch\u1EE9ng minh s\xE1u \u0111i\u1EC3m A\u2081, A\u2082, B\u2081, B\u2082, C\u2081, C\u2082 c\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n."
-    },
-    {
-      id: "imo2010-2",
-      nhom: "IMO",
-      ten: "IMO 2010 \u2013 B\xE0i 2",
-      de: "I l\xE0 t\xE2m n\u1ED9i ti\u1EBFp tam gi\xE1c ABC, \u0393 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp. AI c\u1EAFt \u0393 l\u1EA7n n\u1EEFa t\u1EA1i D. E thu\u1ED9c cung BDC, F thu\u1ED9c c\u1EA1nh BC sao cho \u2220BAF = \u2220CAE. G l\xE0 trung \u0111i\u1EC3m IF. Ch\u1EE9ng minh DG v\xE0 EI c\u1EAFt nhau tr\xEAn \u0393."
-    },
-    {
-      id: "imo2012-5",
-      nhom: "IMO",
-      ten: "IMO 2012 \u2013 B\xE0i 5",
-      de: "Tam gi\xE1c ABC vu\xF4ng t\u1EA1i C, D l\xE0 ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB C. X n\u1EB1m trong \u0111o\u1EA1n CD. K thu\u1ED9c \u0111o\u1EA1n AX v\u1EDBi BK = BC; L thu\u1ED9c \u0111o\u1EA1n BX v\u1EDBi AL = AC. M l\xE0 giao \u0111i\u1EC3m c\u1EE7a AL v\xE0 BK. Ch\u1EE9ng minh MK = ML."
-    },
-    {
-      id: "imo2013-4",
-      nhom: "IMO",
-      ten: "IMO 2013 \u2013 B\xE0i 4",
-      de: "Tam gi\xE1c nh\u1ECDn ABC, tr\u1EF1c t\xE2m H, W thu\u1ED9c c\u1EA1nh BC. M, N l\xE0 ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB B, C. \u03C9\u2081 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (BWN), X \u2208 \u03C9\u2081 v\u1EDBi WX l\xE0 \u0111\u01B0\u1EDDng k\xEDnh; \u03C9\u2082 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (CWM), Y \u2208 \u03C9\u2082 v\u1EDBi WY l\xE0 \u0111\u01B0\u1EDDng k\xEDnh. Ch\u1EE9ng minh X, Y, H th\u1EB3ng h\xE0ng."
-    },
-    {
-      id: "imo2014-4",
-      nhom: "IMO",
-      ten: "IMO 2014 \u2013 B\xE0i 4",
-      de: "P, Q thu\u1ED9c c\u1EA1nh BC c\u1EE7a tam gi\xE1c nh\u1ECDn ABC sao cho \u2220PAB = \u2220BCA v\xE0 \u2220CAQ = \u2220ABC. M, N thu\u1ED9c AP, AQ sao cho P l\xE0 trung \u0111i\u1EC3m AM, Q l\xE0 trung \u0111i\u1EC3m AN. Ch\u1EE9ng minh BM v\xE0 CN c\u1EAFt nhau tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp ABC."
-    },
-    {
-      id: "imo2015-4",
-      nhom: "IMO",
-      ten: "IMO 2015 \u2013 B\xE0i 4",
-      de: "Tam gi\xE1c ABC n\u1ED9i ti\u1EBFp \u03A9 t\xE2m O. \u0110\u01B0\u1EDDng tr\xF2n \u0393 t\xE2m A c\u1EAFt BC t\u1EA1i D, E (B, D, E, C theo th\u1EE9 t\u1EF1) v\xE0 c\u1EAFt \u03A9 t\u1EA1i F, G (A, F, B, C, G theo th\u1EE9 t\u1EF1). \u0110\u01B0\u1EDDng tr\xF2n (BDF) c\u1EAFt AB l\u1EA7n n\u1EEFa t\u1EA1i K, (CGE) c\u1EAFt CA l\u1EA7n n\u1EEFa t\u1EA1i L. FK v\xE0 GL c\u1EAFt nhau t\u1EA1i X. Ch\u1EE9ng minh X thu\u1ED9c AO."
-    },
-    {
-      id: "imo2017-4",
-      nhom: "IMO",
-      ten: "IMO 2017 \u2013 B\xE0i 4",
-      de: "R, S thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n \u03A9, RS kh\xF4ng l\xE0 \u0111\u01B0\u1EDDng k\xEDnh; \u2113 l\xE0 ti\u1EBFp tuy\u1EBFn c\u1EE7a \u03A9 t\u1EA1i R. T sao cho S l\xE0 trung \u0111i\u1EC3m RT. J thu\u1ED9c cung nh\u1ECF RS sao cho \u0111\u01B0\u1EDDng tr\xF2n \u0393 ngo\u1EA1i ti\u1EBFp JST c\u1EAFt \u2113 t\u1EA1i hai \u0111i\u1EC3m; A l\xE0 giao \u0111i\u1EC3m g\u1EA7n R h\u01A1n. AJ c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i K. Ch\u1EE9ng minh KT ti\u1EBFp x\xFAc \u0393."
-    },
-    {
-      id: "imo2018-1",
-      nhom: "IMO",
-      ten: "IMO 2018 \u2013 B\xE0i 1",
-      de: "\u0393 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp tam gi\xE1c nh\u1ECDn ABC. D, E thu\u1ED9c c\xE1c \u0111o\u1EA1n AB, AC v\u1EDBi AD = AE. Trung tr\u1EF1c c\u1EE7a BD v\xE0 CE c\u1EAFt c\xE1c cung nh\u1ECF AB, AC c\u1EE7a \u0393 t\u1EA1i F, G. Ch\u1EE9ng minh DE \u2225 FG (ho\u1EB7c tr\xF9ng)."
-    },
-    {
-      id: "imo2019-6",
-      nhom: "IMO",
-      ten: "IMO 2019 \u2013 B\xE0i 6",
-      de: "I l\xE0 t\xE2m n\u1ED9i ti\u1EBFp tam gi\xE1c nh\u1ECDn ABC (AB \u2260 AC), \u03C9 ti\u1EBFp x\xFAc BC, CA, AB t\u1EA1i D, E, F. \u0110\u01B0\u1EDDng th\u1EB3ng qua D vu\xF4ng g\xF3c EF c\u1EAFt \u03C9 l\u1EA7n n\u1EEFa t\u1EA1i R. AR c\u1EAFt \u03C9 l\u1EA7n n\u1EEFa t\u1EA1i P. \u0110\u01B0\u1EDDng tr\xF2n (PCE) v\xE0 (PBF) c\u1EAFt nhau l\u1EA7n n\u1EEFa t\u1EA1i Q. Ch\u1EE9ng minh DI v\xE0 PQ c\u1EAFt nhau tr\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng qua A vu\xF4ng g\xF3c AI."
-    },
-    {
-      id: "imo2021-4",
-      nhom: "IMO",
-      ten: "IMO 2021 \u2013 B\xE0i 4",
-      de: "\u0110\u01B0\u1EDDng tr\xF2n \u0393 t\xE2m I ti\u1EBFp x\xFAc b\u1ED1n c\u1EA1nh c\u1EE7a t\u1EE9 gi\xE1c l\u1ED3i ABCD. \u03A9 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (AIC). Tia \u0111\u1ED1i c\u1EE7a AB\u2026 c\u1EAFt \u03A9 t\u1EA1i X (BA k\xE9o d\xE0i qua A), Z (BC k\xE9o d\xE0i qua C); AD, CD k\xE9o d\xE0i qua D c\u1EAFt \u03A9 t\u1EA1i Y, T. Ch\u1EE9ng minh AD + DT + TX + XA = CD + DY + YZ + ZC."
-    },
-    {
-      id: "imo2023-2",
-      nhom: "IMO",
-      ten: "IMO 2023 \u2013 B\xE0i 2",
-      de: "Tam gi\xE1c nh\u1ECDn ABC, AB < AC, \u03A9 ngo\u1EA1i ti\u1EBFp. S l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung CB ch\u1EE9a A. \u0110\u01B0\u1EDDng vu\xF4ng g\xF3c t\u1EEB A xu\u1ED1ng BC c\u1EAFt BS t\u1EA1i D, c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i E. \u0110\u01B0\u1EDDng qua D song song BC c\u1EAFt BE t\u1EA1i L. \u03C9 = (BDL) c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i P. Ch\u1EE9ng minh ti\u1EBFp tuy\u1EBFn c\u1EE7a \u03C9 t\u1EA1i P c\u1EAFt BS tr\xEAn ph\xE2n gi\xE1c trong g\xF3c BAC."
-    },
-    {
-      id: "imo2024-4",
-      nhom: "IMO",
-      ten: "IMO 2024 \u2013 B\xE0i 4",
-      de: "Tam gi\xE1c ABC v\u1EDBi AB < AC < BC, t\xE2m n\u1ED9i ti\u1EBFp I, \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp \u03C9. X \u2260 C thu\u1ED9c BC sao cho \u0111\u01B0\u1EDDng qua X song song AC ti\u1EBFp x\xFAc \u03C9; Y \u2260 B thu\u1ED9c BC sao cho \u0111\u01B0\u1EDDng qua Y song song AB ti\u1EBFp x\xFAc \u03C9. AI c\u1EAFt (ABC) l\u1EA7n n\u1EEFa t\u1EA1i P. K, L l\xE0 trung \u0111i\u1EC3m AC, AB. Ch\u1EE9ng minh \u2220KIL + \u2220YPX = 180\xB0."
-    },
-    {
-      id: "imo2025-2",
-      nhom: "IMO",
-      ten: "IMO 2025 \u2013 B\xE0i 2",
-      de: "\u03A9 t\xE2m M v\xE0 \u0393 t\xE2m N (b\xE1n k\xEDnh \u03A9 nh\u1ECF h\u01A1n) c\u1EAFt nhau t\u1EA1i A, B. MN c\u1EAFt \u03A9 t\u1EA1i C, c\u1EAFt \u0393 t\u1EA1i D (C, M, N, D theo th\u1EE9 t\u1EF1). P l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp ACD. AP c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i E, c\u1EAFt \u0393 l\u1EA7n n\u1EEFa t\u1EA1i F. H l\xE0 tr\u1EF1c t\xE2m PMN. Ch\u1EE9ng minh \u0111\u01B0\u1EDDng qua H song song AP ti\u1EBFp x\xFAc \u0111\u01B0\u1EDDng tr\xF2n (BEF)."
-    },
-    {
-      id: "vmo2014-4",
-      nhom: "VMO",
-      ten: "VMO 2014 \u2013 B\xE0i 4",
-      de: "Tam gi\xE1c nh\u1ECDn ABC (AB < AC) n\u1ED9i ti\u1EBFp (O); I l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A. K \u2260 C thu\u1ED9c AC v\u1EDBi IK = IC. BK c\u1EAFt (O) t\u1EA1i D (D \u2260 B), c\u1EAFt AI t\u1EA1i E. DI c\u1EAFt AC t\u1EA1i F. a) EF = BC/2. b) M thu\u1ED9c DI v\u1EDBi CM \u2225 AD; KM c\u1EAFt BC t\u1EA1i N; (BKN) c\u1EAFt (O) t\u1EA1i P \u2260 B. Ch\u1EE9ng minh PK \u0111i qua trung \u0111i\u1EC3m AD."
-    },
-    {
-      id: "vmo2016-3",
-      nhom: "VMO",
-      ten: "VMO 2016 \u2013 B\xE0i 3",
-      de: "B, C c\u1ED1 \u0111\u1ECBnh, A thay \u0111\u1ED5i (tam gi\xE1c ABC nh\u1ECDn). D l\xE0 trung \u0111i\u1EC3m BC; E, F l\xE0 h\xECnh chi\u1EBFu c\u1EE7a D tr\xEAn AB, AC. O l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp; EF c\u1EAFt AO, BC t\u1EA1i M, N. a) \u0110\u01B0\u1EDDng tr\xF2n (AMN) lu\xF4n \u0111i qua m\u1ED9t \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh. b) Ti\u1EBFp tuy\u1EBFn t\u1EA1i E, F c\u1EE7a (AEF) c\u1EAFt nhau t\u1EA1i T; T thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng c\u1ED1 \u0111\u1ECBnh."
-    },
-    {
-      id: "noi-bang-tiep",
-      nhom: "C\u1EA5u h\xECnh",
-      ten: "B\u1ED5 \u0111\u1EC1 t\xE2m n\u1ED9i ti\u1EBFp \u2013 b\xE0ng ti\u1EBFp",
-      de: "S l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A c\u1EE7a (ABC). Ch\u1EE9ng minh B, C, I, I_A c\xF9ng n\u1EB1m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n t\xE2m S (S l\xE0 trung \u0111i\u1EC3m II_A)."
-    },
-    {
-      id: "euler-feuerbach",
-      nhom: "C\u1EA5u h\xECnh",
-      ten: "\u0110\u01B0\u1EDDng tr\xF2n Euler \u2013 \u0111\u1ECBnh l\xFD Feuerbach",
-      de: "\u0110\u01B0\u1EDDng tr\xF2n Euler c\u1EE7a tam gi\xE1c ABC ti\u1EBFp x\xFAc v\u1EDBi \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp v\xE0 ba \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp."
-    },
-    {
-      id: "mixtilinear",
-      nhom: "C\u1EA5u h\xECnh",
-      ten: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear",
-      de: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear n\u1ED9i \u1EE9ng v\u1EDBi A ti\u1EBFp x\xFAc AB, AC t\u1EA1i K, L v\xE0 ti\u1EBFp x\xFAc trong (O) t\u1EA1i T. Ch\u1EE9ng minh I l\xE0 trung \u0111i\u1EC3m KL v\xE0 T, I v\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BAC th\u1EB3ng h\xE0ng."
-    },
-    {
-      id: "nghich-dao-bc",
-      nhom: "C\u1EA5u h\xECnh",
-      ten: "Ngh\u1ECBch \u0111\u1EA3o \u221A(bc)",
-      de: "Ph\xE9p ngh\u1ECBch \u0111\u1EA3o t\xE2m A b\xE1n k\xEDnh \u221A(AB\xB7AC) h\u1EE3p v\u1EDBi ph\xE9p \u0111\u1ED1i x\u1EE9ng qua ph\xE2n gi\xE1c g\xF3c A \u0111\u1ED5i ch\u1ED7 B v\xE0 C, bi\u1EBFn (ABC) th\xE0nh \u0111\u01B0\u1EDDng th\u1EB3ng BC v\xE0 bi\u1EBFn \u0111\u01B0\u1EDDng tr\xF2n mixtilinear n\u1ED9i th\xE0nh \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp g\xF3c A."
-    },
-    {
-      id: "brocard",
-      nhom: "C\u1EA5u h\xECnh",
-      ten: "T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp \u2013 \u0111\u1ECBnh l\xFD Brocard",
-      de: "T\u1EE9 gi\xE1c ABCD n\u1ED9i ti\u1EBFp (O). P = AC \u2229 BD, Q = AB \u2229 CD, R = AD \u2229 BC. Ch\u1EE9ng minh O l\xE0 tr\u1EF1c t\xE2m tam gi\xE1c PQR."
-    },
-    {
-      id: "monge",
-      nhom: "C\u1EA5u h\xECnh",
-      ten: "Ti\u1EBFp tuy\u1EBFn chung \u2013 \u0111\u1ECBnh l\xFD Monge",
-      de: "Ba \u0111\u01B0\u1EDDng tr\xF2n c\xF3 b\xE1n k\xEDnh kh\xE1c nhau. Hai ti\u1EBFp tuy\u1EBFn chung ngo\xE0i c\u1EE7a m\u1ED7i c\u1EB7p c\u1EAFt nhau t\u1EA1i t\xE2m v\u1ECB t\u1EF1 ngo\xE0i; ba t\xE2m v\u1ECB t\u1EF1 ngo\xE0i th\u1EB3ng h\xE0ng."
-    },
-    {
-      id: "dong-dang-xoan",
-      nhom: "C\u1EA5u h\xECnh",
-      ten: "T\xE2m \u0111\u1ED3ng d\u1EA1ng xo\u1EAFn (quay + v\u1ECB t\u1EF1)",
-      de: "X = AB \u2229 CD; (XAC) v\xE0 (XBD) c\u1EAFt nhau l\u1EA7n n\u1EEFa t\u1EA1i S. Ph\xE9p quay t\xE2m S g\xF3c \u2220ASC r\u1ED3i v\u1ECB t\u1EF1 t\xE2m S t\u1EC9 s\u1ED1 SC/SA bi\u1EBFn A th\xE0nh C v\xE0 B th\xE0nh D."
-    },
-    {
-      id: "hinh-day",
-      nhom: "H\xECnh d\xE0y",
-      ten: "Tam gi\xE1c v\u1EDBi ba t\xE2m b\xE0ng ti\u1EBFp (h\xECnh d\xE0y)",
-      de: "Tam gi\xE1c ABC, t\xE2m n\u1ED9i ti\u1EBFp I, ba t\xE2m b\xE0ng ti\u1EBFp I_A, I_B, I_C, \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp v\xE0 ba \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp. (O) l\xE0 \u0111\u01B0\u1EDDng tr\xF2n Euler c\u1EE7a tam gi\xE1c I_AI_BI_C, I l\xE0 tr\u1EF1c t\xE2m c\u1EE7a n\xF3, trung \u0111i\u1EC3m M_A c\u1EE7a II_A n\u1EB1m tr\xEAn (O). K\xE8m nh\xE3n c\xF3 ch\u1EC9 s\u1ED1 d\u01B0\u1EDBi v\xE0 d\u1EA5u ph\u1EA9y."
-    }
-  ];
-
-  // examples/thu-vien/imo2008-1.json
-  var imo2008_1_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2008 \u2013 B\xE0i 1",
-    view: {
-      bbox: [
-        -7.963,
-        4.407,
-        8.13,
-        -5.277
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.8,
-          y: 3.6
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.6,
-          y: -2
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 3.8,
-          y: -2
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "orthocenter",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "H"
-      },
-      {
-        id: "s8",
-        type: "midpoint",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "M_a"
-      },
-      {
-        id: "s9",
-        type: "circle",
-        args: [
-          "s8",
-          "s7"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s10",
-        type: "intersection",
-        args: [
-          "s9",
-          "s5"
-        ],
-        params: {
-          which: 0
-        },
-        name: "A_1"
-      },
-      {
-        id: "s11",
-        type: "intersection_other",
-        args: [
-          "s9",
-          "s5",
-          "s10"
-        ],
-        name: "A_2"
-      },
-      {
-        id: "s12",
-        type: "midpoint",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "M_b"
-      },
-      {
-        id: "s13",
-        type: "circle",
-        args: [
-          "s12",
-          "s7"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s14",
-        type: "intersection",
-        args: [
-          "s13",
-          "s6"
-        ],
-        params: {
-          which: 0
-        },
-        name: "B_1"
-      },
-      {
-        id: "s15",
-        type: "intersection_other",
-        args: [
-          "s13",
-          "s6",
-          "s14"
-        ],
-        name: "B_2"
-      },
-      {
-        id: "s16",
-        type: "midpoint",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "M_c"
-      },
-      {
-        id: "s17",
-        type: "circle",
-        args: [
-          "s16",
-          "s7"
-        ],
-        name: "\u03C93"
-      },
-      {
-        id: "s18",
-        type: "intersection",
-        args: [
-          "s17",
-          "s4"
-        ],
-        params: {
-          which: 0
-        },
-        name: "C_1"
-      },
-      {
-        id: "s19",
-        type: "intersection_other",
-        args: [
-          "s17",
-          "s4",
-          "s18"
-        ],
-        name: "C_2"
-      },
-      {
-        id: "s20",
-        type: "circle_3pts",
-        args: [
-          "s10",
-          "s11",
-          "s14"
-        ],
-        name: "\u03C94"
-      },
-      {
-        id: "s21",
-        type: "center",
-        args: [
-          "s20"
-        ],
-        name: "O",
-        joinPrev: true
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2010-2.json
-  var imo2010_2_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2010 \u2013 B\xE0i 2",
-    view: {
-      bbox: [
-        -7.93,
-        4.621,
-        8.13,
-        -5.043
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -1.2,
-          y: 3.6
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.6,
-          y: -1.8
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 3.8,
-          y: -1.8
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "incenter",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "I"
-      },
-      {
-        id: "s10",
-        type: "line",
-        args: [
-          "s1",
-          "s9"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s11",
-        type: "intersection_other",
-        args: [
-          "s10",
-          "s7",
-          "s1"
-        ],
-        name: "D"
-      },
-      {
-        id: "s12",
-        type: "point_on",
-        args: [
-          "s7"
-        ],
-        params: {
-          t: -0.9075712557190003
-        },
-        name: "E"
-      },
-      {
-        id: "s13",
-        type: "isogonal_line",
-        args: [
-          "s2",
-          "s1",
-          "s3",
-          "s12"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s14",
-        type: "intersection",
-        args: [
-          "s13",
-          "s5"
-        ],
-        name: "F"
-      },
-      {
-        id: "s15",
-        type: "midpoint",
-        args: [
-          "s9",
-          "s14"
-        ],
-        name: "G"
-      },
-      {
-        id: "s16",
-        type: "line",
-        args: [
-          "s11",
-          "s15"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s17",
-        type: "line",
-        args: [
-          "s12",
-          "s9"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s18",
-        type: "intersection",
-        args: [
-          "s17",
-          "s16"
-        ],
-        name: "X"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2012-5.json
-  var imo2012_5_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2012 \u2013 B\xE0i 5",
-    view: {
-      bbox: [
-        -15.548,
-        7.198,
-        12.697,
-        -9.799
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.5,
-          y: 3.5
-        },
-        name: "C"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -4.5,
-          y: -1.5
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s4",
-        type: "perpendicular",
-        args: [
-          "s1",
-          "s3"
-        ],
-        name: "d2",
-        hidden: true,
-        joinPrev: true
-      },
-      {
-        id: "s5",
-        type: "point_on",
-        args: [
-          "s4"
-        ],
-        params: {
-          t: 0.75
-        },
-        name: "A",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s1",
-          "s5"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "segment",
-        args: [
-          "s2",
-          "s5"
-        ],
-        name: "d4",
-        joinPrev: true
-      },
-      {
-        id: "s8",
-        type: "altitude_foot",
-        args: [
-          "s1",
-          "s5",
-          "s2"
-        ],
-        name: "D"
-      },
-      {
-        id: "s9",
-        type: "segment",
-        args: [
-          "s1",
-          "s8"
-        ],
-        name: "d5",
-        style: {
-          dash: true
-        },
-        joinPrev: true
-      },
-      {
-        id: "s10",
-        type: "point_on",
-        args: [
-          "s9"
-        ],
-        params: {
-          t: 0.5499999576752862
-        },
-        name: "X"
-      },
-      {
-        id: "s11",
-        type: "segment",
-        args: [
-          "s5",
-          "s10"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s12",
-        type: "segment",
-        args: [
-          "s2",
-          "s10"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s13",
-        type: "circle",
-        args: [
-          "s2",
-          "s1"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s14",
-        type: "circle",
-        args: [
-          "s5",
-          "s1"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s15",
-        type: "intersection",
-        args: [
-          "s13",
-          "s11"
-        ],
-        params: {
-          which: 0
-        },
-        name: "K"
-      },
-      {
-        id: "s16",
-        type: "intersection",
-        args: [
-          "s14",
-          "s12"
-        ],
-        params: {
-          which: 0
-        },
-        name: "L"
-      },
-      {
-        id: "s17",
-        type: "segment",
-        args: [
-          "s5",
-          "s16"
-        ],
-        name: "d8"
-      },
-      {
-        id: "s18",
-        type: "segment",
-        args: [
-          "s2",
-          "s15"
-        ],
-        name: "d9"
-      },
-      {
-        id: "s19",
-        type: "intersection",
-        args: [
-          "s18",
-          "s17"
-        ],
-        name: "M"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2013-4.json
-  var imo2013_4_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2013 \u2013 B\xE0i 4",
-    view: {
-      bbox: [
-        -6.921,
-        4.637,
-        7.825,
-        -4.237
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.6,
-          y: 3.8
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.6,
-          y: -1.8
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 3.8,
-          y: -1.8
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "orthocenter",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "H"
-      },
-      {
-        id: "s8",
-        type: "point_on",
-        args: [
-          "s5"
-        ],
-        params: {
-          t: 0.6074999640969668
-        },
-        name: "W"
-      },
-      {
-        id: "s9",
-        type: "altitude_foot",
-        args: [
-          "s2",
-          "s3",
-          "s1"
-        ],
-        name: "M"
-      },
-      {
-        id: "s10",
-        type: "segment",
-        args: [
-          "s2",
-          "s9"
-        ],
-        name: "d4",
-        style: {
-          dash: true
-        },
-        joinPrev: true
-      },
-      {
-        id: "s11",
-        type: "altitude_foot",
-        args: [
-          "s3",
-          "s1",
-          "s2"
-        ],
-        name: "N"
-      },
-      {
-        id: "s12",
-        type: "segment",
-        args: [
-          "s3",
-          "s11"
-        ],
-        name: "d5",
-        style: {
-          dash: true
-        },
-        joinPrev: true
-      },
-      {
-        id: "s13",
-        type: "circle_3pts",
-        args: [
-          "s2",
-          "s8",
-          "s11"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s14",
-        type: "center",
-        args: [
-          "s13"
-        ],
-        name: "O_1",
-        joinPrev: true
-      },
-      {
-        id: "s15",
-        type: "reflect",
-        args: [
-          "s8",
-          "s14"
-        ],
-        name: "X"
-      },
-      {
-        id: "s16",
-        type: "circle_3pts",
-        args: [
-          "s3",
-          "s8",
-          "s9"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s17",
-        type: "center",
-        args: [
-          "s16"
-        ],
-        name: "O_2",
-        joinPrev: true
-      },
-      {
-        id: "s18",
-        type: "reflect",
-        args: [
-          "s8",
-          "s17"
-        ],
-        name: "Y"
-      },
-      {
-        id: "s19",
-        type: "line",
-        args: [
-          "s15",
-          "s18"
-        ],
-        name: "d6"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2014-4.json
-  var imo2014_4_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2014 \u2013 B\xE0i 4",
-    view: {
-      bbox: [
-        -12.147,
-        6.401,
-        11.831,
-        -8.028
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.4,
-          y: 3.6
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.8,
-          y: -1.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 3.6,
-          y: -1.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "circle_tangent_at",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s10",
-        type: "center",
-        args: [
-          "s9"
-        ],
-        name: "O1",
-        joinPrev: true
-      },
-      {
-        id: "s11",
-        type: "intersection_other",
-        args: [
-          "s9",
-          "s5",
-          "s3"
-        ],
-        name: "P"
-      },
-      {
-        id: "s12",
-        type: "circle_tangent_at",
-        args: [
-          "s1",
-          "s3",
-          "s2"
-        ],
-        name: "\u03C93"
-      },
-      {
-        id: "s13",
-        type: "center",
-        args: [
-          "s12"
-        ],
-        name: "O2",
-        joinPrev: true
-      },
-      {
-        id: "s14",
-        type: "intersection_other",
-        args: [
-          "s12",
-          "s5",
-          "s2"
-        ],
-        name: "Q"
-      },
-      {
-        id: "s15",
-        type: "reflect",
-        args: [
-          "s1",
-          "s11"
-        ],
-        name: "M"
-      },
-      {
-        id: "s16",
-        type: "reflect",
-        args: [
-          "s1",
-          "s14"
-        ],
-        name: "N"
-      },
-      {
-        id: "s17",
-        type: "line",
-        args: [
-          "s2",
-          "s15"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s18",
-        type: "line",
-        args: [
-          "s3",
-          "s16"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s19",
-        type: "intersection",
-        args: [
-          "s18",
-          "s17"
-        ],
-        name: "X"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2015-4.json
-  var imo2015_4_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2015 \u2013 B\xE0i 4",
-    view: {
-      bbox: [
-        -14.59,
-        10.895,
-        13.39,
-        -5.943
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.6,
-          y: 3.8
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -4,
-          y: -1.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4,
-          y: -1.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "point_on",
-        args: [
-          "s5"
-        ],
-        params: {
-          t: 0.19999997756060434
-        },
-        name: "D"
-      },
-      {
-        id: "s10",
-        type: "circle",
-        args: [
-          "s1",
-          "s9"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s11",
-        type: "intersection_other",
-        args: [
-          "s10",
-          "s5",
-          "s9"
-        ],
-        name: "E"
-      },
-      {
-        id: "s12",
-        type: "intersection",
-        args: [
-          "s10",
-          "s7"
-        ],
-        params: {
-          which: 0
-        },
-        name: "F"
-      },
-      {
-        id: "s13",
-        type: "intersection_other",
-        args: [
-          "s10",
-          "s7",
-          "s12"
-        ],
-        name: "G"
-      },
-      {
-        id: "s14",
-        type: "circle_3pts",
-        args: [
-          "s2",
-          "s9",
-          "s12"
-        ],
-        name: "\u03C93"
-      },
-      {
-        id: "s15",
-        type: "center",
-        args: [
-          "s14"
-        ],
-        name: "O1",
-        joinPrev: true
-      },
-      {
-        id: "s16",
-        type: "intersection_other",
-        args: [
-          "s14",
-          "s4",
-          "s2"
-        ],
-        name: "K"
-      },
-      {
-        id: "s17",
-        type: "circle_3pts",
-        args: [
-          "s3",
-          "s13",
-          "s11"
-        ],
-        name: "\u03C94"
-      },
-      {
-        id: "s18",
-        type: "center",
-        args: [
-          "s17"
-        ],
-        name: "O2",
-        joinPrev: true
-      },
-      {
-        id: "s19",
-        type: "intersection_other",
-        args: [
-          "s17",
-          "s6",
-          "s3"
-        ],
-        name: "L"
-      },
-      {
-        id: "s20",
-        type: "line",
-        args: [
-          "s12",
-          "s16"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s21",
-        type: "line",
-        args: [
-          "s13",
-          "s19"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s22",
-        type: "intersection",
-        args: [
-          "s21",
-          "s20"
-        ],
-        name: "X"
-      },
-      {
-        id: "s23",
-        type: "line",
-        args: [
-          "s1",
-          "s8"
-        ],
-        name: "d6"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2017-4.json
-  var imo2017_4_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2017 \u2013 B\xE0i 4",
-    view: {
-      bbox: [
-        -17.9,
-        7.762,
-        41.519,
-        -27.995
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 0,
-          y: 0.6
-        },
-        name: "O"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 0,
-          y: -3.4
-        },
-        name: "R"
-      },
-      {
-        id: "s3",
-        type: "circle",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s4",
-        type: "point_on",
-        args: [
-          "s3"
-        ],
-        params: {
-          t: -0.3490659190754673
-        },
-        name: "S"
-      },
-      {
-        id: "s5",
-        type: "tangent_at",
-        args: [
-          "s3",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s6",
-        type: "reflect",
-        args: [
-          "s2",
-          "s4"
-        ],
-        name: "T"
-      },
-      {
-        id: "s7",
-        type: "point_on",
-        args: [
-          "s3"
-        ],
-        params: {
-          t: -1.0471975535926368
-        },
-        name: "J"
-      },
-      {
-        id: "s8",
-        type: "circle_3pts",
-        args: [
-          "s7",
-          "s4",
-          "s6"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s9",
-        type: "center",
-        args: [
-          "s8"
-        ],
-        name: "O1",
-        joinPrev: true
-      },
-      {
-        id: "s10",
-        type: "intersection",
-        args: [
-          "s8",
-          "s5"
-        ],
-        params: {
-          which: 0
-        },
-        name: "A"
-      },
-      {
-        id: "s11",
-        type: "line",
-        args: [
-          "s10",
-          "s7"
-        ],
-        name: "d2"
-      },
-      {
-        id: "s12",
-        type: "intersection_other",
-        args: [
-          "s11",
-          "s3",
-          "s7"
-        ],
-        name: "K"
-      },
-      {
-        id: "s13",
-        type: "line",
-        args: [
-          "s12",
-          "s6"
-        ],
-        name: "d3"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2018-1.json
-  var imo2018_1_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2018 \u2013 B\xE0i 1",
-    view: {
-      bbox: [
-        -12.507,
-        9.097,
-        12.237,
-        -5.793
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.4,
-          y: 3.8
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -4,
-          y: -1.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4,
-          y: -1.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "point_on",
-        args: [
-          "s4"
-        ],
-        params: {
-          t: 0.6250000268505589
-        },
-        name: "D"
-      },
-      {
-        id: "s10",
-        type: "circle",
-        args: [
-          "s1",
-          "s9"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s11",
-        type: "intersection",
-        args: [
-          "s10",
-          "s6"
-        ],
-        params: {
-          which: 0
-        },
-        name: "E"
-      },
-      {
-        id: "s12",
-        type: "perp_bisector",
-        args: [
-          "s2",
-          "s9"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s13",
-        type: "intersection",
-        args: [
-          "s12",
-          "s7"
-        ],
-        params: {
-          which: 1
-        },
-        name: "F"
-      },
-      {
-        id: "s14",
-        type: "perp_bisector",
-        args: [
-          "s3",
-          "s11"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s15",
-        type: "intersection",
-        args: [
-          "s14",
-          "s7"
-        ],
-        params: {
-          which: 0
-        },
-        name: "G"
-      },
-      {
-        id: "s16",
-        type: "segment",
-        args: [
-          "s9",
-          "s11"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s17",
-        type: "segment",
-        args: [
-          "s13",
-          "s15"
-        ],
-        name: "d7"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2019-6.json
-  var imo2019_6_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2019 \u2013 B\xE0i 6",
-    view: {
-      bbox: [
-        -7.599,
-        4.636,
-        7.487,
-        -4.443
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.8,
-          y: 3.8
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.8,
-          y: -1.8
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4,
-          y: -1.8
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "incircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "I",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "incircle_touch",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "D"
-      },
-      {
-        id: "s10",
-        type: "incircle_touch",
-        args: [
-          "s2",
-          "s3",
-          "s1"
-        ],
-        name: "E"
-      },
-      {
-        id: "s11",
-        type: "incircle_touch",
-        args: [
-          "s3",
-          "s1",
-          "s2"
-        ],
-        name: "F"
-      },
-      {
-        id: "s12",
-        type: "segment",
-        args: [
-          "s10",
-          "s11"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s13",
-        type: "perpendicular",
-        args: [
-          "s9",
-          "s12"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s14",
-        type: "intersection_other",
-        args: [
-          "s13",
-          "s7",
-          "s9"
-        ],
-        name: "R"
-      },
-      {
-        id: "s15",
-        type: "line",
-        args: [
-          "s1",
-          "s14"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s16",
-        type: "intersection_other",
-        args: [
-          "s15",
-          "s7",
-          "s14"
-        ],
-        name: "P"
-      },
-      {
-        id: "s17",
-        type: "circle_3pts",
-        args: [
-          "s16",
-          "s3",
-          "s10"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s18",
-        type: "center",
-        args: [
-          "s17"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s19",
-        type: "circle_3pts",
-        args: [
-          "s16",
-          "s2",
-          "s11"
-        ],
-        name: "\u03C93"
-      },
-      {
-        id: "s20",
-        type: "center",
-        args: [
-          "s19"
-        ],
-        name: "O1",
-        joinPrev: true
-      },
-      {
-        id: "s21",
-        type: "intersection_other",
-        args: [
-          "s19",
-          "s17",
-          "s16"
-        ],
-        name: "Q"
-      },
-      {
-        id: "s22",
-        type: "line",
-        args: [
-          "s9",
-          "s8"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s23",
-        type: "line",
-        args: [
-          "s16",
-          "s21"
-        ],
-        name: "d8"
-      },
-      {
-        id: "s24",
-        type: "line",
-        args: [
-          "s1",
-          "s8"
-        ],
-        name: "d9"
-      },
-      {
-        id: "s25",
-        type: "perpendicular",
-        args: [
-          "s1",
-          "s24"
-        ],
-        name: "d10"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2021-4.json
-  var imo2021_4_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2021 \u2013 B\xE0i 4",
-    view: {
-      bbox: [
-        -22.661,
-        19.098,
-        18.072,
-        -5.413
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 0,
-          y: 0
-        },
-        name: "I"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 0,
-          y: -2.2
-        },
-        name: "U"
-      },
-      {
-        id: "s3",
-        type: "circle",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s4",
-        type: "point_on",
-        args: [
-          "s3"
-        ],
-        params: {
-          t: 1.5707963267948966
-        },
-        name: "T_1"
-      },
-      {
-        id: "s5",
-        type: "point_on",
-        args: [
-          "s3"
-        ],
-        params: {
-          t: 2.443460752297466
-        },
-        name: "T_2"
-      },
-      {
-        id: "s6",
-        type: "point_on",
-        args: [
-          "s3"
-        ],
-        params: {
-          t: -2.2689280718183586
-        },
-        name: "T_3"
-      },
-      {
-        id: "s7",
-        type: "point_on",
-        args: [
-          "s3"
-        ],
-        params: {
-          t: -0.523598796373967
-        },
-        name: "T_4"
-      },
-      {
-        id: "s8",
-        type: "tangent_at",
-        args: [
-          "s3",
-          "s4"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s9",
-        type: "tangent_at",
-        args: [
-          "s3",
-          "s5"
-        ],
-        name: "d2"
-      },
-      {
-        id: "s10",
-        type: "tangent_at",
-        args: [
-          "s3",
-          "s6"
-        ],
-        name: "d3"
-      },
-      {
-        id: "s11",
-        type: "tangent_at",
-        args: [
-          "s3",
-          "s7"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s12",
-        type: "intersection",
-        args: [
-          "s9",
-          "s8"
-        ],
-        name: "D"
-      },
-      {
-        id: "s13",
-        type: "intersection",
-        args: [
-          "s10",
-          "s9"
-        ],
-        name: "A"
-      },
-      {
-        id: "s14",
-        type: "intersection",
-        args: [
-          "s11",
-          "s10"
-        ],
-        name: "B"
-      },
-      {
-        id: "s15",
-        type: "intersection",
-        args: [
-          "s11",
-          "s8"
-        ],
-        name: "C"
-      },
-      {
-        id: "s16",
-        type: "circle_3pts",
-        args: [
-          "s13",
-          "s1",
-          "s15"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s17",
-        type: "center",
-        args: [
-          "s16"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s18",
-        type: "intersection_other",
-        args: [
-          "s16",
-          "s10",
-          "s13"
-        ],
-        name: "X"
-      },
-      {
-        id: "s19",
-        type: "intersection_other",
-        args: [
-          "s16",
-          "s11",
-          "s15"
-        ],
-        name: "Z"
-      },
-      {
-        id: "s20",
-        type: "intersection_other",
-        args: [
-          "s16",
-          "s9",
-          "s13"
-        ],
-        name: "Y"
-      },
-      {
-        id: "s21",
-        type: "intersection_other",
-        args: [
-          "s16",
-          "s8",
-          "s15"
-        ],
-        name: "T"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2023-2.json
-  var imo2023_2_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2023 \u2013 B\xE0i 2",
-    view: {
-      bbox: [
-        -11.179,
-        6.101,
-        8.115,
-        -5.51
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -1,
-          y: 3.8
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.6,
-          y: -1.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4.2,
-          y: -1.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "arc_midpoint",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        params: {
-          contains: true
-        },
-        name: "S"
-      },
-      {
-        id: "s10",
-        type: "perpendicular",
-        args: [
-          "s1",
-          "s5"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s11",
-        type: "line",
-        args: [
-          "s2",
-          "s9"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s12",
-        type: "intersection",
-        args: [
-          "s11",
-          "s10"
-        ],
-        name: "D"
-      },
-      {
-        id: "s13",
-        type: "intersection_other",
-        args: [
-          "s10",
-          "s7",
-          "s1"
-        ],
-        name: "E"
-      },
-      {
-        id: "s14",
-        type: "parallel",
-        args: [
-          "s12",
-          "s5"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s15",
-        type: "line",
-        args: [
-          "s2",
-          "s13"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s16",
-        type: "intersection",
-        args: [
-          "s15",
-          "s14"
-        ],
-        name: "L"
-      },
-      {
-        id: "s17",
-        type: "circle_3pts",
-        args: [
-          "s2",
-          "s12",
-          "s16"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s18",
-        type: "center",
-        args: [
-          "s17"
-        ],
-        name: "O1",
-        joinPrev: true
-      },
-      {
-        id: "s19",
-        type: "intersection_other",
-        args: [
-          "s17",
-          "s7",
-          "s2"
-        ],
-        name: "P"
-      },
-      {
-        id: "s20",
-        type: "tangent_at",
-        args: [
-          "s17",
-          "s19"
-        ],
-        name: "d8"
-      },
-      {
-        id: "s21",
-        type: "intersection",
-        args: [
-          "s20",
-          "s11"
-        ],
-        name: "X"
-      },
-      {
-        id: "s22",
-        type: "line",
-        args: [
-          "s1",
-          "s21"
-        ],
-        name: "d9"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2024-4.json
-  var imo2024_4_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2024 \u2013 B\xE0i 4",
-    view: {
-      bbox: [
-        -7.613,
-        4.325,
-        8.813,
-        -5.56
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 0.5,
-          y: 3.5
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.4,
-          y: -1.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4.600001,
-          y: -1.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "incircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "I",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "reflect",
-        args: [
-          "s6",
-          "s8"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s10",
-        type: "intersection",
-        args: [
-          "s9",
-          "s5"
-        ],
-        name: "X"
-      },
-      {
-        id: "s11",
-        type: "reflect",
-        args: [
-          "s4",
-          "s8"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s12",
-        type: "intersection",
-        args: [
-          "s11",
-          "s5"
-        ],
-        name: "Y"
-      },
-      {
-        id: "s13",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s14",
-        type: "center",
-        args: [
-          "s13"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s15",
-        type: "line",
-        args: [
-          "s1",
-          "s8"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s16",
-        type: "intersection_other",
-        args: [
-          "s15",
-          "s13",
-          "s1"
-        ],
-        name: "P"
-      },
-      {
-        id: "s17",
-        type: "midpoint",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "K"
-      },
-      {
-        id: "s18",
-        type: "midpoint",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "L"
-      },
-      {
-        id: "s19",
-        type: "segment",
-        args: [
-          "s17",
-          "s8"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s20",
-        type: "segment",
-        args: [
-          "s8",
-          "s18"
-        ],
-        name: "d8"
-      },
-      {
-        id: "s21",
-        type: "segment",
-        args: [
-          "s12",
-          "s16"
-        ],
-        name: "d9"
-      },
-      {
-        id: "s22",
-        type: "segment",
-        args: [
-          "s16",
-          "s10"
-        ],
-        name: "d10"
-      }
-    ]
-  };
-
-  // examples/thu-vien/imo2025-2.json
-  var imo2025_2_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "IMO 2025 \u2013 B\xE0i 2",
-    view: {
-      bbox: [
-        -6.227,
-        4.25,
-        7.727,
-        -4.147
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -1.5,
-          y: 0.3
-        },
-        name: "M"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -1.5,
-          y: -1.7
-        },
-        name: "U"
-      },
-      {
-        id: "s3",
-        type: "circle",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s4",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 1.9,
-          y: 0.3
-        },
-        name: "N"
-      },
-      {
-        id: "s5",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 1.9,
-          y: -2.8
-        },
-        name: "V"
-      },
-      {
-        id: "s6",
-        type: "circle",
-        args: [
-          "s4",
-          "s5"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s7",
-        type: "intersection",
-        args: [
-          "s6",
-          "s3"
-        ],
-        params: {
-          which: 0
-        },
-        name: "A"
-      },
-      {
-        id: "s8",
-        type: "intersection_other",
-        args: [
-          "s6",
-          "s3",
-          "s7"
-        ],
-        name: "B"
-      },
-      {
-        id: "s9",
-        type: "line",
-        args: [
-          "s1",
-          "s4"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s10",
-        type: "intersection",
-        args: [
-          "s9",
-          "s3"
-        ],
-        params: {
-          which: 0
-        },
-        name: "C"
-      },
-      {
-        id: "s11",
-        type: "intersection",
-        args: [
-          "s9",
-          "s6"
-        ],
-        params: {
-          which: 1
-        },
-        name: "D"
-      },
-      {
-        id: "s12",
-        type: "circumcenter",
-        args: [
-          "s7",
-          "s10",
-          "s11"
-        ],
-        name: "P"
-      },
-      {
-        id: "s13",
-        type: "line",
-        args: [
-          "s7",
-          "s12"
-        ],
-        name: "d2"
-      },
-      {
-        id: "s14",
-        type: "intersection_other",
-        args: [
-          "s13",
-          "s3",
-          "s7"
-        ],
-        name: "E"
-      },
-      {
-        id: "s15",
-        type: "intersection_other",
-        args: [
-          "s13",
-          "s6",
-          "s7"
-        ],
-        name: "F"
-      },
-      {
-        id: "s16",
-        type: "orthocenter",
-        args: [
-          "s12",
-          "s1",
-          "s4"
-        ],
-        name: "H"
-      },
-      {
-        id: "s17",
-        type: "parallel",
-        args: [
-          "s16",
-          "s13"
-        ],
-        name: "d3"
-      },
-      {
-        id: "s18",
-        type: "circle_3pts",
-        args: [
-          "s8",
-          "s14",
-          "s15"
-        ],
-        name: "\u03C93"
-      },
-      {
-        id: "s19",
-        type: "center",
-        args: [
-          "s18"
-        ],
-        name: "O",
-        joinPrev: true
-      }
-    ]
-  };
-
-  // examples/thu-vien/vmo2014-4.json
-  var vmo2014_4_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "VMO 2014 \u2013 B\xE0i 4",
-    view: {
-      bbox: [
-        -12.75,
-        5.387,
-        13.35,
-        -10.319
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -1.2,
-          y: 3.8
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.6,
-          y: -1.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4.2,
-          y: -1.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "arc_midpoint",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        params: {
-          contains: false
-        },
-        name: "I"
-      },
-      {
-        id: "s10",
-        type: "circle",
-        args: [
-          "s9",
-          "s3"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s11",
-        type: "intersection_other",
-        args: [
-          "s10",
-          "s6",
-          "s3"
-        ],
-        name: "K"
-      },
-      {
-        id: "s12",
-        type: "line",
-        args: [
-          "s2",
-          "s11"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s13",
-        type: "intersection_other",
-        args: [
-          "s12",
-          "s7",
-          "s2"
-        ],
-        name: "D"
-      },
-      {
-        id: "s14",
-        type: "line",
-        args: [
-          "s1",
-          "s9"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s15",
-        type: "intersection",
-        args: [
-          "s14",
-          "s12"
-        ],
-        name: "E"
-      },
-      {
-        id: "s16",
-        type: "line",
-        args: [
-          "s13",
-          "s9"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s17",
-        type: "intersection",
-        args: [
-          "s16",
-          "s6"
-        ],
-        name: "F"
-      },
-      {
-        id: "s18",
-        type: "segment",
-        args: [
-          "s15",
-          "s17"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s19",
-        type: "line",
-        args: [
-          "s1",
-          "s13"
-        ],
-        name: "d8"
-      },
-      {
-        id: "s20",
-        type: "parallel",
-        args: [
-          "s3",
-          "s19"
-        ],
-        name: "d9"
-      },
-      {
-        id: "s21",
-        type: "intersection",
-        args: [
-          "s20",
-          "s16"
-        ],
-        name: "M"
-      },
-      {
-        id: "s22",
-        type: "line",
-        args: [
-          "s11",
-          "s21"
-        ],
-        name: "d10"
-      },
-      {
-        id: "s23",
-        type: "intersection",
-        args: [
-          "s22",
-          "s5"
-        ],
-        name: "N"
-      },
-      {
-        id: "s24",
-        type: "circle_3pts",
-        args: [
-          "s2",
-          "s11",
-          "s23"
-        ],
-        name: "\u03C93"
-      },
-      {
-        id: "s25",
-        type: "center",
-        args: [
-          "s24"
-        ],
-        name: "O1",
-        joinPrev: true
-      },
-      {
-        id: "s26",
-        type: "intersection_other",
-        args: [
-          "s24",
-          "s7",
-          "s2"
-        ],
-        name: "P"
-      },
-      {
-        id: "s27",
-        type: "midpoint",
-        args: [
-          "s1",
-          "s13"
-        ],
-        name: "J"
-      },
-      {
-        id: "s28",
-        type: "line",
-        args: [
-          "s26",
-          "s11"
-        ],
-        name: "d11"
-      }
-    ]
-  };
-
-  // examples/thu-vien/vmo2016-3.json
-  var vmo2016_3_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "VMO 2016 \u2013 B\xE0i 3",
-    view: {
-      bbox: [
-        -18.274,
-        17.933,
-        46.614,
-        -21.115
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 0.8,
-          y: 3.4
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.6,
-          y: -1.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 3.6,
-          y: -1.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "midpoint",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "D"
-      },
-      {
-        id: "s8",
-        type: "projection",
-        args: [
-          "s7",
-          "s4"
-        ],
-        name: "E"
-      },
-      {
-        id: "s9",
-        type: "projection",
-        args: [
-          "s7",
-          "s6"
-        ],
-        name: "F"
-      },
-      {
-        id: "s10",
-        type: "circumcenter",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "O"
-      },
-      {
-        id: "s11",
-        type: "line",
-        args: [
-          "s8",
-          "s9"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s12",
-        type: "line",
-        args: [
-          "s1",
-          "s10"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s13",
-        type: "intersection",
-        args: [
-          "s12",
-          "s11"
-        ],
-        name: "M"
-      },
-      {
-        id: "s14",
-        type: "intersection",
-        args: [
-          "s11",
-          "s5"
-        ],
-        name: "N"
-      },
-      {
-        id: "s15",
-        type: "circle_3pts",
-        args: [
-          "s1",
-          "s13",
-          "s14"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s16",
-        type: "center",
-        args: [
-          "s15"
-        ],
-        name: "O1",
-        joinPrev: true
-      },
-      {
-        id: "s17",
-        type: "circle_diameter",
-        args: [
-          "s1",
-          "s7"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s18",
-        type: "center",
-        args: [
-          "s17"
-        ],
-        name: "O2",
-        joinPrev: true
-      },
-      {
-        id: "s19",
-        type: "tangent_at",
-        args: [
-          "s17",
-          "s8"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s20",
-        type: "tangent_at",
-        args: [
-          "s17",
-          "s9"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s21",
-        type: "intersection",
-        args: [
-          "s20",
-          "s19"
-        ],
-        name: "T"
-      },
-      {
-        id: "s22",
-        type: "perp_bisector",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d8"
-      }
-    ]
-  };
-
-  // examples/thu-vien/noi-bang-tiep.json
-  var noi_bang_tiep_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "B\u1ED5 \u0111\u1EC1 t\xE2m n\u1ED9i ti\u1EBFp \u2013 b\xE0ng ti\u1EBFp",
-    view: {
-      bbox: [
-        -9.034,
-        5.358,
-        9.234,
-        -5.635
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.4,
-          y: 4.4
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -2.6,
-          y: 0.2
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 2.8,
-          y: 0.2
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "incenter",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "I"
-      },
-      {
-        id: "s10",
-        type: "excenter",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "I_A"
-      },
-      {
-        id: "s11",
-        type: "arc_midpoint",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        params: {
-          contains: false
-        },
-        name: "S"
-      },
-      {
-        id: "s12",
-        type: "segment",
-        args: [
-          "s1",
-          "s10"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s13",
-        type: "circle",
-        args: [
-          "s11",
-          "s2"
-        ],
-        name: "\u03C92"
-      }
-    ]
-  };
-
-  // examples/thu-vien/euler-feuerbach.json
-  var euler_feuerbach_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "\u0110\u01B0\u1EDDng tr\xF2n Euler \u2013 \u0111\u1ECBnh l\xFD Feuerbach",
-    view: {
-      bbox: [
-        -14.652,
-        8.752,
-        16.048,
-        -9.722
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.6,
-          y: 2.6
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -2,
-          y: -0.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 2.2,
-          y: -0.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "nine_point_circle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "N",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "incircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s10",
-        type: "center",
-        args: [
-          "s9"
-        ],
-        name: "I",
-        joinPrev: true
-      },
-      {
-        id: "s11",
-        type: "excircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C93"
-      },
-      {
-        id: "s12",
-        type: "center",
-        args: [
-          "s11"
-        ],
-        name: "I_A",
-        joinPrev: true
-      },
-      {
-        id: "s13",
-        type: "excircle",
-        args: [
-          "s2",
-          "s3",
-          "s1"
-        ],
-        name: "\u03C94"
-      },
-      {
-        id: "s14",
-        type: "center",
-        args: [
-          "s13"
-        ],
-        name: "I_B",
-        joinPrev: true
-      },
-      {
-        id: "s15",
-        type: "excircle",
-        args: [
-          "s3",
-          "s1",
-          "s2"
-        ],
-        name: "\u03C95"
-      },
-      {
-        id: "s16",
-        type: "center",
-        args: [
-          "s15"
-        ],
-        name: "I_C",
-        joinPrev: true
-      },
-      {
-        id: "s17",
-        type: "intersection",
-        args: [
-          "s9",
-          "s7"
-        ],
-        params: {
-          which: 1
-        },
-        name: "F_e"
-      }
-    ]
-  };
-
-  // examples/thu-vien/mixtilinear.json
-  var mixtilinear_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear",
-    view: {
-      bbox: [
-        -8.107,
-        4.654,
-        8.307,
-        -5.224
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.4,
-          y: 3.8
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.8,
-          y: -1.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4,
-          y: -1.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "mixtilinear",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s10",
-        type: "center",
-        args: [
-          "s9"
-        ],
-        name: "J",
-        joinPrev: true
-      },
-      {
-        id: "s11",
-        type: "incenter",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "I"
-      },
-      {
-        id: "s12",
-        type: "intersection",
-        args: [
-          "s9",
-          "s7"
-        ],
-        params: {
-          which: 0
-        },
-        name: "T"
-      },
-      {
-        id: "s13",
-        type: "projection",
-        args: [
-          "s10",
-          "s4"
-        ],
-        name: "K"
-      },
-      {
-        id: "s14",
-        type: "projection",
-        args: [
-          "s10",
-          "s6"
-        ],
-        name: "L"
-      },
-      {
-        id: "s15",
-        type: "segment",
-        args: [
-          "s13",
-          "s14"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s16",
-        type: "arc_midpoint",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        params: {
-          contains: true
-        },
-        name: "S"
-      },
-      {
-        id: "s17",
-        type: "line",
-        args: [
-          "s12",
-          "s16"
-        ],
-        name: "d5"
-      }
-    ]
-  };
-
-  // examples/thu-vien/nghich-dao-bc.json
-  var nghich_dao_bc_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "Ngh\u1ECBch \u0111\u1EA3o \u221A(bc)",
-    view: {
-      bbox: [
-        -24.071,
-        12.332,
-        25.24,
-        -17.341
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.6,
-          y: 3.8
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3,
-          y: -0.8
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4.2,
-          y: -1.4
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "angle_bisector",
-        args: [
-          "s2",
-          "s1",
-          "s3"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s10",
-        type: "reflect",
-        args: [
-          "s3",
-          "s9"
-        ],
-        name: "C'"
-      },
-      {
-        id: "s11",
-        type: "circle_diameter",
-        args: [
-          "s2",
-          "s10"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s12",
-        type: "center",
-        args: [
-          "s11"
-        ],
-        name: "O1",
-        joinPrev: true
-      },
-      {
-        id: "s13",
-        type: "tangent_point",
-        args: [
-          "s11",
-          "s1"
-        ],
-        params: {
-          which: 0
-        },
-        name: "T"
-      },
-      {
-        id: "s14",
-        type: "line",
-        args: [
-          "s1",
-          "s13"
-        ],
-        name: "d5",
-        joinPrev: true
-      },
-      {
-        id: "s15",
-        type: "tangent_point",
-        args: [
-          "s11",
-          "s1"
-        ],
-        params: {
-          which: 1
-        },
-        name: "E",
-        joinPrev: true
-      },
-      {
-        id: "s16",
-        type: "line",
-        args: [
-          "s1",
-          "s15"
-        ],
-        name: "d6",
-        joinPrev: true
-      },
-      {
-        id: "s17",
-        type: "circle",
-        args: [
-          "s1",
-          "s13"
-        ],
-        name: "\u03C93"
-      },
-      {
-        id: "s18",
-        type: "invert_line",
-        args: [
-          "s7",
-          "s17"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s19",
-        type: "reflect",
-        args: [
-          "s18",
-          "s9"
-        ],
-        name: "d8"
-      },
-      {
-        id: "s20",
-        type: "mixtilinear",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C94"
-      },
-      {
-        id: "s21",
-        type: "center",
-        args: [
-          "s20"
-        ],
-        name: "O2",
-        joinPrev: true
-      },
-      {
-        id: "s22",
-        type: "invert_circle",
-        args: [
-          "s20",
-          "s17"
-        ],
-        name: "\u03C95"
-      },
-      {
-        id: "s23",
-        type: "reflect",
-        args: [
-          "s22",
-          "s9"
-        ],
-        name: "\u03C96"
-      },
-      {
-        id: "s24",
-        type: "excircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C97"
-      },
-      {
-        id: "s25",
-        type: "center",
-        args: [
-          "s24"
-        ],
-        name: "I_A",
-        joinPrev: true
-      }
-    ]
-  };
-
-  // examples/thu-vien/brocard.json
-  var brocard_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp \u2013 \u0111\u1ECBnh l\xFD Brocard",
-    view: {
-      bbox: [
-        -25.633,
-        6.563,
-        34.011,
-        -29.329
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -2.6,
-          y: 2.6
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.4,
-          y: -1.4
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 2.2,
-          y: -2.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "circle_3pts",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s5",
-        type: "center",
-        args: [
-          "s4"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "point_on",
-        args: [
-          "s4"
-        ],
-        params: {
-          t: 0
-        },
-        name: "D",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1",
-        joinPrev: true
-      },
-      {
-        id: "s8",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "segment",
-        args: [
-          "s3",
-          "s6"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s10",
-        type: "segment",
-        args: [
-          "s6",
-          "s1"
-        ],
-        name: "d4",
-        joinPrev: true
-      },
-      {
-        id: "s11",
-        type: "segment",
-        args: [
-          "s1",
-          "s3"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s12",
-        type: "segment",
-        args: [
-          "s2",
-          "s6"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s13",
-        type: "intersection",
-        args: [
-          "s12",
-          "s11"
-        ],
-        name: "P"
-      },
-      {
-        id: "s14",
-        type: "intersection",
-        args: [
-          "s7",
-          "s9"
-        ],
-        name: "Q"
-      },
-      {
-        id: "s15",
-        type: "intersection",
-        args: [
-          "s10",
-          "s8"
-        ],
-        name: "R"
-      },
-      {
-        id: "s16",
-        type: "segment",
-        args: [
-          "s13",
-          "s14"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s17",
-        type: "segment",
-        args: [
-          "s14",
-          "s15"
-        ],
-        name: "d8"
-      },
-      {
-        id: "s18",
-        type: "segment",
-        args: [
-          "s15",
-          "s13"
-        ],
-        name: "d9"
-      },
-      {
-        id: "s19",
-        type: "perpendicular",
-        args: [
-          "s5",
-          "s17"
-        ],
-        name: "d10"
-      }
-    ]
-  };
-
-  // examples/thu-vien/monge.json
-  var monge_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "Ti\u1EBFp tuy\u1EBFn chung \u2013 \u0111\u1ECBnh l\xFD Monge",
-    view: {
-      bbox: [
-        -18.11,
-        11.234,
-        25.21,
-        -14.834
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -4.5,
-          y: -1
-        },
-        name: "O_1"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -3.78,
-          y: -1.96
-        },
-        name: "R_1"
-      },
-      {
-        id: "s3",
-        type: "circle",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s4",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 0.5,
-          y: 2.4
-        },
-        name: "O_2"
-      },
-      {
-        id: "s5",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 1.58,
-          y: 0.96
-        },
-        name: "R_2"
-      },
-      {
-        id: "s6",
-        type: "circle",
-        args: [
-          "s4",
-          "s5"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s7",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4.2,
-          y: -1.5
-        },
-        name: "O_3"
-      },
-      {
-        id: "s8",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 4.68,
-          y: -2.14
-        },
-        name: "R_3"
-      },
-      {
-        id: "s9",
-        type: "circle",
-        args: [
-          "s7",
-          "s8"
-        ],
-        name: "\u03C93"
-      },
-      {
-        id: "s10",
-        type: "common_tangent",
-        args: [
-          "s3",
-          "s6"
-        ],
-        params: {
-          internal: false,
-          which: 0
-        },
-        name: "d1"
-      },
-      {
-        id: "s11",
-        type: "common_tangent",
-        args: [
-          "s3",
-          "s6"
-        ],
-        params: {
-          internal: false,
-          which: 1
-        },
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s12",
-        type: "common_tangent",
-        args: [
-          "s3",
-          "s6"
-        ],
-        params: {
-          internal: true,
-          which: 0
-        },
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s13",
-        type: "common_tangent",
-        args: [
-          "s3",
-          "s6"
-        ],
-        params: {
-          internal: true,
-          which: 1
-        },
-        name: "d4",
-        joinPrev: true
-      },
-      {
-        id: "s14",
-        type: "homothety_center",
-        args: [
-          "s3",
-          "s6"
-        ],
-        name: "S_{12}"
-      },
-      {
-        id: "s15",
-        type: "homothety_center",
-        args: [
-          "s6",
-          "s9"
-        ],
-        name: "S_{23}"
-      },
-      {
-        id: "s16",
-        type: "homothety_center",
-        args: [
-          "s3",
-          "s9"
-        ],
-        name: "S_{13}"
-      },
-      {
-        id: "s17",
-        type: "line",
-        args: [
-          "s14",
-          "s15"
-        ],
-        name: "d5"
-      }
-    ]
-  };
-
-  // examples/thu-vien/dong-dang-xoan.json
-  var dong_dang_xoan_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "T\xE2m \u0111\u1ED3ng d\u1EA1ng xo\u1EAFn (quay + v\u1ECB t\u1EF1)",
-    view: {
-      bbox: [
-        -6.453,
-        5.08,
-        6.251,
-        -2.565
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -4,
-          y: 1.5
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -1.6,
-          y: -0.3
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 1.5,
-          y: 0.3
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 3.5,
-          y: 2.7
-        },
-        name: "D"
-      },
-      {
-        id: "s5",
-        type: "line",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s6",
-        type: "line",
-        args: [
-          "s3",
-          "s4"
-        ],
-        name: "d2"
-      },
-      {
-        id: "s7",
-        type: "intersection",
-        args: [
-          "s6",
-          "s5"
-        ],
-        name: "X"
-      },
-      {
-        id: "s8",
-        type: "circle_3pts",
-        args: [
-          "s7",
-          "s1",
-          "s3"
-        ],
-        name: "\u03C91"
-      },
-      {
-        id: "s9",
-        type: "center",
-        args: [
-          "s8"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s10",
-        type: "circle_3pts",
-        args: [
-          "s7",
-          "s2",
-          "s4"
-        ],
-        name: "\u03C92"
-      },
-      {
-        id: "s11",
-        type: "center",
-        args: [
-          "s10"
-        ],
-        name: "O1",
-        joinPrev: true
-      },
-      {
-        id: "s12",
-        type: "intersection_other",
-        args: [
-          "s10",
-          "s8",
-          "s7"
-        ],
-        name: "S"
-      },
-      {
-        id: "s13",
-        type: "rotate_by",
-        args: [
-          "s2",
-          "s12",
-          "s1",
-          "s12",
-          "s3"
-        ],
-        name: "B_1"
-      },
-      {
-        id: "s14",
-        type: "homothety_by",
-        args: [
-          "s13",
-          "s12",
-          "s12",
-          "s3",
-          "s12",
-          "s1"
-        ],
-        name: "D'"
-      },
-      {
-        id: "s15",
-        type: "segment",
-        args: [
-          "s12",
-          "s2"
-        ],
-        name: "d3"
-      },
-      {
-        id: "s16",
-        type: "segment",
-        args: [
-          "s12",
-          "s14"
-        ],
-        name: "d4"
-      }
-    ]
-  };
-
-  // examples/thu-vien/hinh-day.json
-  var hinh_day_default = {
-    format: "hinh-hoc-dong",
-    version: 1,
-    title: "Tam gi\xE1c v\u1EDBi ba t\xE2m b\xE0ng ti\u1EBFp (h\xECnh d\xE0y)",
-    view: {
-      bbox: [
-        -13.115,
-        7.517,
-        13.996,
-        -8.798
-      ]
-    },
-    steps: [
-      {
-        id: "s1",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -0.3,
-          y: 2.4
-        },
-        name: "A"
-      },
-      {
-        id: "s2",
-        type: "free_point",
-        args: [],
-        params: {
-          x: -1.8,
-          y: -0.6
-        },
-        name: "B"
-      },
-      {
-        id: "s3",
-        type: "free_point",
-        args: [],
-        params: {
-          x: 2,
-          y: -0.6
-        },
-        name: "C"
-      },
-      {
-        id: "s4",
-        type: "segment",
-        args: [
-          "s1",
-          "s2"
-        ],
-        name: "d1"
-      },
-      {
-        id: "s5",
-        type: "segment",
-        args: [
-          "s2",
-          "s3"
-        ],
-        name: "d2",
-        joinPrev: true
-      },
-      {
-        id: "s6",
-        type: "segment",
-        args: [
-          "s3",
-          "s1"
-        ],
-        name: "d3",
-        joinPrev: true
-      },
-      {
-        id: "s7",
-        type: "circumcircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C91",
-        joinPrev: true
-      },
-      {
-        id: "s8",
-        type: "center",
-        args: [
-          "s7"
-        ],
-        name: "O",
-        joinPrev: true
-      },
-      {
-        id: "s9",
-        type: "incircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C92",
-        joinPrev: true
-      },
-      {
-        id: "s10",
-        type: "center",
-        args: [
-          "s9"
-        ],
-        name: "I",
-        joinPrev: true
-      },
-      {
-        id: "s11",
-        type: "excircle",
-        args: [
-          "s1",
-          "s2",
-          "s3"
-        ],
-        name: "\u03C93",
-        joinPrev: true
-      },
-      {
-        id: "s12",
-        type: "center",
-        args: [
-          "s11"
-        ],
-        name: "I_A",
-        joinPrev: true
-      },
-      {
-        id: "s13",
-        type: "excircle",
-        args: [
-          "s2",
-          "s3",
-          "s1"
-        ],
-        name: "\u03C94",
-        joinPrev: true
-      },
-      {
-        id: "s14",
-        type: "center",
-        args: [
-          "s13"
-        ],
-        name: "I_B",
-        joinPrev: true
-      },
-      {
-        id: "s15",
-        type: "excircle",
-        args: [
-          "s3",
-          "s1",
-          "s2"
-        ],
-        name: "\u03C95",
-        joinPrev: true
-      },
-      {
-        id: "s16",
-        type: "center",
-        args: [
-          "s15"
-        ],
-        name: "I_C",
-        joinPrev: true
-      },
-      {
-        id: "s17",
-        type: "segment",
-        args: [
-          "s14",
-          "s16"
-        ],
-        name: "d4"
-      },
-      {
-        id: "s18",
-        type: "segment",
-        args: [
-          "s16",
-          "s12"
-        ],
-        name: "d5"
-      },
-      {
-        id: "s19",
-        type: "segment",
-        args: [
-          "s12",
-          "s14"
-        ],
-        name: "d6"
-      },
-      {
-        id: "s20",
-        type: "midpoint",
-        args: [
-          "s10",
-          "s12"
-        ],
-        name: "M_A"
-      },
-      {
-        id: "s21",
-        type: "midpoint",
-        args: [
-          "s10",
-          "s14"
-        ],
-        name: "M_B"
-      },
-      {
-        id: "s22",
-        type: "midpoint",
-        args: [
-          "s10",
-          "s16"
-        ],
-        name: "M_C"
-      },
-      {
-        id: "s23",
-        type: "projection",
-        args: [
-          "s12",
-          "s5"
-        ],
-        name: "T_A"
-      },
-      {
-        id: "s24",
-        type: "projection",
-        args: [
-          "s14",
-          "s6"
-        ],
-        name: "T_B"
-      },
-      {
-        id: "s25",
-        type: "projection",
-        args: [
-          "s16",
-          "s4"
-        ],
-        name: "T_C"
-      },
-      {
-        id: "s26",
-        type: "reflect",
-        args: [
-          "s1",
-          "s8"
-        ],
-        name: "A'"
-      },
-      {
-        id: "s27",
-        type: "reflect",
-        args: [
-          "s2",
-          "s8"
-        ],
-        name: "B'"
-      },
-      {
-        id: "s28",
-        type: "reflect",
-        args: [
-          "s3",
-          "s8"
-        ],
-        name: "C'"
-      },
-      {
-        id: "s29",
-        type: "segment",
-        args: [
-          "s1",
-          "s26"
-        ],
-        name: "d7"
-      },
-      {
-        id: "s30",
-        type: "segment",
-        args: [
-          "s10",
-          "s12"
-        ],
-        name: "d8"
-      }
-    ]
-  };
-
-  // src/core/thu-vien.js
-  var DOCS = [imo2008_1_default, imo2010_2_default, imo2012_5_default, imo2013_4_default, imo2014_4_default, imo2015_4_default, imo2017_4_default, imo2018_1_default, imo2019_6_default, imo2021_4_default, imo2023_2_default, imo2024_4_default, imo2025_2_default, vmo2014_4_default, vmo2016_3_default, noi_bang_tiep_default, euler_feuerbach_default, mixtilinear_default, nghich_dao_bc_default, brocard_default, monge_default, dong_dang_xoan_default, hinh_day_default];
-  var THU_VIEN = muc_luc_default.map((m, i) => ({ ...m, doc: DOCS[i] }));
-
-  // src/ui/tabbar.js
-  function setupTabBar(app) {
-    const host = document.getElementById("tabbar");
-    if (!host) return;
-    const label = (doc2, i) => doc2.title || `H\xECnh ${i + 1}`;
-    const render3 = () => {
-      if (host.querySelector("input")) return;
-      host.innerHTML = app.tabs.map((t2, i) => {
-        const doc2 = i === app.tabIdx ? app.doc : t2.doc;
-        return `<div class="dtab${i === app.tabIdx ? " active" : ""}" data-tab="${i}" title="${escapeHTML(label(doc2, i))}${i === app.tabIdx ? " \u2013 nh\xE1y \u0111\xFAp \u0111\u1EC3 \u0111\u1EB7t t\xEAn" : i < 9 ? ` (Alt+${i + 1})` : ""}">
-        <span class="dt-name">${escapeHTML(label(doc2, i))}</span><button class="dt-x" data-close="${i}" title="\u0110\xF3ng h\xECnh">\u2715</button></div>`;
-      }).join("") + '<button id="tab-new" class="dt-new" title="H\xECnh m\u1EDBi (tab m\u1EDBi)">\uFF0B</button>';
-      host.querySelector(".dtab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
-    };
-    app.renderTabs = render3;
-    app.on("change", render3);
-    app.on("load", render3);
-    host.addEventListener("click", (e) => {
-      const x = e.target.closest("[data-close]");
-      if (x) {
-        e.stopPropagation();
-        app.closeTab(+x.dataset.close);
-        return;
-      }
-      if (e.target.closest("#tab-new")) {
-        app.newTab();
-        return;
-      }
-      const t2 = e.target.closest("[data-tab]");
-      if (t2) app.switchTab(+t2.dataset.tab);
-    });
-    host.addEventListener("dblclick", (e) => {
-      const t2 = e.target.closest(".dtab.active");
-      if (!t2) return;
-      const name2 = t2.querySelector(".dt-name");
-      const inp = document.createElement("input");
-      inp.className = "dt-input";
-      inp.value = app.doc.title || "";
-      inp.placeholder = "T\xEAn h\xECnh\u2026";
-      name2.replaceWith(inp);
-      inp.focus();
-      inp.select();
-      let done = false;
-      const finish = (save) => {
-        if (done) return;
-        done = true;
-        const v = inp.value.trim();
-        inp.remove();
-        if (save && v !== (app.doc.title || "")) app.commit((doc2) => {
-          doc2.title = v;
-        });
-        render3();
-      };
-      inp.addEventListener("keydown", (ev) => {
-        ev.stopPropagation();
-        if (ev.key === "Enter") finish(true);
-        else if (ev.key === "Escape") finish(false);
-      });
-      inp.addEventListener("blur", () => finish(true));
-    });
-    render3();
-  }
-
-  // src/ui/images.js
-  init_dialog();
-  var MAX_SIDE = 1600;
-  function setupImages(app) {
-    document.addEventListener("paste", (e) => {
-      const tag = (e.target.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea" || document.querySelector(".modal-back")) return;
-      const item = [...e.clipboardData?.items || []].find((it) => it.kind === "file" && it.type.startsWith("image/"));
-      if (!item) return;
-      e.preventDefault();
-      insertImageFile(app, item.getAsFile(), null, app.textBoxes ? "box" : "background");
-    });
-    const stage = document.getElementById("stage");
-    stage.addEventListener("dragover", (e) => {
-      if ([...e.dataTransfer?.items || []].some((it) => it.kind === "file")) e.preventDefault();
-    });
-    stage.addEventListener("drop", (e) => {
-      const files = [...e.dataTransfer?.files || []].filter((f) => f.type.startsWith("image/"));
-      if (!files.length) return;
-      e.preventDefault();
-      const r = app.view.canvas.getBoundingClientRect();
-      files.forEach((f, i) => insertImageFile(app, f, { sx: e.clientX - r.left + 24 * i, sy: e.clientY - r.top + 24 * i }, app.textBoxes ? "box" : "background"));
-    });
-    const btn = document.getElementById("btn-image");
-    if (btn) btn.onclick = () => {
-      const inp = document.createElement("input");
-      inp.type = "file";
-      inp.accept = "image/*";
-      inp.onchange = () => {
-        if (inp.files[0]) insertImageFile(app, inp.files[0], null, "box");
-      };
-      inp.click();
-    };
-    const bg = document.getElementById("btn-image-bg");
-    if (bg) bg.onclick = () => {
-      const inp = document.createElement("input");
-      inp.type = "file";
-      inp.accept = "image/*";
-      inp.onchange = () => {
-        if (inp.files[0]) insertImageFile(app, inp.files[0], null, "background");
-      };
-      inp.click();
-    };
-  }
-  var readURL = (file) => new Promise((res, rej) => {
-    const fr = new FileReader();
-    fr.onload = () => res(fr.result);
-    fr.onerror = rej;
-    fr.readAsDataURL(file);
-  });
-  var loadImg = (src) => new Promise((res, rej) => {
-    const im = new Image();
-    im.onload = () => res(im);
-    im.onerror = () => rej(new Error("Kh\xF4ng \u0111\u1ECDc \u0111\u01B0\u1EE3c \u1EA3nh"));
-    im.src = src;
-  });
-  async function insertImageFile(app, file, at = null, as = "background") {
-    let src, img;
-    try {
-      src = await readURL(file);
-      img = await loadImg(src);
-    } catch {
-      toast("Kh\xF4ng \u0111\u1ECDc \u0111\u01B0\u1EE3c \u1EA3nh n\xE0y");
-      return null;
-    }
-    let w = img.naturalWidth, h = img.naturalHeight;
-    if (Math.max(w, h) > MAX_SIDE) {
-      const k = MAX_SIDE / Math.max(w, h);
-      w = Math.round(w * k);
-      h = Math.round(h * k);
-      const cv = document.createElement("canvas");
-      cv.width = w;
-      cv.height = h;
-      cv.getContext("2d").drawImage(img, 0, 0, w, h);
-      src = file.type === "image/png" ? cv.toDataURL("image/png") : cv.toDataURL("image/jpeg", 0.9);
-    }
-    if (as === "box" && app.textBoxes) return app.textBoxes.pasteImage(src, w);
-    return insertImageData(app, src, w, h, at);
-  }
-  function insertImageData(app, src, w, h, at = null) {
-    const v = app.view;
-    const f = Math.min(1, 0.6 * v.W / w, 0.6 * v.H / h);
-    const sw = w * f, sh = h * f;
-    const c = at || { sx: v.W / 2, sy: v.H / 2 };
-    const tl = app.toUser(c.sx - sw / 2, c.sy - sh / 2);
-    const id = "img" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    app.registerImage(id, src);
-    app.commit((doc2) => {
-      (doc2.images || (doc2.images = [])).push({ id, x: round(tl.x), y: round(tl.y), w: round(sw / v.scale), h: round(sh / v.scale) });
-    });
-    if (app.toolId !== "move") app.setTool("move");
-    app.selectImage(id);
-    toast('\u0110\xE3 ch\xE8n \u1EA3nh \u2013 k\xE9o \u0111\u1EC3 d\u1EDDi, k\xE9o g\xF3c d\u01B0\u1EDBi ph\u1EA3i \u0111\u1EC3 \u0111\u1ED5i c\u1EE1; "Kho\xE1 l\xE0m n\u1EC1n" \u0111\u1EC3 \u0111\u1ED3 h\xECnh l\xEAn tr\xEAn', 5e3);
-    return id;
-  }
-  var round = (x) => Math.round(x * 1e4) / 1e4;
-
   // node_modules/katex/dist/katex.mjs
   var SourceLocation = class _SourceLocation {
     // The + prefix indicates that these fields aren't writeable
@@ -11989,22 +3826,22 @@
   };
   var D = 0;
   var Dc = 1;
-  var T4 = 2;
+  var T3 = 2;
   var Tc = 3;
   var S = 4;
   var Sc = 5;
   var SS = 6;
   var SSc = 7;
-  var styles = [new Style(D, 0, false), new Style(Dc, 0, true), new Style(T4, 1, false), new Style(Tc, 1, true), new Style(S, 2, false), new Style(Sc, 2, true), new Style(SS, 3, false), new Style(SSc, 3, true)];
+  var styles = [new Style(D, 0, false), new Style(Dc, 0, true), new Style(T3, 1, false), new Style(Tc, 1, true), new Style(S, 2, false), new Style(Sc, 2, true), new Style(SS, 3, false), new Style(SSc, 3, true)];
   var sup = [S, Sc, S, Sc, SS, SSc, SS, SSc];
   var sub3 = [Sc, Sc, Sc, Sc, SSc, SSc, SSc, SSc];
-  var fracNum = [T4, Tc, S, Sc, SS, SSc, SS, SSc];
+  var fracNum = [T3, Tc, S, Sc, SS, SSc, SS, SSc];
   var fracDen = [Tc, Tc, Sc, Sc, SSc, SSc, SSc, SSc];
   var cramp = [Dc, Dc, Tc, Tc, Sc, Sc, SSc, SSc];
-  var text$1 = [D, Dc, T4, Tc, T4, Tc, T4, Tc];
+  var text$1 = [D, Dc, T3, Tc, T3, Tc, T3, Tc];
   var Style$1 = {
     DISPLAY: styles[D],
-    TEXT: styles[T4],
+    TEXT: styles[T3],
     SCRIPT: styles[S],
     SCRIPTSCRIPT: styles[SS]
   };
@@ -26045,7 +17882,7 @@
     });
     return out;
   }
-  var esc4 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  var esc3 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   var MACROS = {
     "\\goc": "\\angle",
     "\\tamgiac": "\\triangle",
@@ -26056,17 +17893,18 @@
   };
   function tokenize(src) {
     const out = [];
-    let i = 0, buf = "";
+    let i = 0, buf = "", raw = "";
     const flush = () => {
-      if (buf) {
-        out.push({ t: "text", v: buf });
-        buf = "";
+      if (raw) {
+        out.push({ t: "text", v: buf, raw });
+        buf = raw = "";
       }
     };
     while (i < src.length) {
       const c = src[i];
       if (c === "\\" && src[i + 1] === "$") {
         buf += "$";
+        raw += "\\$";
         i += 2;
         continue;
       }
@@ -26074,7 +17912,7 @@
         const j = src.indexOf("\\]", i + 2);
         if (j >= 0) {
           flush();
-          out.push({ t: "dmath", v: src.slice(i + 2, j) });
+          out.push({ t: "dmath", v: src.slice(i + 2, j), o: "\\[", c: "\\]" });
           i = j + 2;
           continue;
         }
@@ -26083,7 +17921,7 @@
         const j = src.indexOf("$$", i + 2);
         if (j >= 0) {
           flush();
-          out.push({ t: "dmath", v: src.slice(i + 2, j) });
+          out.push({ t: "dmath", v: src.slice(i + 2, j), o: "$$", c: "$$" });
           i = j + 2;
           continue;
         }
@@ -26093,7 +17931,7 @@
         while (j < src.length && !(src[j] === "$" && src[j - 1] !== "\\")) j++;
         if (j < src.length) {
           flush();
-          out.push({ t: "math", v: src.slice(i + 1, j) });
+          out.push({ t: "math", v: src.slice(i + 1, j), o: "$", c: "$" });
           i = j + 1;
           continue;
         }
@@ -26102,30 +17940,46 @@
         const j = src.indexOf(")", i);
         if (j > 0) {
           flush();
-          out.push({ t: "img", v: src.slice(i + 8, j) });
+          out.push({ t: "img", v: src.slice(i + 8, j), o: "![](img:", c: ")" });
           i = j + 1;
           continue;
         }
       }
       buf += c;
+      raw += c;
       i++;
     }
     flush();
     return out;
   }
   function inlineText(s) {
-    return esc4(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>");
+    return esc3(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>");
   }
   function linkNames(tex, names) {
-    if (!names || !names.length) return tex;
+    return mapNames(tex, names, (f, id) => `\\htmlData{p=${id}}{${f}}`);
+  }
+  function nameForms(names) {
     const forms = [];
-    for (const { name: name2, id } of names) {
+    for (const { name: name2, id } of names || []) {
       if (!name2 || !/^[A-Z]/.test(name2)) continue;
       forms.push([name2, id]);
       const m = /^(.+?)_([^{}])('*)$/.exec(name2);
       if (m) forms.push([`${m[1]}_{${m[2]}}${m[3]}`, id]);
     }
-    forms.sort((a, b) => b[0].length - a[0].length);
+    return forms.sort((a, b) => b[0].length - a[0].length);
+  }
+  function nameAt(tex, i, forms) {
+    if (!/[A-Z]/.test(tex[i])) return null;
+    for (const [f, id] of forms) if (tex.startsWith(f, i)) {
+      const nx = tex[i + f.length];
+      if (nx === "_" || nx === "'") continue;
+      return [f, id];
+    }
+    return null;
+  }
+  function mapNames(tex, names, fn) {
+    const forms = nameForms(names);
+    if (!forms.length) return tex;
     let out = "", i = 0;
     while (i < tex.length) {
       if (tex[i] === "\\") {
@@ -26141,17 +17995,9 @@
         i += cmd2.length;
         continue;
       }
-      let hit = null;
-      if (/[A-Z]/.test(tex[i])) {
-        for (const [f, id] of forms) if (tex.startsWith(f, i)) {
-          const nx = tex[i + f.length];
-          if (nx === "_" || nx === "'") continue;
-          hit = [f, id];
-          break;
-        }
-      }
+      const hit = nameAt(tex, i, forms);
       if (hit) {
-        out += `\\htmlData{p=${hit[1]}}{${hit[0]}}`;
+        out += fn(hit[0], hit[1]);
         i += hit[0].length;
       } else {
         out += tex[i];
@@ -26159,6 +18005,27 @@
       }
     }
     return out;
+  }
+  function renameInText(text2, names, renames) {
+    if (!text2 || !renames || !renames.size) return text2;
+    const forms = nameForms(names);
+    const sub4 = (f, id) => renames.has(id) ? renames.get(id) : f;
+    return tokenize(text2).map((tk) => {
+      if (tk.t === "math" || tk.t === "dmath") return tk.o + mapNames(tk.v, names, sub4) + tk.c;
+      if (tk.t === "img") return tk.o + tk.v + tk.c;
+      return tk.raw.replace(/(^|[^\\\p{L}\d_])([A-Z][A-Za-z0-9_'{}]*)(?![\p{L}\d_'{}])/gu, (all, pre, word) => {
+        const parts = [];
+        for (let i = 0; i < word.length; ) {
+          const hit = nameAt(word, i, forms);
+          if (!hit) return all;
+          parts.push(hit);
+          i += hit[0].length;
+        }
+        if (!parts.some(([, id]) => renames.has(id))) return all;
+        const w = parts.map(([f, id]) => sub4(f, id)).join("");
+        return pre + (/[_'{}]/.test(w) ? `$${w}$` : w);
+      });
+    }).join("");
   }
   function matchBrace(s, i) {
     if (s[i] !== "{") return i;
@@ -26174,7 +18041,7 @@
     try {
       return katex.renderToString(linkNames(tex, names), { ...KATEX_OPTS, displayMode: display, macros: { ...MACROS } });
     } catch (e) {
-      return `<span class="tex-err" title="${esc4(e.message)}">${esc4(tex)}</span>`;
+      return `<span class="tex-err" title="${esc3(e.message)}">${esc3(tex)}</span>`;
     }
   }
   function renderStep(text2, opts = {}) {
@@ -26199,7 +18066,7 @@
       if (tk.t === "math") return renderMath(tk.v, false, opts.names);
       if (tk.t === "dmath") return `<div class="dmath">${renderMath(tk.v, true, opts.names)}</div>`;
       const url = opts.image ? opts.image(tk.v) : null;
-      return url ? `<img class="tb-img" src="${esc4(url)}" alt="\u1EA3nh">` : '<span class="tb-noimg">[\u1EA3nh kh\xF4ng c\xF3 trong link chia s\u1EBB \u2013 m\u1EDF t\u1EC7p .json \u0111\u1EC3 xem]</span>';
+      return url ? `<img class="tb-img" src="${esc3(url)}" alt="\u1EA3nh">` : '<span class="tb-noimg">[\u1EA3nh kh\xF4ng c\xF3 trong link chia s\u1EBB \u2013 m\u1EDF t\u1EC7p .json \u0111\u1EC3 xem]</span>';
     }).join("");
   }
   function toLatex(text2, imageFile = (id) => id + ".png") {
@@ -26237,6 +18104,8174 @@
 \newcommand{\vecto}[1]{\overrightarrow{#1}}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{6pt}`;
+
+  // src/ui/app.js
+  var HISTORY_MAX = 200;
+  var App = class {
+    constructor() {
+      this.doc = emptyDoc();
+      this.values = /* @__PURE__ */ new Map();
+      this.undoStack = [];
+      this.redoStack = [];
+      this.selection = /* @__PURE__ */ new Set();
+      this.highlight = /* @__PURE__ */ new Set();
+      this.toolId = "move";
+      this.picks = [];
+      this.tx = null;
+      this.mode = "edit";
+      this.frameIdx = 0;
+      this.projector = false;
+      this.grid = false;
+      this.mouse = { x: 0, y: 0 };
+      this.markDefaults = { color: null, arcs: 1, ticks: 1, polyColor: null };
+      this.theme = loadPref("theme", "mono");
+      setTheme(this.theme);
+      this.listeners = { change: [] };
+      this.images = /* @__PURE__ */ new Map();
+      this.imageSel = null;
+      this.typeToRename = true;
+      this.fitKey = "Home";
+    }
+    // ================= khởi tạo =================
+    mount() {
+      this.view = new CanvasView(document.getElementById("board"));
+      this.view.setBoundingBox([-8, 6, 8, -6]);
+      this.renderer = new Renderer(this.view);
+      this.renderer.trimLines = loadPref("trim", "1") === "1";
+      this.initTabs();
+      this.stage = document.getElementById("stage");
+      this.buildToolbar();
+      this.bindPointer();
+      this.bindKeys();
+      this.bindButtons();
+      this.setTool("move");
+      this.refresh();
+    }
+    on(evt, fn) {
+      var _a2;
+      ((_a2 = this.listeners)[evt] || (_a2[evt] = [])).push(fn);
+    }
+    emit(evt) {
+      for (const fn of this.listeners[evt] || []) fn(this);
+    }
+    // ================= tài liệu & lịch sử =================
+    /** Thay toàn bộ tài liệu (mở file, link...). */
+    loadDoc(doc2, { keepHistory = false } = {}) {
+      if (keepHistory) this.pushUndo(JSON.stringify(this.doc));
+      else {
+        this.undoStack = [];
+        this.redoStack = [];
+      }
+      this.doc = clone(doc2);
+      this.takeImages(this.doc);
+      this.imageSel = null;
+      this.selection.clear();
+      this.highlight.clear();
+      this.relation = null;
+      this.cancelTool();
+      if (doc2.view && Array.isArray(doc2.view.bbox)) this.view.setBoundingBox(doc2.view.bbox);
+      this.refresh();
+      this.emit("load");
+      this.emit("change");
+    }
+    // ================= ảnh dán vào hình (bản 1.3) =================
+    // doc.images = [{id, x, y, w, h, opacity?, locked?}] – (x, y) là góc trên-trái theo toạ độ hình (y hướng lên),
+    // w × h theo đơn vị hình nên ảnh phóng/dời theo hình. Dữ liệu ảnh (data URL) giữ trong this.images; khi lưu tệp /
+    // nháp thì gắn vào doc.imageData (withImageData), khi mở thì lấy ra (takeImages).
+    registerImage(id, src) {
+      if (this.images.has(id) || typeof src !== "string") return;
+      const img = new Image();
+      const rec = { src, img, ready: false };
+      img.onload = () => {
+        rec.ready = true;
+        this.view?.requestDraw();
+      };
+      img.src = src;
+      this.images.set(id, rec);
+    }
+    takeImages(doc2) {
+      if (doc2 && doc2.imageData) {
+        for (const [id, src] of Object.entries(doc2.imageData)) this.registerImage(id, src);
+        delete doc2.imageData;
+      }
+    }
+    withImageData(doc2) {
+      const ids = (doc2.images || []).map((im) => im.id);
+      for (const b of doc2.boxes || []) for (const m of String(b.text || "").matchAll(/!\[\]\(img:([A-Za-z0-9_-]+)\)/g)) ids.push(m[1]);
+      if (!ids.length) return doc2;
+      const data = {};
+      for (const id of ids) {
+        const r = this.images.get(id);
+        if (r) data[id] = r.src;
+      }
+      return { ...doc2, imageData: data };
+    }
+    /** Ảnh (không khoá) tại vị trí màn hình; handle = true nếu trúng ô đổi cỡ ở góc dưới phải. Ảnh trên cùng trước. */
+    imageAt(sx, sy) {
+      const list = this.doc.images || [];
+      for (let i = list.length - 1; i >= 0; i--) {
+        const im = list[i];
+        if (im.locked) continue;
+        const a = this.toScreen({ x: im.x, y: im.y }), b = this.toScreen({ x: im.x + im.w, y: im.y - im.h });
+        if (Math.abs(sx - b.x) <= 9 && Math.abs(sy - b.y) <= 9 && this.imageSel === im.id) return { id: im.id, handle: true };
+        if (sx >= a.x && sx <= b.x && sy >= a.y && sy <= b.y) return { id: im.id, handle: false };
+      }
+      return null;
+    }
+    selectImage(id) {
+      this.imageSel = id;
+      if (id) this.selection.clear();
+      this.refresh();
+    }
+    /** Kéo ảnh (dời) hoặc kéo ô góc dưới phải (đổi cỡ, giữ tỉ lệ). */
+    startImageDrag(e, id, resize) {
+      const im = (this.doc.images || []).find((x) => x.id === id);
+      if (!im) return;
+      const start2 = JSON.stringify(this.doc);
+      const p0 = this.eventPos(e);
+      const P0 = this.toUser(p0.sx, p0.sy);
+      const o = { x: im.x, y: im.y, w: im.w, h: im.h };
+      this.drag = { kind: "image", id };
+      const move = (ev) => {
+        const { sx, sy } = this.eventPos(ev);
+        const P2 = this.toUser(sx, sy);
+        if (resize) {
+          const w = Math.max(20 / this.view.scale, o.w + (P2.x - P0.x));
+          im.w = w;
+          im.h = w * o.h / o.w;
+        } else {
+          im.x = o.x + P2.x - P0.x;
+          im.y = o.y + P2.y - P0.y;
+        }
+        this.view.requestDraw();
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move, true);
+        window.removeEventListener("pointerup", up, true);
+        window.removeEventListener("pointercancel", up, true);
+        this.drag = null;
+        if (JSON.stringify(this.doc) !== start2) {
+          this.pushUndo(start2);
+          this.afterChange();
+        }
+      };
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", up, true);
+      window.addEventListener("pointercancel", up, true);
+    }
+    setImageProp(id, patch) {
+      this.commit((doc2) => {
+        const im = (doc2.images || []).find((x) => x.id === id);
+        if (im) Object.assign(im, patch);
+      });
+    }
+    deleteImage(id) {
+      this.commit((doc2) => {
+        doc2.images = (doc2.images || []).filter((x) => x.id !== id);
+        if (!doc2.images.length) delete doc2.images;
+      });
+      this.imageSel = null;
+      this.refresh();
+    }
+    // ================= nhiều tab hình (bản 1.3) =================
+    // Mỗi tab giữ hình, lịch sử hoàn tác/làm lại và khung nhìn riêng. Tab đang mở dùng trực tiếp this.doc,
+    // this.undoStack… (như trước); khi đổi tab thì cất vào this.tabs[i] rồi lấy tab kia ra.
+    initTabs() {
+      this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null }];
+      this.tabIdx = 0;
+    }
+    stashTab() {
+      const t2 = this.tabs[this.tabIdx];
+      Object.assign(t2, { doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: this.view.getBoundingBox() });
+    }
+    /** Hiện tab i (đã cất tab đang mở). */
+    showTab(i) {
+      const t2 = this.tabs[i];
+      this.tabIdx = i;
+      this.doc = t2.doc;
+      this.undoStack = t2.undo;
+      this.redoStack = t2.redo;
+      this.selection.clear();
+      this.highlight.clear();
+      this.relation = null;
+      this.imageSel = null;
+      this.cancelTool();
+      if (t2.bbox) this.view.setBoundingBox(t2.bbox);
+      else if (t2.doc.view && Array.isArray(t2.doc.view.bbox)) this.view.setBoundingBox(t2.doc.view.bbox);
+      else this.view.setBoundingBox([-8, 6, 8, -6]);
+      this.refresh();
+      if (!t2.bbox && !t2.doc.view && t2.doc.steps.length) this.zoomFit();
+      this.emit("load");
+      this.emit("change");
+    }
+    switchTab(i) {
+      if (i === this.tabIdx || !this.tabs[i]) return;
+      this.stashTab();
+      this.showTab(i);
+    }
+    /** Mở một hình ở tab mới (doc = null: hình trống). */
+    newTab(doc2 = null) {
+      this.stashTab();
+      const d = doc2 ? clone(doc2) : emptyDoc();
+      this.takeImages(d);
+      this.tabs.push({ doc: d, undo: [], redo: [], bbox: null });
+      this.showTab(this.tabs.length - 1);
+    }
+    async closeTab(i) {
+      const t2 = i === this.tabIdx ? { doc: this.doc } : this.tabs[i];
+      const n = t2.doc.steps.length + (t2.doc.images?.length || 0);
+      if (n && !await confirmDialog("\u0110\xF3ng h\xECnh", `\u0110\xF3ng h\xECnh <b>${escapeHTML(t2.doc.title || "ch\u01B0a \u0111\u1EB7t t\xEAn")}</b>? H\xECnh ch\u01B0a l\u01B0u t\u1EC7p s\u1EBD m\u1EA5t.`, "\u0110\xF3ng")) return;
+      this.stashTab();
+      const cur2 = this.tabIdx;
+      this.tabs.splice(i, 1);
+      if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null });
+      const next = i < cur2 ? cur2 - 1 : i === cur2 ? Math.min(i, this.tabs.length - 1) : cur2;
+      this.showTab(next);
+    }
+    /** Mở hình (tệp, ví dụ, link): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. */
+    openDoc(doc2) {
+      if (!this.doc.steps.length && !(this.doc.images || []).length) this.loadDoc(doc2);
+      else this.newTab(doc2);
+    }
+    pushUndo(snapshot) {
+      this.undoStack.push(snapshot);
+      if (this.undoStack.length > HISTORY_MAX) this.undoStack.shift();
+      this.redoStack = [];
+    }
+    /** Thay đổi tài liệu như một bước hoàn tác được. mutate(doc) sửa trực tiếp doc. */
+    commit(mutate) {
+      const before = this.tx ?? JSON.stringify(this.doc);
+      mutate(this.doc);
+      if (!this.tx) this.pushUndo(before);
+      this.afterChange();
+    }
+    afterChange() {
+      for (const id of [...this.selection]) if (!stepById(this.doc, id)) this.selection.delete(id);
+      if (this.imageSel && (this.selection.size || !(this.doc.images || []).some((im) => im.id === this.imageSel))) this.imageSel = null;
+      if (this.relation && !this.relation.ids.every((id) => stepById(this.doc, id))) {
+        this.relation = null;
+        this.highlight.clear();
+      }
+      this.refresh();
+      this.emit("change");
+    }
+    beginTx() {
+      if (!this.tx) this.tx = JSON.stringify(this.doc);
+    }
+    endTx() {
+      if (this.tx) {
+        if (this.tx !== JSON.stringify(this.doc)) this.pushUndo(this.tx);
+        this.tx = null;
+      }
+    }
+    undo() {
+      this.cancelTool();
+      if (!this.undoStack.length) return toast("Kh\xF4ng c\xF2n g\xEC \u0111\u1EC3 ho\xE0n t\xE1c");
+      this.redoStack.push(JSON.stringify(this.doc));
+      this.doc = JSON.parse(this.undoStack.pop());
+      this.afterChange();
+    }
+    redo() {
+      this.cancelTool();
+      if (!this.redoStack.length) return toast("Kh\xF4ng c\xF2n g\xEC \u0111\u1EC3 l\xE0m l\u1EA1i");
+      this.undoStack.push(JSON.stringify(this.doc));
+      this.doc = JSON.parse(this.redoStack.pop());
+      this.afterChange();
+    }
+    /**
+     * Thêm các bước từ đặc tả [{type,args,params,name,style}]. Đối số '$k' = id của bước thứ k vừa thêm.
+     * Các bước sau bước đầu được gộp chung khung trình bày. Trả về danh sách id.
+     */
+    addSteps(specs, { join = true } = {}) {
+      return addSpecs(this.doc, specs, { join });
+    }
+    /** Tên hiển thị của một đối tượng (dùng khi công cụ đặt tên kết quả, vd I_A). */
+    name(id) {
+      return stepById(this.doc, id)?.name || "";
+    }
+    /** Tham số số của công cụ đang dùng (góc quay, tỉ số vị tự…), chỉnh ở thẻ tuỳ chọn. */
+    opt(key, def) {
+      const p = this.toolParams && this.toolParams[this.toolId] || {};
+      return key in p ? p[key] : def;
+    }
+    nameUsed(name2, exceptId) {
+      return this.doc.steps.some((s) => s.name === name2 && s.id !== exceptId);
+    }
+    // ================= tính toán & vẽ =================
+    visibleSet() {
+      if (this.mode !== "present") return null;
+      const fr = frames(this.doc);
+      const set = /* @__PURE__ */ new Set();
+      for (let i = 0; i <= Math.min(this.frameIdx, fr.length - 1); i++) for (const id of fr[i]) set.add(id);
+      return set;
+    }
+    refresh() {
+      this.values = evaluate(this.doc);
+      this.renderer.scale = this.projector ? 1.9 : 1;
+      this.renderer.grid = this.grid;
+      this.renderer.setScene(this.doc, this.values, {
+        theme: this.theme,
+        visible: this.visibleSet(),
+        selected: this.mode === "present" ? /* @__PURE__ */ new Set() : this.selection,
+        highlight: this.highlight,
+        images: this.images,
+        imageSel: this.mode === "present" ? null : this.imageSel
+      });
+      this.renderer.clearExtra();
+      this.drawRelationOverlay?.();
+      this.renderPanels();
+      this.emit("refresh");
+    }
+    /** Tô sáng tạm (rê chuột lên tên điểm trong khung chữ); null: trở lại quan hệ đang tô (nếu có). */
+    setHover(ids) {
+      this.highlight = new Set(ids || (this.relation ? this.relation.ids : []));
+      this.refresh();
+    }
+    /** Số khung trình bày: khung của hình, kéo dài thêm nếu lời giải còn bước ở các khung sau. */
+    frameCount() {
+      return Math.max(frames(this.doc).length, this.textBoxes ? this.textBoxes.lastFrame() + 1 : 0);
+    }
+    /** Cập nhật nhanh khi kéo: chỉ tính lại các bước phụ thuộc (nếu có bộ cập nhật), rồi vẽ lại. */
+    quickUpdate() {
+      if (this.dragUpdater) this.dragUpdater(this.values);
+      else this.values = evaluate(this.doc);
+      this.renderer.update(this.values);
+    }
+    renderPanels() {
+      renderStepList(this);
+      renderProps(this);
+      renderToolOptions(this);
+      for (const id of ["btn-undo", "menu-undo"]) {
+        const b = document.getElementById(id);
+        if (b) b.disabled = !this.undoStack.length;
+      }
+      for (const id of ["btn-redo", "menu-redo"]) {
+        const b = document.getElementById(id);
+        if (b) b.disabled = !this.redoStack.length;
+      }
+      this.updatePresentBar();
+    }
+    // ================= toạ độ & chọn đối tượng =================
+    toScreen(P2) {
+      return this.view.toScreen(P2);
+    }
+    toUser(sx, sy) {
+      return this.view.toUser(sx, sy);
+    }
+    eventPos(e) {
+      const r = this.boardRect || (this.boardRect = this.view.canvas.getBoundingClientRect());
+      return { sx: e.clientX - r.left, sy: e.clientY - r.top };
+    }
+    /** Các đối tượng gần vị trí màn hình (sx, sy), điểm trước, rồi theo khoảng cách. */
+    hitTest(sx, sy) {
+      const vis = this.visibleSet();
+      const k = kinds(this.doc);
+      const P2 = this.toUser(sx, sy);
+      const px = 1 / this.view.scale;
+      const f = this.projector ? 1.6 : 1;
+      const out = [];
+      let order = 0;
+      for (const s of this.doc.steps) {
+        order++;
+        if (s.hidden || vis && !vis.has(s.id)) continue;
+        const v = this.values.get(s.id);
+        const kind = k.get(s.id);
+        if (!v || kind === "mark") continue;
+        let d = distToObject(v, P2) / px;
+        const rg = kind === "line" && !this.renderer.ghostLines && this.renderer.lineRanges.get(s.id);
+        if (rg) d = dist(P2, pointOn({ ...v, sub: "line" }, Math.max(rg[0], Math.min(rg[1], lineParam(P2, v))))) / px;
+        if (kind === "point" && d <= 11 * f) out.push({ id: s.id, kind, d, pri: 0, order });
+        else if ((kind === "line" || kind === "circle") && d <= 7 * f) out.push({ id: s.id, kind, d, pri: 1, order });
+      }
+      for (const s of this.doc.steps) {
+        if (s.hidden || vis && !vis.has(s.id) || k.get(s.id) !== "mark") continue;
+        const v = this.values.get(s.id);
+        if (!v) continue;
+        const d = markDistance(v, P2, px * f) / px;
+        if (d <= 9 * f) out.push({ id: s.id, kind: "mark", d, pri: 2 });
+      }
+      out.sort((a, b) => a.pri - b.pri || (Math.abs(a.d - b.d) < 0.75 ? (b.order || 0) - (a.order || 0) : a.d - b.d));
+      return out;
+    }
+    figureScale() {
+      let xs = [], ys = [];
+      for (const v of this.values.values()) if (v && v.kind === "point") {
+        xs.push(v.x);
+        ys.push(v.y);
+      }
+      if (xs.length < 2) return 10;
+      return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1e-6);
+    }
+    /** Điểm đã có trùng (về số) với P. */
+    existingPointAt(P2, tolPx = 0.5) {
+      const k = kinds(this.doc);
+      const tol = Math.max(1e-9 * this.figureScale(), tolPx / this.view.scale);
+      for (const s of this.doc.steps) {
+        if (k.get(s.id) !== "point") continue;
+        const v = this.values.get(s.id);
+        if (v && dist(v, P2) < tol) return s.id;
+      }
+      return null;
+    }
+    /**
+     * Tạo giao điểm của hai đường c1, c2. near: toạ độ chuột (chọn nghiệm gần nhất) hoặc null (tạo mọi nghiệm).
+     * Nếu một nghiệm trùng điểm đã có thì nghiệm còn lại được dựng bằng "giao điểm thứ hai" (bền vững hơn
+     * chọn theo chỉ số). Trả về danh sách id điểm (mới hoặc có sẵn).
+     */
+    createIntersections(c1, c2, near = null) {
+      const v1 = this.values.get(c1), v2 = this.values.get(c2);
+      const roots = intersect(v1, v2);
+      if (!roots.length) {
+        toast("Hai \u0111\u01B0\u1EDDng n\xE0y kh\xF4ng c\u1EAFt nhau (\u1EDF v\u1ECB tr\xED hi\u1EC7n t\u1EA1i)");
+        return [];
+      }
+      const existing = roots.map((r) => this.existingPointAt(r, 0.01));
+      let idx = roots.map((_, i) => i);
+      if (near) idx = [idx.reduce((a, b) => dist(roots[a], near) <= dist(roots[b], near) ? a : b)];
+      const out = [];
+      for (const i of idx) {
+        if (existing[i]) {
+          out.push(existing[i]);
+          continue;
+        }
+        const other = roots.length === 2 ? existing[1 - i] : null;
+        const spec = other ? { type: "intersection_other", args: [c1, c2, other] } : { type: "intersection", args: [c1, c2], params: roots.length === 2 ? { which: i } : void 0 };
+        out.push(...this.addSteps([spec]));
+        this.values = evaluate(this.doc);
+      }
+      return out;
+    }
+    /** Cặp đường cắt nhau gần chỗ bấm nhất (nhiều cặp cùng chỗ: cặp dựng sau cùng). */
+    crossingPair(curves, P2) {
+      const px = 1 / this.view.scale;
+      const cs = curves.slice(0, 5);
+      let best = null;
+      for (let i = 0; i < cs.length; i++)
+        for (let j = i + 1; j < cs.length; j++)
+          for (const r of intersect(this.values.get(cs[i].id), this.values.get(cs[j].id))) {
+            const d = dist(r, P2) / px, rec = Math.min(cs[i].order || 0, cs[j].order || 0);
+            if (!best || d < best.d - 0.75 || Math.abs(d - best.d) <= 0.75 && rec > best.rec) best = { d, rec, ids: [cs[i].id, cs[j].id] };
+          }
+      return best ? best.ids : [curves[0].id, curves[1].id];
+    }
+    /** Lấy (hoặc tạo) một điểm tại vị trí bấm: điểm có sẵn / giao điểm / điểm trên đường / điểm tự do. */
+    resolvePoint(sx, sy, hits) {
+      const pHit = hits.find((h) => h.kind === "point");
+      if (pHit) return pHit.id;
+      const P2 = this.toUser(sx, sy);
+      const curves = hits.filter((h) => h.kind === "line" || h.kind === "circle").slice(0, 4);
+      const px = 1 / this.view.scale;
+      let best = null;
+      for (let i = 0; i < curves.length; i++)
+        for (let j = i + 1; j < curves.length; j++)
+          for (const r of intersect(this.values.get(curves[i].id), this.values.get(curves[j].id))) {
+            const d = dist(r, P2) / px;
+            const rec = Math.min(curves[i].order || 0, curves[j].order || 0);
+            if (d < 14 && (!best || d < best.d - 0.75 || Math.abs(d - best.d) <= 0.75 && rec > best.rec)) best = { d, rec, a: curves[i].id, b: curves[j].id };
+          }
+      if (best) return this.createIntersections(best.a, best.b, P2)[0] ?? null;
+      if (curves.length) {
+        const c = curves[0].id;
+        const t2 = paramOf(this.values.get(c), P2);
+        return this.addSteps([{ type: "point_on", args: [c], params: { t: t2 } }])[0];
+      }
+      const anchors = this.shiftSnap ? this.pickAnchors() : [];
+      const Q = anchors.length ? this.angleSnap(P2, anchors) : this.snap(P2);
+      return this.addSteps([{ type: "free_point", args: [], params: { x: Q.x, y: Q.y } }])[0];
+    }
+    /**
+     * Giữ Shift (bản 1.3): bắt hướng từ một điểm mốc tới P về bội số của 15° (0°, 15°, …, 90°…) – đường nằm ngang,
+     * thẳng đứng, nghiêng 45°… thật chính xác. Nhiều mốc: lấy mốc làm P dịch ít nhất. Giữ nguyên khoảng cách tới mốc.
+     */
+    angleSnap(P2, anchors) {
+      const step = Math.PI / 12;
+      let best = null;
+      for (const A of anchors) {
+        const r = Math.hypot(P2.x - A.x, P2.y - A.y);
+        if (r < 1e-9) continue;
+        const a = Math.round(Math.atan2(P2.y - A.y, P2.x - A.x) / step) * step;
+        const Q = { x: round6(A.x + r * Math.cos(a)), y: round6(A.y + r * Math.sin(a)) };
+        if (Math.abs(Math.sin(a)) < 1e-12) Q.y = A.y;
+        if (Math.abs(Math.cos(a)) < 1e-12) Q.x = A.x;
+        const d = Math.hypot(Q.x - P2.x, Q.y - P2.y);
+        if (!best || d < best.d) best = { d, Q };
+      }
+      return best ? best.Q : this.snap(P2);
+    }
+    /** Các điểm đã chọn trong lần dùng công cụ hiện tại (mốc để căn hướng khi giữ Shift). */
+    pickAnchors() {
+      return this.picks.map((id) => this.values.get(id)).filter((v) => v && v.kind === "point");
+    }
+    /** Các điểm nối với điểm id bằng một đoạn/tia/đường thẳng đã vẽ (mốc để căn hướng khi kéo với Shift). */
+    dragAnchors(id) {
+      const out = [];
+      for (const s of this.doc.steps) {
+        if (!["segment", "line", "ray"].includes(s.type) || !s.args.includes(id)) continue;
+        const o = this.values.get(s.args[0] === id ? s.args[1] : s.args[0]);
+        if (o) out.push(o);
+      }
+      return out;
+    }
+    snap(P2) {
+      if (!this.grid) return { x: round6(P2.x), y: round6(P2.y) };
+      return { x: Math.round(P2.x * 2) / 2, y: Math.round(P2.y * 2) / 2 };
+    }
+    // ================= công cụ =================
+    setTool(id) {
+      this.cancelTool();
+      this.toolId = id;
+      this.markActiveTool(id);
+      this.stage.classList.toggle("tool-active", id !== "move");
+      this.rememberTool(id);
+      this.renderer.ghostLines = id !== "move" && this.mode === "edit";
+      this.view.requestDraw();
+      this.showHint();
+      renderToolOptions(this);
+      renderProps(this);
+    }
+    cancelTool() {
+      this.picks = [];
+      this.renderer?.clearExtra();
+      if (this.tx) {
+        this.endTx();
+        this.refresh();
+      }
+      this.showHint();
+    }
+    showHint(msg) {
+      const el = document.getElementById("hint");
+      if (!el) return;
+      if (this.mode === "present") {
+        el.textContent = "Ch\u1EBF \u0111\u1ED9 tr\xECnh b\xE0y: \u2190 \u2192 (ho\u1EB7c PageUp/PageDown) \u0111\u1EC3 chuy\u1EC3n khung. V\u1EABn k\xE9o \u0111\u01B0\u1EE3c \u0111i\u1EC3m t\u1EF1 do.";
+        return;
+      }
+      const t2 = TOOL_BY_ID[this.toolId];
+      const i = Math.min(this.picks.length, t2.hints.length - 1);
+      const sel = this.selection.size === 1 && !this.picks.length ? stepById(this.doc, [...this.selection][0]) : null;
+      const tip = sel && sel.name && kinds(this.doc).get(sel.id) === "point" ? ` \xB7 G\xF5 ch\u1EEF \u0111\u1EC3 \u0111\u1EB7t t\xEAn ${sel.name}` : "";
+      const shiftTip = this.picks.length && this.toolId !== "move" && this.pickAnchors().length ? " \xB7 gi\u1EEF Shift: c\u0103n h\u01B0\u1EDBng theo b\u01B0\u1EDBc 15\xB0 (n\u1EB1m ngang, th\u1EB3ng \u0111\u1EE9ng\u2026)" : "";
+      el.textContent = msg || `${t2.label}: ${t2.hints[i] || ""}${shiftTip}${tip}`;
+    }
+    neededTypes(tool) {
+      if (tool.inputs[0] === "...point") return ["point"];
+      if (!tool.anyOrder) return [tool.inputs[this.picks.length]];
+      const k = kinds(this.doc);
+      const rem = [...tool.inputs];
+      for (const p of this.picks) {
+        const j = rem.findIndex((t2) => argAccepts(t2, k.get(p)));
+        if (j >= 0) rem.splice(j, 1);
+      }
+      return rem;
+    }
+    toolClick(sx, sy, shift2 = false) {
+      this.shiftSnap = shift2;
+      const tool = TOOL_BY_ID[this.toolId];
+      const hits = this.hitTest(sx, sy).filter((h) => h.kind !== "mark");
+      this.beginTx();
+      if (tool.id === "point") {
+        const id2 = this.resolvePoint(sx, sy, hits);
+        this.endTx();
+        this.selection = new Set(id2 ? [id2] : []);
+        this.afterChange();
+        return;
+      }
+      if (tool.id === "intersect") {
+        const curves = hits.filter((h) => h.kind === "line" || h.kind === "circle");
+        if (!this.picks.length && curves.length >= 2) {
+          const n0 = this.doc.steps.length;
+          const [c1, c2] = this.crossingPair(curves, this.toUser(sx, sy));
+          this.createIntersections(c1, c2, this.toUser(sx, sy));
+          this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
+          return this.finishTool();
+        }
+        const c = curves.find((h) => !this.picks.includes(h.id));
+        if (!c) return this.showHint("H\xE3y b\u1EA5m v\xE0o m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng ho\u1EB7c \u0111\u01B0\u1EDDng tr\xF2n");
+        this.picks.push(c.id);
+        if (this.picks.length === 2) {
+          const n0 = this.doc.steps.length;
+          this.createIntersections(this.picks[0], this.picks[1], null);
+          this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
+          return this.finishTool();
+        }
+        this.selection = new Set(this.picks);
+        this.refresh();
+        return this.showHint();
+      }
+      if (tool.segmentShortcut && !this.picks.length && hits.length && hits[0].kind === "line") {
+        const s = stepById(this.doc, hits[0].id);
+        if (s.type === "segment") {
+          this.picks = [...s.args];
+          return this.completeTool(tool);
+        }
+      }
+      const need = this.neededTypes(tool);
+      let chosen = hits.find((h) => need.some((t2) => argAccepts(t2, h.kind)));
+      let id = chosen?.id;
+      if (!id && need.some((t2) => argAccepts(t2, "point"))) id = this.resolvePoint(sx, sy, hits);
+      if (!id) return this.showHint(`H\xE3y ch\u1ECDn ${need.map(typeName).join(" ho\u1EB7c ")}`);
+      if (tool.inputs[0] === "...point") {
+        if (this.picks.length >= 3 && id === this.picks[0]) return this.completeTool(tool);
+        if (this.picks.includes(id)) return;
+        this.picks.push(id);
+      } else {
+        if (this.picks.includes(id) && !tool.allowRepeat) return this.showHint("\u0110\u1ED1i t\u01B0\u1EE3ng n\xE0y \u0111\xE3 \u0111\u01B0\u1EE3c ch\u1ECDn, h\xE3y ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng kh\xE1c");
+        this.picks.push(id);
+        if (tool.anyOrder && this.picks.length === tool.inputs.length) {
+          const kk = kinds(this.doc);
+          const ordered = [];
+          const rest = [...this.picks];
+          for (const t2 of tool.inputs) {
+            const j = rest.findIndex((p) => argAccepts(t2, kk.get(p)));
+            ordered.push(rest.splice(j, 1)[0]);
+          }
+          this.picks = ordered;
+        }
+        if (this.picks.length === tool.inputs.length) return this.completeTool(tool);
+      }
+      this.selection = new Set(this.picks);
+      this.refresh();
+      this.startPreview(tool);
+      this.showHint();
+    }
+    /** Điểm vừa dựng nằm ngoài khung nhìn → nhắc cách thu phóng (không tự đổi khung nhìn của người dùng). */
+    warnOutOfView() {
+      const ids = [...this.selection];
+      const out = ids.some((id) => {
+        const v = this.values.get(id);
+        if (!v || v.kind !== "point") return false;
+        const q = this.toScreen(v);
+        return q.x < 0 || q.y < 0 || q.x > this.view.W || q.y > this.view.H;
+      });
+      if (out) toast("\u0110i\u1EC3m v\u1EEBa d\u1EF1ng n\u1EB1m ngo\xE0i khung nh\xECn \u2013 nh\u1EA5n Home (ho\u1EB7c Hi\u1EC3n th\u1ECB \u203A Thu ph\xF3ng v\u1EEBa h\xECnh) \u0111\u1EC3 th\u1EA5y c\u1EA3 h\xECnh", 4200);
+    }
+    completeTool(tool) {
+      const specs = tool.make(this.picks, this);
+      const ids = this.addSteps(specs);
+      const k = kinds(this.doc);
+      const pts = ids.filter((id) => k.get(id) === "point" && !stepById(this.doc, id).hidden);
+      this.selection = new Set(pts.length === 1 ? pts : ids.slice(0, 1));
+      this.finishTool();
+    }
+    finishTool() {
+      this.picks = [];
+      this.renderer.clearExtra();
+      this.endTx();
+      if (this.toolId === "intersect") this.selection = new Set(this.lastCreatedPoints && this.lastCreatedPoints.length === 1 ? this.lastCreatedPoints : []);
+      this.lastCreatedPoints = null;
+      this.afterChange();
+      this.warnOutOfView();
+      this.showHint();
+    }
+    markStyle(kind) {
+      const m = this.markDefaults;
+      const c = (x) => x ? { color: x } : {};
+      if (kind === "angle") return { ...c(m.color), arcs: m.arcs };
+      if (kind === "segment") return { ...c(m.color), ticks: m.ticks };
+      return { ...c(m.polyColor) };
+    }
+    startPreview(tool) {
+      this.renderer.clearExtra();
+      if (!tool.preview || !this.picks.length) return;
+      const r = this.renderer;
+      const pts = this.picks.map((id) => () => this.values.get(id));
+      const mouse = () => this.mouse;
+      if (["segment", "line", "ray", "circle"].includes(tool.preview)) r.addExtra({ type: tool.preview, pts: [pts[0], mouse] });
+      else if (tool.preview === "polygon") r.addExtra({ type: "polyline", pts: [...pts, mouse] });
+    }
+    // ================= chuột / cảm ứng =================
+    bindPointer() {
+      const canvas = this.view.canvas;
+      const wrap = this.stage;
+      const resetRect = () => {
+        this.boardRect = null;
+      };
+      window.addEventListener("resize", resetRect);
+      window.addEventListener("scroll", resetRect, true);
+      this.view.onViewChange(resetRect);
+      if (typeof ResizeObserver !== "undefined") new ResizeObserver(resetRect).observe(canvas);
+      wrap.addEventListener("pointerdown", (e) => this.onPointerDown(e), true);
+      let hoverPending = false;
+      let lastEvent = null;
+      wrap.addEventListener("pointermove", (e) => {
+        if (this.drag) return;
+        lastEvent = e;
+        if (hoverPending) return;
+        hoverPending = true;
+        requestAnimationFrame(() => {
+          hoverPending = false;
+          if (this.drag || !lastEvent) return;
+          const ev = lastEvent;
+          const { sx, sy } = this.eventPos(ev);
+          this.mouse = this.toUser(sx, sy);
+          if (ev.shiftKey && this.picks.length && this.toolId !== "move") {
+            const an = this.pickAnchors();
+            if (an.length) this.mouse = this.angleSnap(this.mouse, an);
+          }
+          if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
+          const hits = this.hitTest(sx, sy);
+          let cursor = "";
+          if (this.toolId === "move" || this.mode === "present") {
+            const h = hits[0];
+            if (h && h.kind === "point" && isDraggableType(stepById(this.doc, h.id).type)) cursor = "grab";
+            else if (h && this.mode === "edit") cursor = "pointer";
+            else if (this.mode === "edit" && this.labelAt(ev)) cursor = "move";
+          } else cursor = hits.length ? "pointer" : "crosshair";
+          canvas.style.cursor = cursor;
+        });
+      });
+      canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const { sx, sy } = this.eventPos(e);
+        const dy = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;
+        this.view.zoomAt(sx, sy, Math.exp(-dy * 15e-4));
+      }, { passive: false });
+      canvas.addEventListener("dblclick", (e) => {
+        if (this.mode === "present") return;
+        const { sx, sy } = this.eventPos(e);
+        const h = this.hitTest(sx, sy)[0];
+        if (h && h.kind === "point") this.inlineRename(h.id, null);
+      });
+    }
+    /** Nhãn điểm tại vị trí chuột (để kéo nhãn). */
+    labelAt(e) {
+      const { sx, sy } = this.eventPos(e);
+      for (const [id, b] of this.renderer.labelBoxes) {
+        if (sx >= b.x - 2 && sx <= b.x + b.w + 2 && sy >= b.y - 2 && sy <= b.y + b.h + 2) return id;
+      }
+      return null;
+    }
+    /** Dời hình bằng cách kéo nền (một ngón/chuột) hoặc chụm hai ngón để phóng (màn hình cảm ứng). */
+    startPan(e) {
+      const pointers = this.panPointers || (this.panPointers = /* @__PURE__ */ new Map());
+      pointers.set(e.pointerId, this.eventPos(e));
+      if (this.panning) return;
+      this.panning = true;
+      const move = (ev) => {
+        if (!pointers.has(ev.pointerId)) return;
+        const prev = [...pointers.values()];
+        const before = pointers.get(ev.pointerId);
+        const now = this.eventPos(ev);
+        pointers.set(ev.pointerId, now);
+        if (pointers.size >= 2) {
+          const [a0, b0] = prev, [a1, b1] = [...pointers.values()];
+          const d0 = Math.hypot(a0.sx - b0.sx, a0.sy - b0.sy), d1 = Math.hypot(a1.sx - b1.sx, a1.sy - b1.sy);
+          if (d0 > 5) this.view.zoomAt((a1.sx + b1.sx) / 2, (a1.sy + b1.sy) / 2, d1 / d0);
+        } else this.view.panBy(now.sx - before.sx, now.sy - before.sy);
+      };
+      const up = (ev) => {
+        pointers.delete(ev.pointerId);
+        if (pointers.size) return;
+        this.panning = false;
+        window.removeEventListener("pointermove", move, true);
+        window.removeEventListener("pointerup", up, true);
+        window.removeEventListener("pointercancel", up, true);
+      };
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", up, true);
+      window.addEventListener("pointercancel", up, true);
+    }
+    onPointerDown(e) {
+      if (!e.target.closest("#board")) return;
+      if (e.button !== void 0 && e.button !== 0) return;
+      if (document.querySelector(".modal-back")) return;
+      this.boardRect = null;
+      const { sx, sy } = this.eventPos(e);
+      if (sx < 0 || sy < 0 || sx > this.view.W || sy > this.view.H) return;
+      if (this.panning) {
+        this.startPan(e);
+        return;
+      }
+      this.mouse = this.toUser(sx, sy);
+      if (this.toolId !== "move" && this.mode === "edit") {
+        e.stopPropagation();
+        e.preventDefault();
+        this.toolClick(sx, sy, e.shiftKey);
+        this.shiftSnap = false;
+        return;
+      }
+      const hits = this.hitTest(sx, sy);
+      const lab = this.mode === "edit" && !(hits[0] && hits[0].kind === "point" && hits[0].d < 5) ? this.labelAt(e) : null;
+      if (lab) {
+        e.stopPropagation();
+        e.preventDefault();
+        const s = stepById(this.doc, lab);
+        const off = s.style && s.style.labelOffset || this.renderer.labelOffsets.get(lab) || [9, 9];
+        this.startDrag(e, { kind: "label", id: lab, start: JSON.stringify(this.doc), sx, sy, off: [...off] });
+        return;
+      }
+      const h = hits[0];
+      const step = h ? stepById(this.doc, h.id) : null;
+      if (h && h.kind === "point" && isDraggableType(step.type)) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.startDrag(e, { kind: "point", id: h.id, start: JSON.stringify(this.doc) });
+        if (this.mode === "edit") this.select(h.id, e.shiftKey, false);
+        return;
+      }
+      if (h) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (this.mode === "edit") this.select(h.id, e.shiftKey);
+        return;
+      }
+      const imh = this.mode === "edit" ? this.imageAt(sx, sy) : null;
+      if (imh) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (this.imageSel !== imh.id) this.selectImage(imh.id);
+        this.startImageDrag(e, imh.id, imh.handle);
+        return;
+      }
+      e.preventDefault();
+      if (this.mode === "edit" && (this.selection.size || this.imageSel) && !e.shiftKey) {
+        this.selection.clear();
+        this.imageSel = null;
+        this.refresh();
+      }
+      this.startPan(e);
+    }
+    /**
+     * Kéo điểm hoặc nhãn. Sự kiện chuột chỉ ghi lại vị trí mới nhất; việc tính lại và vẽ được gom
+     * vào requestAnimationFrame (≤ 1 lần mỗi khung hình) và chỉ tính lại các bước phụ thuộc vào điểm
+     * đang kéo. Ghi lịch sử hoàn tác, đặt lại nhãn tự động, lưu nháp… chỉ làm một lần khi thả chuột.
+     */
+    startDrag(e, info) {
+      this.drag = info;
+      const step = stepById(this.doc, info.id);
+      const P0 = this.values.get(info.id);
+      if (info.kind === "point" && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
+      if (info.kind === "point") this.dragUpdater = makeUpdater(this.doc, [info.id]);
+      let pending = null;
+      const anchors = info.kind === "point" && step.type === "free_point" ? this.dragAnchors(info.id) : [];
+      const apply = () => {
+        if (!pending) return;
+        const { sx, sy, shift: shift2 } = pending;
+        pending = null;
+        this.mouse = this.toUser(sx, sy);
+        if (info.kind === "label") {
+          const sc = this.projector ? 1.9 : 1;
+          const off = [round12(info.off[0] + (sx - info.sx) / sc), round12(info.off[1] - (sy - info.sy) / sc)];
+          step.style = { ...step.style || {}, labelOffset: off };
+          this.renderer.setLabelOffset(info.id, off);
+          return;
+        }
+        const target = { x: this.mouse.x + info.grab.x, y: this.mouse.y + info.grab.y };
+        if (step.type === "free_point") {
+          const Q = shift2 && anchors.length ? this.angleSnap(target, anchors) : this.snap(target);
+          step.params = { ...step.params || {}, x: Q.x, y: Q.y };
+        } else if (step.type === "point_on") {
+          const c = this.values.get(step.args[0]);
+          if (c) step.params = { ...step.params || {}, t: round9(paramOf(c, target)) };
+        }
+        this.quickUpdate();
+      };
+      this.view.frameHooks.push(apply);
+      const move = (ev) => {
+        pending = { ...this.eventPos(ev), shift: ev.shiftKey };
+        this.view.requestDraw();
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move, true);
+        window.removeEventListener("pointerup", up, true);
+        window.removeEventListener("pointercancel", up, true);
+        apply();
+        this.view.frameHooks = this.view.frameHooks.filter((f) => f !== apply);
+        this.drag = null;
+        this.dragUpdater = null;
+        if (JSON.stringify(this.doc) !== info.start) {
+          this.pushUndo(info.start);
+          this.afterChange();
+        }
+      };
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", up, true);
+      window.addEventListener("pointercancel", up, true);
+    }
+    select(id, additive = false, rerender = true) {
+      this.imageSel = null;
+      if (additive) {
+        if (this.selection.has(id)) this.selection.delete(id);
+        else this.selection.add(id);
+      } else this.selection = /* @__PURE__ */ new Set([id]);
+      if (rerender) this.refresh();
+      else this.renderPanels();
+    }
+    // ================= sửa đối tượng =================
+    async renameStep(id) {
+      const s = stepById(this.doc, id);
+      if (!s || !s.name) return;
+      const v = await promptDialog("\u0110\u1ED5i t\xEAn", s.name, "G\xF5 nh\u01B0 c\xF4ng th\u1EE9c: I_A \u2192 I v\u1EDBi ch\u1EC9 s\u1ED1 A, X_{AB} \u2192 ch\u1EC9 s\u1ED1 AB, B' \u2192 B ph\u1EA9y, A1 \u2192 A\u2081.");
+      if (v == null) return;
+      this.setName(id, v.trim());
+    }
+    /**
+     * Đặt tên ngay trên hình: ô nhập nhỏ hiện cạnh nhãn. Mở bằng cách GÕ CHỮ khi đang chọn một điểm (vd điểm vừa
+     * dựng), F2, hoặc nháy đúp. Enter/bấm ra ngoài: lưu; Esc: bỏ.
+     */
+    inlineRename(id, first = null) {
+      const s = stepById(this.doc, id);
+      const v = this.values.get(id);
+      if (!s || !s.name || !v || this.mode !== "edit") return;
+      document.querySelector(".inline-name")?.remove();
+      const inp = document.createElement("input");
+      inp.className = "inline-name";
+      inp.type = "text";
+      inp.spellcheck = false;
+      inp.value = first ?? s.name;
+      inp.title = "G\xF5 nh\u01B0 c\xF4ng th\u1EE9c: I_A, X_{AB}, B', A1 \u2192 A\u2081. Enter \u0111\u1EC3 l\u01B0u, Esc \u0111\u1EC3 b\u1ECF.";
+      const p = this.toScreen(v);
+      const off = this.renderer.labelOffsets.get(id) || [9, 9];
+      const sc = this.projector ? 1.9 : 1;
+      inp.style.left = Math.max(4, Math.min(this.view.W - 90, p.x + off[0] * sc - 20)) + "px";
+      inp.style.top = Math.max(4, Math.min(this.view.H - 30, p.y - off[1] * sc - 13)) + "px";
+      this.stage.appendChild(inp);
+      let done = false;
+      const finish = (save) => {
+        if (done) return;
+        done = true;
+        const val = inp.value.trim();
+        inp.remove();
+        if (save && val) this.setName(id, val);
+        this.showHint();
+      };
+      inp.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      inp.addEventListener("blur", () => finish(true));
+      inp.focus();
+      if (first == null) inp.select();
+      else inp.setSelectionRange(inp.value.length, inp.value.length);
+    }
+    /** Đổi tên; nếu tên đã thuộc đối tượng khác thì ĐỔI CHỖ hai tên (vd tam giác vuông dựng ở A mà đề cần vuông ở C). */
+    setName(id, name2) {
+      const s = stepById(this.doc, id);
+      if (!name2 || name2 === s.name) return false;
+      const other = this.doc.steps.find((x) => x.name === name2 && x.id !== id);
+      const old = s.name;
+      if (this.textBoxes && this.textBoxes.editing) this.textBoxes.stopEdit(true);
+      this.commit((doc2) => {
+        const k = kinds(doc2);
+        const pts = doc2.steps.filter((x) => k.get(x.id) === "point" && x.name).map((x) => ({ name: x.name, id: x.id }));
+        const ren = new Map([[id, name2], ...other ? [[other.id, old]] : []]);
+        for (const b of doc2.boxes || []) b.text = renameInText(b.text, pts, ren);
+        if (other) other.name = old;
+        s.name = name2;
+      });
+      if (other) toast(`\u0110\xE3 \u0111\u1ED5i ch\u1ED7 t\xEAn: ${name2} \u2194 ${old}`);
+      return true;
+    }
+    setStyle(ids, patch) {
+      this.commit((doc2) => {
+        for (const id of ids) {
+          const s = stepById(doc2, id);
+          if (s) s.style = { ...s.style || {}, ...patch };
+        }
+      });
+    }
+    setStepProp(id, key, value) {
+      this.commit((doc2) => {
+        const s = stepById(doc2, id);
+        if (!s) return;
+        if (value === false || value == null) delete s[key];
+        else s[key] = value;
+      });
+    }
+    setParams(id, patch) {
+      this.commit((doc2) => {
+        const s = stepById(doc2, id);
+        s.params = { ...s.params || {}, ...patch };
+      });
+    }
+    async deleteSteps(ids) {
+      ids = ids.filter((id) => stepById(this.doc, id));
+      if (!ids.length) return;
+      const dep = [...dependents(this.doc, ids)];
+      if (dep.length) {
+        const names = dep.map((d) => `<b>${escapeHTML(describe(this.doc, d) || d)}</b>`).join(", ");
+        const ok = await confirmDialog("Xo\xE1 \u0111\u1ED1i t\u01B0\u1EE3ng", `Xo\xE1 ${ids.map((i) => `<b>${escapeHTML(describe(this.doc, i))}</b>`).join(", ")} s\u1EBD xo\xE1 k\xE8m <b>${dep.length}</b> \u0111\u1ED1i t\u01B0\u1EE3ng ph\u1EE5 thu\u1ED9c: ${names}.<br>Ti\u1EBFp t\u1EE5c?`, "Xo\xE1");
+        if (!ok) return;
+      }
+      this.commit((doc2) => {
+        const { doc: nd } = removeSteps(doc2, ids);
+        doc2.steps = nd.steps;
+      });
+      this.selection.clear();
+      this.refresh();
+    }
+    /** Tô sáng một quan hệ do bộ khám phá tìm ra (null để bỏ). */
+    setRelation(rel2) {
+      this.relation = rel2;
+      this.highlight = new Set(rel2 ? rel2.ids : []);
+      this.refresh();
+    }
+    // ================= trình bày / trình chiếu =================
+    setMode(mode) {
+      this.cancelTool();
+      this.mode = mode;
+      document.body.classList.toggle("presenting", mode === "present");
+      if (mode === "present") {
+        this.frameIdx = 0;
+        this.selection.clear();
+        this.renderer.ghostLines = false;
+      } else this.setTool(this.toolId);
+      this.refresh();
+      this.showHint();
+    }
+    gotoFrame(i) {
+      const n = this.frameCount();
+      this.frameIdx = Math.max(0, Math.min(n - 1, i));
+      this.refresh();
+    }
+    updatePresentBar() {
+      const lab = document.getElementById("frame-label");
+      if (!lab) return;
+      const n = this.frameCount();
+      lab.textContent = n ? `Khung ${Math.min(this.frameIdx + 1, n)} / ${n}` : "Ch\u01B0a c\xF3 b\u01B0\u1EDBc n\xE0o";
+      document.getElementById("btn-prev").disabled = this.frameIdx <= 0;
+      document.getElementById("btn-next").disabled = this.frameIdx >= n - 1;
+    }
+    async setProjector(on) {
+      this.projector = on;
+      document.body.classList.toggle("projector", on);
+      try {
+        if (on && !document.fullscreenElement) await document.documentElement.requestFullscreen();
+        if (!on && document.fullscreenElement) await document.exitFullscreen();
+      } catch {
+      }
+      setTimeout(() => {
+        this.view.resize();
+        this.boardRect = null;
+        this.refresh();
+      }, 80);
+    }
+    setThemeId(id) {
+      this.theme = setTheme(id);
+      savePref("theme", this.theme);
+      this.updateMenuChecks();
+      this.refresh();
+    }
+    /** Hiện/ẩn bảng các bước dựng (mặc định ẩn để dành chỗ cho bảng vẽ). */
+    togglePanel(show = !document.body.classList.contains("panel-open"), remember = true) {
+      document.body.classList.toggle("panel-open", !!show);
+      if (remember) savePref("panel", show ? "1" : "0");
+      this.updateMenuChecks();
+      setTimeout(() => {
+        this.view.resize();
+        this.boardRect = null;
+      }, 0);
+    }
+    updateMenuChecks() {
+      document.querySelectorAll("[data-theme]").forEach((b) => b.classList.toggle("on", b.dataset.theme === this.theme));
+      document.getElementById("btn-grid")?.classList.toggle("on", this.grid);
+      document.getElementById("btn-trim")?.classList.toggle("on", !!this.renderer?.trimLines);
+      document.getElementById("menu-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
+      document.getElementById("btn-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
+    }
+    toggleGrid() {
+      this.grid = !this.grid;
+      this.renderer.grid = this.grid;
+      this.updateMenuChecks();
+      this.view.requestDraw();
+    }
+    zoomFit() {
+      const pts = [];
+      const vis = this.visibleSet();
+      for (const s of this.doc.steps) {
+        if (s.hidden || vis && !vis.has(s.id)) continue;
+        const v = this.values.get(s.id);
+        if (!v) continue;
+        if (v.kind === "point") pts.push(v);
+        if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
+      }
+      for (const im of this.doc.images || []) pts.push({ x: im.x, y: im.y }, { x: im.x + im.w, y: im.y - im.h });
+      if (!pts.length) return this.view.setBoundingBox([-8, 6, 8, -6]);
+      const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+      let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+      const m = Math.max(x2 - x1, y2 - y1, 1) * 0.1;
+      [x1, x2, y1, y2] = [x1 - m, x2 + m, y1 - m, y2 + m];
+      const W = this.view.W, H = this.view.H;
+      const per = Math.max((x2 - x1) / W, (y2 - y1) / H);
+      const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+      this.view.setBoundingBox([cx - per * W / 2, cy + per * H / 2, cx + per * W / 2, cy - per * H / 2]);
+    }
+    // ================= bàn phím & nút =================
+    bindKeys() {
+      document.addEventListener("keydown", (e) => {
+        if (document.querySelector(".modal-back")) return;
+        const tag = (e.target.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
+        const ctrl = e.ctrlKey || e.metaKey;
+        if (ctrl && e.key === "Enter" && this.mode === "edit" && this.textBoxes) {
+          e.preventDefault();
+          this.textBoxes.editSolution();
+          return;
+        }
+        if (e.altKey && !ctrl && this.tabs.length > 1) {
+          const d = /^Digit([1-9])$/.exec(e.code);
+          const n = this.tabs.length;
+          if (d) {
+            e.preventDefault();
+            this.switchTab(Math.min(+d[1], n) - 1);
+            return;
+          }
+          if (e.key === "PageDown" || e.key === "PageUp") {
+            e.preventDefault();
+            this.switchTab((this.tabIdx + (e.key === "PageDown" ? 1 : n - 1)) % n);
+            return;
+          }
+        }
+        if (ctrl && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+          e.preventDefault();
+          this.undo();
+          return;
+        }
+        if (ctrl && (e.key === "y" || e.key === "Y" || (e.key === "z" || e.key === "Z") && e.shiftKey)) {
+          e.preventDefault();
+          this.redo();
+          return;
+        }
+        if (this.mode === "present") {
+          if (["ArrowRight", "PageDown", " ", "ArrowDown"].includes(e.key)) {
+            e.preventDefault();
+            this.gotoFrame(this.frameIdx + 1);
+          } else if (["ArrowLeft", "PageUp", "ArrowUp"].includes(e.key)) {
+            e.preventDefault();
+            this.gotoFrame(this.frameIdx - 1);
+          } else if (e.key === "Home") this.gotoFrame(0);
+          else if (e.key === "End") this.gotoFrame(1e9);
+          else if (e.key === "Escape" && !this.projector) this.setMode("edit");
+          return;
+        }
+        if (!ctrl && !e.altKey && this.selection.size === 1 && !this.picks.length && (e.key === "F2" || e.key.length === 1 && /[\p{L}\d_'{}]/u.test(e.key))) {
+          const id = [...this.selection][0];
+          if (kinds(this.doc).get(id) === "point" && stepById(this.doc, id)?.name) {
+            e.preventDefault();
+            this.inlineRename(id, e.key === "F2" ? null : e.key);
+            return;
+          }
+        }
+        if (e.key === "Home") {
+          e.preventDefault();
+          this.zoomFit();
+          return;
+        }
+        if (e.key === "Escape") {
+          if (this.picks.length) this.cancelTool();
+          else if (this.toolId !== "move") this.setTool("move");
+          else {
+            this.selection.clear();
+            this.imageSel = null;
+            this.setRelation(null);
+          }
+        } else if (e.key === "Enter" && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === "...point") {
+          this.completeTool(TOOL_BY_ID[this.toolId]);
+        } else if ((e.key === "Delete" || e.key === "Backspace") && this.selection.size) {
+          e.preventDefault();
+          this.deleteSteps([...this.selection]);
+        } else if ((e.key === "Delete" || e.key === "Backspace") && this.imageSel) {
+          e.preventDefault();
+          this.deleteImage(this.imageSel);
+        }
+      });
+      document.addEventListener("fullscreenchange", () => {
+        if (!document.fullscreenElement && this.projector) this.setProjector(false);
+      });
+    }
+    /** Nạp công cụ tự tạo (lưu trong trình duyệt) và gắn vào menu "Công cụ › 7. Công cụ của tôi". */
+    loadUserTools() {
+      let list = [];
+      try {
+        list = JSON.parse(loadPref("tools", "[]"));
+      } catch {
+        list = [];
+      }
+      this.userTools = Array.isArray(list) ? list.filter(validMacro) : [];
+      for (const id of Object.keys(TOOL_BY_ID)) if (TOOL_BY_ID[id].user) delete TOOL_BY_ID[id];
+      for (const d of this.userTools) TOOL_BY_ID[d.id] = macroTool(d);
+      const userIds = this.userTools.map((d) => d.id);
+      this.toolbarGroups = TOOLBAR.map((g) => g.id === "library" ? { ...g, tools: [...g.tools, ...userIds], submenus: [...g.submenus, USER_MENU] } : g);
+    }
+    saveUserTools() {
+      savePref("tools", JSON.stringify(this.userTools));
+      this.loadUserTools();
+      this.buildToolbar();
+      this.markActiveTool(this.toolId);
+    }
+    async userToolAction(action, arg) {
+      if (action === "create") {
+        const r0 = createMacro(this.doc, [...this.selection], "x");
+        if (!r0.ok) return toast(r0.error, 5e3);
+        const name2 = await promptDialog("T\u1EA1o c\xF4ng c\u1EE5 m\u1EDBi", "", `\u0110\u1EA7u v\xE0o: ${r0.tool.inputs.length} (${r0.tool.inputs.map((t2) => ({ point: "\u0111i\u1EC3m", line: "\u0111\u01B0\u1EDDng th\u1EB3ng", circle: "\u0111\u01B0\u1EDDng tr\xF2n" })[t2]).join(", ")}); ${r0.tool.steps.length} b\u01B0\u1EDBc d\u1EF1ng. \u0110\u1EB7t t\xEAn cho c\xF4ng c\u1EE5:`);
+        if (!name2 || !name2.trim()) return;
+        r0.tool.label = name2.trim();
+        this.userTools.push(r0.tool);
+        this.saveUserTools();
+        toast(`\u0110\xE3 t\u1EA1o c\xF4ng c\u1EE5 "${r0.tool.label}" (C\xF4ng c\u1EE5 \u203A ${USER_MENU})`, 4e3);
+      } else if (action === "delete") {
+        const d = this.userTools.find((x) => x.id === arg);
+        if (!d || !await confirmDialog("Xo\xE1 c\xF4ng c\u1EE5", `Xo\xE1 c\xF4ng c\u1EE5 <b>${escapeHTML(d.label)}</b>?`, "Xo\xE1")) return;
+        this.userTools = this.userTools.filter((x) => x.id !== arg);
+        if (this.toolId === arg) this.setTool("move");
+        this.saveUserTools();
+      } else if (action === "export") {
+        if (!this.userTools.length) return toast("Ch\u01B0a c\xF3 c\xF4ng c\u1EE5 t\u1EF1 t\u1EA1o n\xE0o");
+        const blob = new Blob([JSON.stringify({ format: "hinh-hoc-dong-cong-cu", version: 1, tools: this.userTools }, null, 1)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "cong-cu-cua-toi.json";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 1e3);
+      } else if (action === "import") {
+        const inp = document.createElement("input");
+        inp.type = "file";
+        inp.accept = ".json,application/json";
+        inp.onchange = async () => {
+          try {
+            const data = JSON.parse(await inp.files[0].text());
+            const list = (Array.isArray(data) ? data : data.tools || []).filter(validMacro);
+            if (!list.length) throw new Error("T\u1EC7p kh\xF4ng ch\u1EE9a c\xF4ng c\u1EE5 h\u1EE3p l\u1EC7");
+            for (const d of list) {
+              this.userTools = this.userTools.filter((x) => x.id !== d.id);
+              this.userTools.push(d);
+            }
+            this.saveUserTools();
+            toast(`\u0110\xE3 nh\u1EADp ${list.length} c\xF4ng c\u1EE5`);
+          } catch (e) {
+            toast("Kh\xF4ng nh\u1EADp \u0111\u01B0\u1EE3c: " + e.message, 5e3);
+          }
+        };
+        inp.click();
+      }
+    }
+    buildToolbar() {
+      const host = document.getElementById("tools");
+      if (!this.toolbarGroups) this.loadUserTools();
+      const groups = this.toolbarGroups;
+      this.groupCurrent = this.groupCurrent || {};
+      for (const g of groups) if (!this.groupCurrent[g.id]) this.groupCurrent[g.id] = g.tools[0];
+      host.innerHTML = groups.map((g) => {
+        const many = g.tools.length > 1 || g.menu;
+        const btn = (id) => {
+          const t2 = TOOL_BY_ID[id];
+          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t2.label)}"><span class="ti">${t2.icon}</span><span class="tl">${escapeHTML(t2.label)}</span></button>`;
+        };
+        const items = g.submenus ? g.submenus.map((m) => {
+          const ids = g.tools.filter((id) => TOOL_BY_ID[id].menu === m);
+          let list = ids.map(btn).join("");
+          if (m === USER_MENU) {
+            list = ids.map((id) => `<div class="user-tool">${btn(id)}<button class="tool-del" data-del="${id}" title="Xo\xE1 c\xF4ng c\u1EE5 n\xE0y">\u2715</button></div>`).join("") + (ids.length ? '<div class="menu-sep"></div>' : '<div class="note" style="padding:4px 8px">Ch\u01B0a c\xF3 c\xF4ng c\u1EE5 n\xE0o. Ch\u1ECDn c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng k\u1EBFt qu\u1EA3 tr\xEAn h\xECnh (Shift \u0111\u1EC3 ch\u1ECDn nhi\u1EC1u, c\xF3 th\u1EC3 ch\u1ECDn c\u1EA3 \u0111\u1ED1i t\u01B0\u1EE3ng ban \u0111\u1EA7u) r\u1ED3i b\u1EA5m "T\u1EA1o c\xF4ng c\u1EE5".</div>') + '<button class="tool-action" data-action="create">\uFF0B T\u1EA1o c\xF4ng c\u1EE5 t\u1EEB c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng \u0111ang ch\u1ECDn\u2026</button><button class="tool-action" data-action="export">Xu\u1EA5t c\xE1c c\xF4ng c\u1EE5 ra t\u1EC7p\u2026</button><button class="tool-action" data-action="import">Nh\u1EADp c\xF4ng c\u1EE5 t\u1EEB t\u1EC7p\u2026</button>';
+          }
+          return `<div class="sub"><button class="sub-title">${escapeHTML(m)}<span class="caret">\u203A</span></button><div class="sub-pop">${list}</div></div>`;
+        }).join("") + (g.extraHTML ? g.extraHTML(this) : "") : g.tools.map(btn).join("");
+        return `<div class="tb-group" data-group="${g.id}">
+          <button class="tb-btn" data-group="${g.id}" title="${escapeHTML(g.label)}">${ICONS[g.icon] || ""}${many ? '<span class="tb-more"></span>' : ""}</button>
+          ${many ? `<div class="flyout"><div class="flyout-title">${escapeHTML(g.label)}</div>${items}</div>` : ""}
+        </div>`;
+      }).join("") + '<div id="tb-recent" class="tb-recent" title="C\xF4ng c\u1EE5 v\u1EEBa d\xF9ng"></div>';
+      this.renderRecent();
+      const closeAll = () => host.querySelectorAll(".tb-group.open, .sub.open").forEach((x) => x.classList.remove("open"));
+      if (this.toolbarBound) return;
+      this.toolbarBound = true;
+      host.addEventListener("mouseover", (e) => {
+        const st = e.target.closest(".sub-title");
+        if (!st || st.parentElement.classList.contains("open")) return;
+        st.parentElement.parentElement.querySelectorAll(".sub.open").forEach((x) => x.classList.remove("open"));
+        st.parentElement.classList.add("open");
+      });
+      host.onclick = (e) => {
+        const act = e.target.closest("[data-action], [data-del]");
+        if (act) {
+          closeAll();
+          this.userToolAction(act.dataset.action || "delete", act.dataset.del);
+          return;
+        }
+        const rc = e.target.closest("[data-recent]");
+        if (rc) {
+          closeAll();
+          this.setTool(rc.dataset.recent);
+          return;
+        }
+        const tb = e.target.closest(".tb-btn");
+        const tl = e.target.closest(".tool");
+        const st = e.target.closest(".sub-title");
+        if (st) {
+          const subEl = st.parentElement;
+          subEl.parentElement.querySelectorAll(".sub.open").forEach((x) => x !== subEl && x.classList.remove("open"));
+          subEl.classList.add("open");
+          return;
+        }
+        if (tl) {
+          const g2 = tl.closest(".tb-group").dataset.group;
+          this.groupCurrent[g2] = tl.dataset.tool;
+          closeAll();
+          this.setTool(tl.dataset.tool);
+          return;
+        }
+        if (!tb) return;
+        const gEl = tb.closest(".tb-group");
+        const g = this.toolbarGroups.find((x) => x.id === tb.dataset.group);
+        const wasOpen = gEl.classList.contains("open");
+        closeAll();
+        if (g.menu) {
+          if (!wasOpen) {
+            gEl.classList.add("open");
+            g.menu(gEl.querySelector(".flyout"), this, closeAll);
+          }
+          return;
+        }
+        if (!g.submenus) this.setTool(this.groupCurrent[g.id]);
+        if (g.tools.length > 1 && !wasOpen) gEl.classList.add("open");
+      };
+      document.addEventListener("pointerdown", (e) => {
+        if (e.target.closest("#tools") || !host.querySelector(".tb-group.open")) return;
+        closeAll();
+        if (e.target.closest("#board")) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }, true);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeAll();
+      });
+    }
+    /** Công cụ vừa dùng (tối đa 6) – hiện ở cuối thanh công cụ dọc, chọn lại bằng MỘT lần bấm. */
+    rememberTool(id) {
+      if (!this.recentTools) {
+        try {
+          this.recentTools = JSON.parse(loadPref("recent", "[]"));
+        } catch {
+          this.recentTools = [];
+        }
+      }
+      if (id !== "move" && TOOL_BY_ID[id]) {
+        this.recentTools = [id, ...this.recentTools.filter((x) => x !== id)].slice(0, 6);
+        savePref("recent", JSON.stringify(this.recentTools));
+      }
+      this.renderRecent();
+    }
+    renderRecent() {
+      const host = document.getElementById("tb-recent");
+      if (!host) return;
+      const list = (this.recentTools || []).filter((id) => TOOL_BY_ID[id]);
+      host.innerHTML = list.map((id) => `<button class="tb-rc${id === this.toolId ? " active" : ""}" data-recent="${id}" title="${escapeHTML(TOOL_BY_ID[id].label)}">${TOOL_BY_ID[id].icon}</button>`).join("");
+      host.style.display = list.length ? "" : "none";
+    }
+    /** Đánh dấu công cụ đang dùng trên thanh công cụ. */
+    markActiveTool(id) {
+      const groups = this.toolbarGroups || TOOLBAR;
+      this.groupCurrent || (this.groupCurrent = {});
+      document.querySelectorAll("#tools .tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === id));
+      for (const g of groups) {
+        const on = g.tools.includes(id) || !!(g.isActive && g.isActive(id));
+        if (g.tools.includes(id)) this.groupCurrent[g.id] = id;
+        document.querySelector(`#tools .tb-group[data-group="${g.id}"]`)?.classList.toggle("active", on);
+      }
+    }
+    bindButtons() {
+      const on = (id, fn) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("click", fn);
+      };
+      for (const [id, ic2] of [["btn-undo", "undo"], ["btn-redo", "redo"], ["btn-explore", "explore"], ["btn-present", "present"], ["btn-projector", "projector"], ["btn-panel", "panel"]]) {
+        const b = document.getElementById(id);
+        if (b) b.innerHTML = ICONS[ic2];
+      }
+      const menus = [...document.querySelectorAll("#topbar .menu")];
+      const closeMenus = () => menus.forEach((m) => m.classList.remove("open"));
+      for (const m of menus) {
+        m.querySelector(".menu-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          const open2 = m.classList.contains("open");
+          closeMenus();
+          if (!open2) m.classList.add("open");
+        });
+        m.querySelector(".menu-pop").addEventListener("click", (e) => {
+          if (e.target.closest("button")) closeMenus();
+        });
+        m.addEventListener("mouseenter", () => {
+          if (menus.some((x) => x.classList.contains("open")) && !m.classList.contains("open")) {
+            closeMenus();
+            m.classList.add("open");
+          }
+        });
+      }
+      document.addEventListener("pointerdown", (e) => {
+        if (e.target.closest("#topbar .menu") || !menus.some((m) => m.classList.contains("open"))) return;
+        closeMenus();
+        if (e.target.closest("#board")) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }, true);
+      on("btn-undo", () => this.undo());
+      on("btn-redo", () => this.redo());
+      on("menu-undo", () => this.undo());
+      on("menu-redo", () => this.redo());
+      document.querySelectorAll("[data-theme]").forEach((b) => b.addEventListener("click", () => this.setThemeId(b.dataset.theme)));
+      on("btn-panel", () => this.togglePanel());
+      on("menu-panel", () => this.togglePanel());
+      on("btn-close-panel", () => this.togglePanel(false));
+      this.togglePanel(loadPref("panel", "0") === "1", false);
+      this.updateMenuChecks();
+      on("btn-delete", () => this.deleteSteps([...this.selection]));
+      on("btn-grid", () => this.toggleGrid());
+      on("btn-trim", () => {
+        this.renderer.trimLines = !this.renderer.trimLines;
+        savePref("trim", this.renderer.trimLines ? "1" : "0");
+        this.updateMenuChecks();
+        this.refresh();
+      });
+      on("btn-fit", () => this.zoomFit());
+      on("btn-present", () => this.setMode(this.mode === "present" ? "edit" : "present"));
+      on("btn-projector", () => this.setProjector(!this.projector));
+      on("btn-prev", () => this.gotoFrame(this.frameIdx - 1));
+      on("btn-next", () => this.gotoFrame(this.frameIdx + 1));
+      on("btn-exit-present", () => {
+        if (this.projector) this.setProjector(false);
+        this.setMode("edit");
+      });
+      on("btn-new", () => this.newTab());
+      on("btn-unlock-images", () => {
+        if (!(this.doc.images || []).some((im) => im.locked)) return toast("Kh\xF4ng c\xF3 \u1EA3nh n\xE0o \u0111ang kho\xE1");
+        this.commit((doc2) => {
+          for (const im of doc2.images) delete im.locked;
+        });
+        toast("\u0110\xE3 m\u1EDF kho\xE1 c\xE1c \u1EA3nh \u2013 b\u1EA5m v\xE0o \u1EA3nh \u0111\u1EC3 d\u1EDDi, \u0111\u1ED5i c\u1EE1");
+      });
+    }
+  };
+  function loadPref(key, def) {
+    try {
+      return localStorage.getItem("hinh-hoc-dong:" + key) ?? def;
+    } catch {
+      return def;
+    }
+  }
+  function savePref(key, v) {
+    try {
+      localStorage.setItem("hinh-hoc-dong:" + key, v);
+    } catch {
+    }
+  }
+  var round6 = (v) => Math.round(v * 1e6) / 1e6;
+  var round9 = (v) => Math.round(v * 1e9) / 1e9;
+  var round12 = (v) => Math.round(v * 10) / 10;
+  var escapeHTML = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  function typeName(t2) {
+    return { point: "m\u1ED9t \u0111i\u1EC3m", line: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng", circle: "m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n", curve: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng/\u0111\u01B0\u1EDDng tr\xF2n", obj: "m\u1ED9t \u0111\u1ED1i t\u01B0\u1EE3ng", pl: "m\u1ED9t \u0111i\u1EC3m ho\u1EB7c \u0111\u01B0\u1EDDng th\u1EB3ng", "...point": "m\u1ED9t \u0111i\u1EC3m" }[t2] || t2;
+  }
+  function markDistance(v, P2, px) {
+    if (v.kind === "angle") return Math.abs(dist(v.B, P2) - 20 * px);
+    if (v.kind === "segmark") return dist(mid(v.A, v.B), P2);
+    if (v.kind === "polygon") return pointInPolygon(P2, v.pts) ? 0 : Infinity;
+    return Infinity;
+  }
+  function pointInPolygon(P2, pts) {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const a = pts[i], b = pts[j];
+      if (a.y > P2.y !== b.y > P2.y && P2.x < (b.x - a.x) * (P2.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    return inside;
+  }
+
+  // src/core/builder.js
+  var Builder = class {
+    constructor(doc2 = emptyDoc()) {
+      this.doc = doc2;
+    }
+    /** Thêm một bước; trả về id. */
+    add(type, args = [], params = void 0, name2 = void 0, extra = {}) {
+      const def = STEP_TYPES[type];
+      if (!def) throw new Error("Lo\u1EA1i b\u01B0\u1EDBc kh\xF4ng r\xF5: " + type);
+      const id = newId(this.doc);
+      const kind = def.kind === "same" ? kinds(this.doc).get(args[0]) : def.kind;
+      const step = { id, type, args: [...args] };
+      if (params && Object.keys(params).length) step.params = { ...params };
+      if (kind !== "mark") step.name = name2 || nextName(this.doc, kind);
+      Object.assign(step, extra);
+      this.doc.steps.push(step);
+      return id;
+    }
+    point(x, y, name2) {
+      return this.add("free_point", [], { x, y }, name2);
+    }
+  };
+
+  // src/core/examples.js
+  var triangle = (b) => {
+    const A = b.point(-0.6, 3.4, "A"), B = b.point(-3.4, -1.6, "B"), C2 = b.point(3.6, -1.6, "C");
+    b.add("segment", [A, B]);
+    b.add("segment", [B, C2]);
+    b.add("segment", [C2, A]);
+    return [A, B, C2];
+  };
+  var EXAMPLES = {
+    euler_line: {
+      title: "\u0110\u01B0\u1EDDng th\u1EB3ng Euler",
+      build() {
+        const b = new Builder();
+        const [A, B, C2] = triangle(b);
+        b.add("circumcircle", [A, B, C2]);
+        b.add("circumcenter", [A, B, C2], {}, "O");
+        b.add("centroid", [A, B, C2], {}, "G");
+        b.add("orthocenter", [A, B, C2], {}, "H");
+        return b.doc;
+      }
+    },
+    nine_point: {
+      title: "\u0110\u01B0\u1EDDng tr\xF2n Euler (9 \u0111i\u1EC3m)",
+      build() {
+        const b = new Builder();
+        const [A, B, C2] = triangle(b);
+        const H = b.add("orthocenter", [A, B, C2], {}, "H");
+        const D2 = b.add("altitude_foot", [A, B, C2], {}, "D");
+        const E = b.add("altitude_foot", [B, C2, A], {}, "E");
+        const F = b.add("altitude_foot", [C2, A, B], {}, "F");
+        b.add("segment", [A, D2], {}, void 0, { style: { dash: true } });
+        b.add("segment", [B, E], {}, void 0, { style: { dash: true } });
+        b.add("segment", [C2, F], {}, void 0, { style: { dash: true } });
+        const M12 = b.add("midpoint", [B, C2], {}, "M");
+        const M22 = b.add("midpoint", [C2, A], {}, "K");
+        const M32 = b.add("midpoint", [A, B], {}, "L");
+        b.add("midpoint", [A, H], {}, "X");
+        b.add("midpoint", [B, H], {}, "Y");
+        b.add("midpoint", [C2, H], {}, "Z");
+        b.add("circle_3pts", [M12, M22, M32], {}, "\u03C9", { style: { color: "#7e22ce" } });
+        return b.doc;
+      }
+    },
+    simson: {
+      title: "\u0110\u01B0\u1EDDng th\u1EB3ng Simson",
+      build() {
+        const b = new Builder();
+        const A = b.point(-0.6, 3.4, "A"), B = b.point(-3.4, -1.6, "B"), C2 = b.point(3.6, -1.6, "C");
+        const a = b.add("line", [B, C2]), bb = b.add("line", [C2, A]), c = b.add("line", [A, B]);
+        const w = b.add("circumcircle", [A, B, C2]);
+        const P2 = b.add("point_on", [w], { t: 2.2 }, "P");
+        b.add("projection", [P2, a], {}, "D");
+        b.add("projection", [P2, bb], {}, "E");
+        b.add("projection", [P2, c], {}, "F");
+        return b.doc;
+      }
+    },
+    miquel: {
+      title: "\u0110\u1ECBnh l\xFD Miquel",
+      build() {
+        const b = new Builder();
+        const [A, B, C2] = triangle(b);
+        const sAB = b.doc.steps[3].id, sBC = b.doc.steps[4].id, sCA = b.doc.steps[5].id;
+        const D2 = b.add("point_on", [sBC], { t: 0.4 }, "D");
+        const E = b.add("point_on", [sCA], { t: 0.35 }, "E");
+        const F = b.add("point_on", [sAB], { t: 0.55 }, "F");
+        const w1 = b.add("circle_3pts", [A, E, F]);
+        const w2 = b.add("circle_3pts", [B, F, D2]);
+        b.add("circle_3pts", [C2, D2, E]);
+        b.add("intersection_other", [w1, w2, F], {}, "M");
+        return b.doc;
+      }
+    },
+    dense: {
+      title: "H\xECnh d\xE0y (m\xF4 ph\u1ECFng \u0111\u1EC1 VMO, d\xF9ng \u0111o hi\u1EC7u n\u0103ng)",
+      build() {
+        const b = new Builder();
+        const A = b.point(0.6, 3.6, "A"), B = b.point(-1.4, -0.6, "B"), C2 = b.point(2.4, -0.6, "C");
+        const BC = b.add("line", [B, C2]);
+        b.add("segment", [A, B]);
+        b.add("segment", [A, C2]);
+        const eA = b.add("angle_bisector", [B, A, C2], { external: true }, void 0, { hidden: true });
+        const eB = b.add("angle_bisector", [A, B, C2], { external: true }, void 0, { hidden: true });
+        const eC = b.add("angle_bisector", [A, C2, B], { external: true }, void 0, { hidden: true });
+        const IA = b.add("intersection", [eB, eC], {}, "I_A");
+        const IB = b.add("intersection", [eA, eC], {}, "I_B");
+        const IC = b.add("intersection", [eA, eB], {}, "I_C");
+        const TA = b.add("projection", [IA, BC], {}, "T");
+        const Q = b.add("projection", [IB, BC], {}, "Q");
+        const P2 = b.add("projection", [IC, BC], {}, "P");
+        b.add("circle", [IA, TA]);
+        b.add("circle", [IB, Q]);
+        b.add("circle", [IC, P2]);
+        const w = b.add("circumcircle", [A, B, C2]);
+        const I = b.add("incenter", [A, B, C2], {}, "I", { hidden: true });
+        for (const [X, Y] of [[IC, IB], [IC, B], [IC, C2], [IB, B], [IB, C2], [IA, B], [IA, C2], [A, IA], [IC, P2], [IB, Q]]) b.add("segment", [X, Y]);
+        const lBIB = b.add("line", [B, IB], {}, void 0, { hidden: true });
+        const lCIC = b.add("line", [C2, IC], {}, void 0, { hidden: true });
+        const U = b.add("intersection_other", [lBIB, w, B], {}, "U");
+        const V = b.add("intersection_other", [lCIC, w, C2], {}, "V");
+        const XA = b.add("midpoint", [I, IA], {}, "X_A");
+        const XB = b.add("midpoint", [I, IB], {}, "X_B");
+        const XC = b.add("midpoint", [I, IC], {}, "X_C");
+        const sUV = b.add("segment", [U, V]);
+        const PA = b.add("projection", [A, sUV], {}, "P_A");
+        const PB = b.add("midpoint", [B, U], {}, "P_B");
+        const PC = b.add("midpoint", [C2, V], {}, "P_C");
+        const Bp = b.add("reflect", [B, lCIC], {}, "B'");
+        const Cp = b.add("reflect", [C2, lBIB], {}, "C'");
+        for (const [X, Y] of [
+          [A, U],
+          [A, V],
+          [IC, U],
+          [IB, V],
+          [V, IB],
+          [U, IC],
+          [A, XA],
+          [B, XB],
+          [C2, XC],
+          [PB, PC],
+          [PA, XA],
+          [XB, XC],
+          [B, Bp],
+          [C2, Cp],
+          [Cp, IA],
+          [Bp, IA],
+          [C2, Cp],
+          [B, PC],
+          [C2, PB],
+          [V, XB],
+          [U, XC],
+          [IA, U],
+          [IA, V],
+          [PB, XA],
+          [PC, XA]
+        ]) b.add("segment", [X, Y]);
+        const sAB = b.doc.steps[4].id, sAC = b.doc.steps[5].id;
+        const tp = [];
+        for (const X of [IA, IB, IC]) for (const l of [sAB, sAC]) tp.push(b.add("projection", [X, l]));
+        const mids = [[B, C2], [C2, A], [A, B]].map(([X, Y]) => b.add("midpoint", [X, Y]));
+        b.add("segment", [tp[0], tp[1]]);
+        b.add("segment", [mids[0], mids[1]]);
+        b.add("segment", [mids[1], mids[2]]);
+        b.add("nine_point_circle", [IA, IB, IC], {}, void 0, { hidden: true });
+        b.add("circle_3pts", [U, V, I]);
+        return b.doc;
+      }
+    }
+  };
+
+  // src/core/index.js
+  var core_exports = {};
+  __export(core_exports, {
+    FORMAT: () => FORMAT,
+    FREE_PARAM_TYPES: () => FREE_PARAM_TYPES,
+    STEP_TYPES: () => STEP_TYPES,
+    VERSION: () => VERSION,
+    argAccepts: () => argAccepts,
+    clone: () => clone,
+    computeStep: () => computeStep,
+    dependents: () => dependents,
+    describe: () => describe,
+    emptyDoc: () => emptyDoc,
+    evaluate: () => evaluate,
+    frames: () => frames,
+    geom: () => geom_exports,
+    indexOf: () => indexOf,
+    kinds: () => kinds,
+    makeUpdater: () => makeUpdater,
+    newId: () => newId,
+    nextName: () => nextName,
+    paramsOf: () => paramsOf,
+    removeSteps: () => removeSteps,
+    stepById: () => stepById,
+    validate: () => validate
+  });
+
+  // src/io/codec.js
+  var codec_exports = {};
+  __export(codec_exports, {
+    compactDoc: () => compactDoc,
+    decodeDoc: () => decodeDoc,
+    encodeDoc: () => encodeDoc,
+    parseDocJSON: () => parseDocJSON
+  });
+  function toB64url(bytes) {
+    let bin2 = "";
+    for (let i = 0; i < bytes.length; i += 32768) bin2 += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    return btoa(bin2).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function fromB64url(s) {
+    const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
+    const bin2 = atob(b64);
+    const out = new Uint8Array(bin2.length);
+    for (let i = 0; i < bin2.length; i++) out[i] = bin2.charCodeAt(i);
+    return out;
+  }
+  async function pipe(bytes, stream) {
+    const res = new Response(new Blob([bytes]).stream().pipeThrough(stream));
+    return new Uint8Array(await res.arrayBuffer());
+  }
+  function compactDoc(doc2) {
+    const out = { format: doc2.format, version: doc2.version };
+    if (doc2.title) out.title = doc2.title;
+    if (doc2.view) out.view = doc2.view;
+    if (doc2.images && doc2.images.length) out.images = doc2.images;
+    if (doc2.boxes && doc2.boxes.length) out.boxes = doc2.boxes;
+    if (doc2.imageData && Object.keys(doc2.imageData).length) out.imageData = doc2.imageData;
+    out.steps = doc2.steps.map((s) => {
+      const t2 = { id: s.id, type: s.type, args: s.args };
+      for (const k of ["params", "name", "style", "hidden", "joinPrev"]) {
+        const v = s[k];
+        if (v === void 0 || v === false || typeof v === "object" && v && !Array.isArray(v) && !Object.keys(v).length) continue;
+        t2[k] = v;
+      }
+      return t2;
+    });
+    return out;
+  }
+  async function encodeDoc(doc2) {
+    const json = JSON.stringify(compactDoc(doc2));
+    const bytes = new TextEncoder().encode(json);
+    if (typeof CompressionStream !== "undefined") {
+      try {
+        return "z" + toB64url(await pipe(bytes, new CompressionStream("deflate-raw")));
+      } catch {
+      }
+    }
+    return "j" + toB64url(bytes);
+  }
+  async function decodeDoc(code) {
+    let bytes;
+    try {
+      if (code[0] === "z") bytes = await pipe(fromB64url(code.slice(1)), new DecompressionStream("deflate-raw"));
+      else if (code[0] === "j") bytes = fromB64url(code.slice(1));
+      else throw new Error();
+    } catch {
+      throw new Error("Link h\xECnh b\u1ECB h\u1ECFng ho\u1EB7c b\u1ECB c\u1EAFt c\u1EE5t.");
+    }
+    return parseDocJSON(new TextDecoder().decode(bytes));
+  }
+  function parseDocJSON(text2) {
+    let doc2;
+    try {
+      doc2 = JSON.parse(text2);
+    } catch {
+      throw new Error("T\u1EC7p kh\xF4ng ph\u1EA3i JSON h\u1EE3p l\u1EC7.");
+    }
+    const errs = validate(doc2);
+    if (errs.length) throw new Error("H\xECnh kh\xF4ng h\u1EE3p l\u1EC7:\n" + errs.slice(0, 6).join("\n"));
+    return doc2;
+  }
+
+  // src/ui/share.js
+  init_dialog();
+  var DRAFT_KEY = "hinh-hoc-dong:nhap";
+  var TABS_KEY = "hinh-hoc-dong:nhap-tab";
+  var roundBox = (bb) => bb.map((v) => Math.round(v * 1e3) / 1e3);
+  function docWithView(app, withImages = true) {
+    const doc2 = { ...app.doc, view: { bbox: roundBox(app.view.getBoundingBox()) } };
+    return withImages ? app.withImageData(doc2) : doc2;
+  }
+  var draftWarned = false;
+  function saveDraft(app) {
+    try {
+      app.stashTab();
+      const tabs = app.tabs.map((t2, i) => app.withImageData(i === app.tabIdx ? docWithView(app, false) : { ...t2.doc, ...t2.bbox ? { view: { bbox: roundBox(t2.bbox) } } : {} }));
+      localStorage.setItem(TABS_KEY, JSON.stringify({ active: app.tabIdx, tabs }));
+    } catch {
+      if (!draftWarned && app.tabs.some((t2) => (t2.doc.images || []).length)) {
+        draftWarned = true;
+        toast("Kh\xF4ng l\u01B0u nh\xE1p \u0111\u01B0\u1EE3c (\u1EA3nh qu\xE1 l\u1EDBn) \u2013 h\xE3y l\u01B0u t\u1EC7p (Ctrl+S)", 5e3);
+      }
+    }
+  }
+  function loadDraft() {
+    try {
+      const t2 = localStorage.getItem(TABS_KEY);
+      if (t2) {
+        const d = JSON.parse(t2);
+        const tabs = (d.tabs || []).map((x) => {
+          try {
+            return parseDocJSON(JSON.stringify(x));
+          } catch {
+            return null;
+          }
+        }).filter(Boolean);
+        if (tabs.length) return { tabs, active: Math.min(Math.max(0, d.active | 0), tabs.length - 1) };
+      }
+      const old = localStorage.getItem(DRAFT_KEY);
+      return old ? { tabs: [parseDocJSON(old)], active: 0 } : null;
+    } catch {
+      return null;
+    }
+  }
+  async function shareLink(app) {
+    const code = await encodeDoc(docWithView(app, false));
+    if ((app.doc.images || []).length) toast("Link kh\xF4ng ch\u1EE9a \u1EA3nh \u0111\xE3 d\xE1n v\xE0o h\xECnh \u2013 mu\u1ED1n g\u1EEDi c\u1EA3 \u1EA3nh th\xEC l\u01B0u t\u1EC7p (Ctrl+S)", 6e3);
+    const base2 = location.href.split("#")[0];
+    const url = `${base2}#h=${code}`;
+    try {
+      history.replaceState(null, "", "#h=" + code);
+    } catch {
+    }
+    const warn = location.protocol === "file:" ? '<div class="modal-body">\u26A0 Trang \u0111ang m\u1EDF t\u1EEB t\u1EC7p tr\xEAn m\xE1y (file://). Link ch\u1EC9 d\xF9ng \u0111\u01B0\u1EE3c tr\xEAn m\xE1y n\xE0y; h\xE3y d\xF9ng b\u1EA3n tr\xEAn GitHub Pages \u0111\u1EC3 g\u1EEDi cho ng\u01B0\u1EDDi kh\xE1c.</div>' : "";
+    await textDialog("Link chia s\u1EBB h\xECnh", url, `<div class="modal-body">G\u1EEDi link n\xE0y: ng\u01B0\u1EDDi nh\u1EADn m\u1EDF ra s\u1EBD th\u1EA5y \u0111\xFAng h\xECnh (to\xE0n b\u1ED9 h\xECnh n\u1EB1m trong link, kh\xF4ng c\u1EA7n m\xE1y ch\u1EE7). \u0110\u1ED9 d\xE0i: ${url.length} k\xFD t\u1EF1.</div>${warn}`);
+  }
+  function saveFile(app) {
+    const doc2 = compactDoc(docWithView(app));
+    const text2 = JSON.stringify(doc2, null, 1);
+    const blob = new Blob([text2], { type: "application/json" });
+    const a = document.createElement("a");
+    a.download = `${fileSafeName(app.doc.title || "hinh")}.json`;
+    a.href = URL.createObjectURL(blob);
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 1e3);
+  }
+  function openFile(app) {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".json,application/json";
+    inp.onchange = async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      try {
+        const doc2 = parseDocJSON(await f.text());
+        if (!doc2.title) doc2.title = f.name.replace(/\.json$/i, "");
+        app.openDoc(doc2);
+        if (!doc2.view) app.zoomFit();
+        toast(`\u0110\xE3 m\u1EDF "${f.name}"`);
+      } catch (e) {
+        await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c t\u1EC7p", escapeBr(e.message), "OK");
+      }
+    };
+    inp.click();
+  }
+  function fileSafeName(title) {
+    const t2 = title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    return t2 || "hinh";
+  }
+  var escapeBr = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
+  async function initShare(app) {
+    const m = /[#&]h=([A-Za-z0-9_-]+)/.exec(location.hash);
+    const d = loadDraft();
+    if (d && d.tabs.some((x) => x.steps.length || (x.images || []).length)) {
+      app.loadDoc(d.tabs[0]);
+      for (const x of d.tabs.slice(1)) app.newTab(x);
+      app.switchTab(d.active);
+      if (!m) toast("\u0110\xE3 kh\xF4i ph\u1EE5c " + (d.tabs.length > 1 ? `${d.tabs.length} h\xECnh \u0111ang m\u1EDF l\u1EA7n tr\u01B0\u1EDBc` : "b\u1EA3n nh\xE1p l\u1EA7n tr\u01B0\u1EDBc"));
+    }
+    if (m) {
+      try {
+        const doc2 = await decodeDoc(m[1]);
+        const same = app.tabs.findIndex((t2, i) => JSON.stringify((i === app.tabIdx ? app.doc : t2.doc).steps) === JSON.stringify(doc2.steps));
+        if (same >= 0) app.switchTab(same);
+        else {
+          app.openDoc(doc2);
+          if (!doc2.view) app.zoomFit();
+        }
+        toast("\u0110\xE3 m\u1EDF h\xECnh t\u1EEB link");
+      } catch (e) {
+        toast(e.message, 5e3);
+      }
+    }
+    let timer = null;
+    app.on("change", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => saveDraft(app), 300);
+    });
+    app.view.onViewChange(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => saveDraft(app), 600);
+    });
+    window.addEventListener("beforeunload", () => saveDraft(app));
+  }
+
+  // src/explore/knowledge.js
+  var UF = class {
+    constructor() {
+      this.p = /* @__PURE__ */ new Map();
+    }
+    find(x) {
+      if (!this.p.has(x)) this.p.set(x, x);
+      let r = x;
+      while (this.p.get(r) !== r) r = this.p.get(r);
+      while (this.p.get(x) !== r) {
+        const n = this.p.get(x);
+        this.p.set(x, r);
+        x = n;
+      }
+      return r;
+    }
+    union(a, b) {
+      const ra = this.find(a), rb = this.find(b);
+      if (ra !== rb) this.p.set(ra, rb);
+      return ra !== rb;
+    }
+  };
+  var Knowledge = class {
+    /**
+     * @param doc  tài liệu
+     * @param rep  hàm id điểm → id đại diện (các điểm luôn trùng nhau gộp làm một)
+     */
+    constructor(doc2, rep = (x) => x) {
+      this.rep = rep;
+      this.lines = [];
+      this.circles = [];
+      this.dir = new UF();
+      this.perps = [];
+      this.tans = [];
+      const k = kinds(doc2);
+      this.kind = k;
+      for (const s of doc2.steps) {
+        const def = STEP_TYPES[s.type];
+        if (!def) continue;
+        const kind = k.get(s.id);
+        if (kind === "line") {
+          const i = this.newLine();
+          this.lines[i].objs.add(s.id);
+          if (s.type === "perp_bisector") this.addTag(i, "PB:" + sortKey(s.args.map(rep)));
+          if (s.type === "angle_bisector" && !(s.params && s.params.external)) this.addTag(i, abTag(s.args.map(rep)));
+        } else if (kind === "circle") {
+          const i = this.newCircle();
+          this.circles[i].objs.add(s.id);
+          if (s.type === "incircle") this.circles[i].tags.add("IC:" + sortKey(s.args.map(rep)));
+          if (s.type === "circumcircle" || s.type === "circle_3pts") for (const a of s.args) this.circles[i].pts.add(rep(a));
+        }
+      }
+      for (const s of doc2.steps) {
+        const def = STEP_TYPES[s.type];
+        if (!def || !def.facts) continue;
+        let facts = [];
+        try {
+          facts = def.facts(s, s.args.map((a) => k.get(a)), doc2) || [];
+        } catch {
+          facts = [];
+        }
+        for (const f of facts) this.addFact(f);
+      }
+      this.saturate();
+    }
+    newLine() {
+      this.lines.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
+      return this.lines.length - 1;
+    }
+    newCircle() {
+      this.circles.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
+      return this.circles.length - 1;
+    }
+    addTag(i, tag) {
+      this.lines[i].tags.add(tag);
+    }
+    /** Chỉ số thực thể đường thẳng ứng với tham chiếu (id đối tượng hoặc tham chiếu ảo). */
+    lineOf(ref) {
+      const L = this.lines;
+      if (typeof ref === "string") return L.findIndex((e) => e.alive && e.objs.has(ref));
+      if (ref.L) {
+        const [a, b] = ref.L.map(this.rep);
+        if (a === b) return -1;
+        let i = L.findIndex((e) => e.alive && e.pts.has(a) && e.pts.has(b));
+        if (i < 0) {
+          i = this.newLine();
+          L[i].pts.add(a);
+          L[i].pts.add(b);
+        }
+        return i;
+      }
+      if (ref.PB) return this.tagged("PB:" + sortKey(ref.PB.map(this.rep)), () => {
+        const j = this.lineOf({ L: ref.PB });
+        return j;
+      });
+      if (ref.AB) return this.tagged(abTag(ref.AB.map(this.rep)), null, this.rep(ref.AB[1]));
+      return -1;
+    }
+    tagged(tag, perpTo, through) {
+      let i = this.lines.findIndex((e) => e.alive && e.tags.has(tag));
+      if (i < 0) {
+        i = this.newLine();
+        this.lines[i].tags.add(tag);
+        if (through) this.lines[i].pts.add(through);
+      }
+      if (perpTo) {
+        const j = perpTo();
+        if (j >= 0) this.perps.push([i, j]);
+      }
+      return i;
+    }
+    circleOf(ref) {
+      const C2 = this.circles;
+      if (typeof ref === "string") return C2.findIndex((e) => e.alive && e.objs.has(ref));
+      if (ref.C) {
+        const ps = ref.C.map(this.rep);
+        if (new Set(ps).size < 3) return -1;
+        let i = C2.findIndex((e) => e.alive && ps.every((p) => e.pts.has(p)));
+        if (i < 0) {
+          i = this.newCircle();
+          ps.forEach((p) => C2[i].pts.add(p));
+        }
+        return i;
+      }
+      if (ref.IC) {
+        const tag = "IC:" + sortKey(ref.IC.map(this.rep));
+        let i = C2.findIndex((e) => e.alive && e.tags.has(tag));
+        if (i < 0) {
+          i = this.newCircle();
+          C2[i].tags.add(tag);
+        }
+        return i;
+      }
+      return -1;
+    }
+    curveOf(ref) {
+      if (typeof ref === "string") {
+        const kd = this.kind.get(ref);
+        if (kd === "line") return { t: "L", i: this.lineOf(ref) };
+        if (kd === "circle") return { t: "C", i: this.circleOf(ref) };
+        return null;
+      }
+      if (ref.C || ref.IC) return { t: "C", i: this.circleOf(ref) };
+      return { t: "L", i: this.lineOf(ref) };
+    }
+    addFact(f) {
+      if (f.on) {
+        const P2 = this.rep(f.on[0]);
+        const c = this.curveOf(f.on[1]);
+        if (!c || c.i < 0) return;
+        (c.t === "L" ? this.lines : this.circles)[c.i].pts.add(P2);
+      } else if (f.col) {
+        const ps = [...new Set(f.col.map(this.rep))];
+        if (ps.length < 2) return;
+        const i = this.lineOf({ L: [ps[0], ps[1]] });
+        ps.forEach((p) => this.lines[i].pts.add(p));
+      } else if (f.cyc) {
+        const ps = [...new Set(f.cyc.map(this.rep))];
+        if (ps.length < 3) return;
+        const i = this.circleOf({ C: ps.slice(0, 3) });
+        ps.forEach((p) => this.circles[i].pts.add(p));
+      } else if (f.par || f.perp) {
+        const [a, b] = (f.par || f.perp).map((r) => this.lineOf(r));
+        if (a < 0 || b < 0) return;
+        if (f.par) this.dir.union(a, b);
+        else this.perps.push([a, b]);
+      } else if (f.tan) {
+        const [a, b] = f.tan.map((r) => this.curveOf(r));
+        if (a && b && a.i >= 0 && b.i >= 0) this.tans.push([a, b]);
+      }
+    }
+    mergeLine(i, j) {
+      const a = this.lines[i], b = this.lines[j];
+      for (const p of b.pts) a.pts.add(p);
+      for (const o of b.objs) a.objs.add(o);
+      for (const t2 of b.tags) a.tags.add(t2);
+      b.alive = false;
+      this.dir.union(i, j);
+      this.perps = this.perps.map(([x, y]) => [x === j ? i : x, y === j ? i : y]);
+      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "L" && c.i === j ? { t: "L", i } : c));
+      this.redirect = this.redirect || /* @__PURE__ */ new Map();
+      this.redirect.set(j, i);
+    }
+    mergeCircle(i, j) {
+      const a = this.circles[i], b = this.circles[j];
+      for (const p of b.pts) a.pts.add(p);
+      for (const o of b.objs) a.objs.add(o);
+      for (const t2 of b.tags) a.tags.add(t2);
+      b.alive = false;
+      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "C" && c.i === j ? { t: "C", i } : c));
+    }
+    saturate() {
+      for (let round3 = 0; round3 < 20; round3++) {
+        let changed = false;
+        const perpOf = /* @__PURE__ */ new Map();
+        for (const [x, y] of this.perps) {
+          const rx = this.dir.find(x), ry = this.dir.find(y);
+          if (perpOf.has(ry)) changed = this.dir.union(perpOf.get(ry), rx) || changed;
+          else perpOf.set(ry, rx);
+          if (perpOf.has(rx)) changed = this.dir.union(perpOf.get(rx), ry) || changed;
+          else perpOf.set(rx, ry);
+        }
+        const L = this.lines;
+        for (let i = 0; i < L.length; i++) {
+          if (!L[i].alive) continue;
+          for (let j = i + 1; j < L.length; j++) {
+            if (!L[j].alive) continue;
+            let common = 0;
+            for (const p of L[j].pts) if (L[i].pts.has(p)) common++;
+            const sameTag = [...L[j].tags].some((t2) => L[i].tags.has(t2));
+            if (common >= 2 || sameTag || common >= 1 && this.dir.find(i) === this.dir.find(j)) {
+              this.mergeLine(i, j);
+              changed = true;
+            }
+          }
+        }
+        const C2 = this.circles;
+        for (let i = 0; i < C2.length; i++) {
+          if (!C2[i].alive) continue;
+          for (let j = i + 1; j < C2.length; j++) {
+            if (!C2[j].alive) continue;
+            let common = 0;
+            for (const p of C2[j].pts) if (C2[i].pts.has(p)) common++;
+            const sameTag = [...C2[j].tags].some((t2) => C2[i].tags.has(t2));
+            if (common >= 3 || sameTag) {
+              this.mergeCircle(i, j);
+              changed = true;
+            }
+          }
+        }
+        if (!changed) break;
+      }
+    }
+    // ---------- truy vấn ----------
+    pointOnLineObj(P2, lineId) {
+      const i = this.lineOf(lineId);
+      return i >= 0 && this.lines[i].pts.has(this.rep(P2));
+    }
+    pointOnCircleObj(P2, cId) {
+      const i = this.circleOf(cId);
+      return i >= 0 && this.circles[i].pts.has(this.rep(P2));
+    }
+    collinear(ps) {
+      const r = ps.map(this.rep);
+      return this.lines.some((e) => e.alive && r.every((p) => e.pts.has(p)));
+    }
+    concyclic(ps) {
+      const r = ps.map(this.rep);
+      return this.circles.some((e) => e.alive && r.every((p) => e.pts.has(p)));
+    }
+    sameLine(a, b) {
+      const i = this.lineOf(a), j = this.lineOf(b);
+      return i >= 0 && i === j;
+    }
+    sameCircle(a, b) {
+      const i = this.circleOf(a), j = this.circleOf(b);
+      return i >= 0 && i === j;
+    }
+    parallel(a, b) {
+      const i = this.lineOf(a), j = this.lineOf(b);
+      return i >= 0 && j >= 0 && this.dir.find(i) === this.dir.find(j);
+    }
+    perpendicular(a, b) {
+      const i = this.lineOf(a), j = this.lineOf(b);
+      if (i < 0 || j < 0) return false;
+      const ri = this.dir.find(i), rj = this.dir.find(j);
+      return this.perps.some(([x, y]) => {
+        const rx = this.dir.find(x), ry = this.dir.find(y);
+        return rx === ri && ry === rj || rx === rj && ry === ri;
+      });
+    }
+    tangent(a, b) {
+      const ca = this.curveOf(a), cb = this.curveOf(b);
+      if (!ca || !cb) return false;
+      const eq = (u, v) => u.t === v.t && u.i === v.i;
+      return this.tans.some(([x, y]) => eq(x, ca) && eq(y, cb) || eq(x, cb) && eq(y, ca));
+    }
+  };
+  var sortKey = (arr) => [...arr].sort().join(",");
+  var abTag = ([A, V, C2]) => `AB:${V}:${sortKey([A, C2])}`;
+
+  // src/explore/explorer.js
+  var DEFAULTS = {
+    samples: 12,
+    // số cấu hình ngẫu nhiên hợp lệ cần có (ngoài cấu hình gốc)
+    maxAttempts: 150,
+    // số lần thử tối đa (cấu hình suy biến bị loại)
+    perturb: 0.3,
+    // biên độ xê dịch điểm tự do, tính theo kích thước hình
+    tol: 1e-6,
+    // dung sai TƯƠNG ĐỐI theo kích thước hình
+    minSep: 0.012,
+    // hai điểm (vốn khác nhau) gần hơn minSep·kích thước → cấu hình suy biến
+    minAngle: 4,
+    // tam giác có góc < minAngle độ → suy biến
+    maxRadius: 25,
+    // đường tròn bán kính > maxRadius·kích thước → gần suy biến (3 điểm gần thẳng hàng)
+    seed: 12345,
+    maxPoints: 90
+    // giới hạn để tránh bùng nổ tổ hợp
+  };
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = a + 1831565813 >>> 0;
+      let t2 = a;
+      t2 = Math.imul(t2 ^ t2 >>> 15, t2 | 1);
+      t2 ^= t2 + Math.imul(t2 ^ t2 >>> 7, t2 | 61);
+      return ((t2 ^ t2 >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function figureScale(vals, pointIds) {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const id of pointIds) {
+      const v = vals.get(id);
+      if (!v) continue;
+      x1 = Math.min(x1, v.x);
+      x2 = Math.max(x2, v.x);
+      y1 = Math.min(y1, v.y);
+      y2 = Math.max(y2, v.y);
+    }
+    const s = Math.hypot(x2 - x1, y2 - y1);
+    return Number.isFinite(s) && s > 1e-12 ? s : 1;
+  }
+  var TRIANGLE_TYPES = /* @__PURE__ */ new Set([
+    "circumcenter",
+    "orthocenter",
+    "incenter",
+    "centroid",
+    "nine_point_center",
+    "altitude_foot",
+    "incircle_touch",
+    "arc_midpoint",
+    "circle_3pts",
+    "circumcircle",
+    "incircle",
+    "nine_point_circle",
+    "angle_bisector",
+    "excenter",
+    "excircle",
+    "lemoine",
+    "kosnita",
+    "symmedian_foot",
+    "mixtilinear"
+  ]);
+  function findTriangles(doc2, kindOf, { strict = false, drawn = false } = {}) {
+    const tri2 = /* @__PURE__ */ new Map();
+    const addTri = (ids) => {
+      if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === "point")) return;
+      const key = [...ids].sort().join(",");
+      if (!tri2.has(key)) tri2.set(key, ids);
+    };
+    for (const s of doc2.steps)
+      if (!drawn && TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === "circle_3pts" || s.type === "angle_bisector"))) addTri(s.args);
+    const adj = /* @__PURE__ */ new Map();
+    const link = (a, b) => {
+      if (!adj.has(a)) adj.set(a, /* @__PURE__ */ new Set());
+      if (!adj.has(b)) adj.set(b, /* @__PURE__ */ new Set());
+      adj.get(a).add(b);
+      adj.get(b).add(a);
+    };
+    for (const s of doc2.steps) if (["line", "segment", "ray"].includes(s.type)) link(s.args[0], s.args[1]);
+    for (const [a, nb] of adj) for (const b of nb) for (const c of nb) if (a < b && b < c && adj.get(b).has(c)) addTri([a, b, c]);
+    return [...tri2.values()];
+  }
+  function randomOverrides(doc2, base2, scale, rand, perturb) {
+    const ov = /* @__PURE__ */ new Map();
+    for (const s of doc2.steps) {
+      const p = paramsOf(s);
+      if (s.type === "free_point") {
+        const r = perturb * scale * Math.sqrt(rand()), a = 2 * Math.PI * rand();
+        ov.set(s.id, { x: p.x + r * Math.cos(a), y: p.y + r * Math.sin(a) });
+      } else if (s.type === "point_on") {
+        const host = base2.get(s.args[0]);
+        if (!host) continue;
+        let t2 = p.t;
+        if (host.kind === "circle") t2 += (rand() * 2 - 1) * 0.9;
+        else if (host.sub === "segment") t2 = Math.min(0.92, Math.max(0.08, t2 + (rand() * 2 - 1) * 0.3));
+        else if (host.sub === "ray") t2 = Math.max(0.05, t2 * Math.exp((rand() * 2 - 1) * 0.5));
+        else t2 += (rand() * 2 - 1) * 0.4;
+        ov.set(s.id, { t: t2 });
+      }
+    }
+    return ov;
+  }
+  function degenerate(doc2, vals, ctx) {
+    const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments, tangentAtBase } = ctx;
+    const scale = figureScale(vals, pointIds);
+    for (const id of [...pointIds, ...curveIds]) if (!vals.get(id)) return "kh\xF4ng x\xE1c \u0111\u1ECBnh";
+    const sep = opts.minSep * scale;
+    for (let i = 0; i < pointIds.length; i++) {
+      const a = vals.get(pointIds[i]);
+      for (let j = i + 1; j < pointIds.length; j++) {
+        if (sameClassPairs.has(pointIds[i] + "|" + pointIds[j])) continue;
+        const d = dist(a, vals.get(pointIds[j]));
+        if (d < sep && (!baseDist || d < 0.3 * baseDist[i][j])) return "\u0111i\u1EC3m g\u1EA7n tr\xF9ng";
+      }
+    }
+    const sinMin = Math.sin(opts.minAngle * Math.PI / 180);
+    const ang = (P2, Q, R) => Math.abs(cross(sub(Q, P2), sub(R, P2))) / (dist(P2, Q) * dist(P2, R) + 1e-300);
+    for (const t2 of triangles) {
+      const [A, B, C2] = t2.map((a) => vals.get(a));
+      if (Math.min(ang(A, B, C2), ang(B, C2, A), ang(C2, A, B)) < sinMin) return "tam gi\xE1c d\u1EB9t";
+    }
+    if (onSegments) {
+      for (const [pid, sid] of onSegments) if (!insideSegment(vals.get(pid), vals.get(sid))) return "ra ngo\xE0i \u0111o\u1EA1n th\u1EB3ng";
+    }
+    if (baseShape) for (let i = 0; i < shapeTriangles.length; i++) {
+      const sh = triShape(shapeTriangles[i].map((a) => vals.get(a)));
+      if (baseShape[i].some((x, j) => x !== 0 && x !== sh[j])) return "\u0111\u1ED5i d\u1EA1ng tam gi\xE1c";
+    }
+    for (const s of doc2.steps) {
+      const v = vals.get(s.id);
+      if (v && v.kind === "circle" && v.r > opts.maxRadius * scale) return "\u0111\u01B0\u1EDDng tr\xF2n qu\xE1 l\u1EDBn";
+      if (s.type === "intersection" || s.type === "intersection_other") {
+        const r = intersect(vals.get(s.args[0]), vals.get(s.args[1]));
+        if (r.length === 2 && dist(r[0], r[1]) < sep * 2 && !(tangentAtBase && tangentAtBase.has(s.id))) return "g\u1EA7n ti\u1EBFp x\xFAc";
+        if (r.length === 1 && kindOf.get(s.args[0]) === "line" && kindOf.get(s.args[1]) === "line") {
+          const l1 = vals.get(s.args[0]), l2 = vals.get(s.args[1]);
+          if (Math.abs(cross(unit(l1.d), unit(l2.d))) < sinMin) return "hai \u0111\u01B0\u1EDDng g\u1EA7n song song";
+        }
+      }
+    }
+    return null;
+  }
+  var insideSegment = (P2, l) => {
+    const t2 = lineParam(P2, l);
+    return t2 > -1e-9 && t2 < 1 + 1e-9;
+  };
+  function pointsOnSegments(doc2, base2) {
+    const out = [];
+    const typeOf = new Map(doc2.steps.map((s) => [s.id, s.type]));
+    for (const s of doc2.steps) {
+      if (s.type !== "intersection" && s.type !== "intersection_other") continue;
+      const P2 = base2.get(s.id);
+      if (!P2) continue;
+      for (const a of s.args.slice(0, 2)) if (typeOf.get(a) === "segment" && base2.get(a) && insideSegment(P2, base2.get(a))) out.push([s.id, a]);
+    }
+    return out;
+  }
+  function triShape([A, B, C2]) {
+    const area = cross(sub(B, A), sub(C2, A));
+    const cosAt = (P2, Q, R) => dot(sub(Q, P2), sub(R, P2)) / (dist(P2, Q) * dist(P2, R) + 1e-300);
+    const sg = (c) => Math.abs(c) < 0.05 ? 0 : Math.sign(c);
+    return [Math.sign(area), sg(cosAt(A, B, C2)), sg(cosAt(B, C2, A)), sg(cosAt(C2, A, B))];
+  }
+  var T4 = {
+    coincide: (P2, Q, e) => dist(P2, Q) < e,
+    onLine: (P2, l, e) => distPointLine(P2, l) < e,
+    onCircle: (P2, c, e) => Math.abs(dist(P2, c.c) - c.r) < e,
+    collinear: (P2, Q, R, e) => distPointLine(R, lineThrough(P2, Q)) < e,
+    parallel: (l1, l2, e, s) => Math.abs(cross(unit(l1.d), unit(l2.d))) < e / s,
+    perpendicular: (l1, l2, e, s) => Math.abs(dot(unit(l1.d), unit(l2.d))) < e / s,
+    sameLine: (l1, l2, e, s) => T4.parallel(l1, l2, e, s) && distPointLine(l2.p, l1) < e,
+    sameCircle: (c1, c2, e) => dist(c1.c, c2.c) < e && Math.abs(c1.r - c2.r) < e,
+    tangentLC: (l, c, e) => Math.abs(distPointLine(c.c, l) - c.r) < e,
+    tangentCC: (c1, c2, e) => {
+      const d = dist(c1.c, c2.c);
+      if (d < e) return false;
+      return Math.abs(d - (c1.r + c2.r)) < e || Math.abs(d - Math.abs(c1.r - c2.r)) < e;
+    }
+  };
+  function explore(doc2, options = {}) {
+    const opts = { ...DEFAULTS, ...options };
+    const t0 = Date.now();
+    const kindOf = kinds(doc2);
+    const base2 = evaluate(doc2);
+    const pointIds = [], lineIds = [], circleIds = [];
+    for (const s of doc2.steps) {
+      if (!base2.get(s.id)) continue;
+      const kd = kindOf.get(s.id);
+      if (kd === "point") pointIds.push(s.id);
+      else if (kd === "line") lineIds.push(s.id);
+      else if (kd === "circle") circleIds.push(s.id);
+    }
+    if (pointIds.length > opts.maxPoints) pointIds.length = opts.maxPoints;
+    const curveIds = [...lineIds, ...circleIds];
+    const scale0 = figureScale(base2, pointIds);
+    const sameClassPairs = /* @__PURE__ */ new Set();
+    for (let i = 0; i < pointIds.length; i++)
+      for (let j = i + 1; j < pointIds.length; j++)
+        if (dist(base2.get(pointIds[i]), base2.get(pointIds[j])) < opts.tol * scale0) sameClassPairs.add(pointIds[i] + "|" + pointIds[j]);
+    const rand = rng(opts.seed);
+    const triangles = findTriangles(doc2, kindOf);
+    const baseDist = pointIds.map((a) => pointIds.map((b) => dist(base2.get(a), base2.get(b))));
+    const shapeTriangles = findTriangles(doc2, kindOf, { drawn: true });
+    const baseShape = shapeTriangles.map((t2) => t2.every((a) => base2.get(a)) ? triShape(t2.map((a) => base2.get(a))) : [0, 0, 0, 0]);
+    const tangentAtBase = new Set(doc2.steps.filter((s) => (s.type === "intersection" || s.type === "intersection_other") && (() => {
+      const r = intersect(base2.get(s.args[0]), base2.get(s.args[1]));
+      return r.length === 2 && dist(r[0], r[1]) < 1e-6 * scale0;
+    })()).map((s) => s.id));
+    const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments: pointsOnSegments(doc2, base2), tangentAtBase };
+    const samples = [{ vals: base2, scale: scale0 }];
+    let attempts = 0;
+    const rejected = {};
+    const baseDegenerate = degenerate(doc2, base2, { ...ctx, baseDist: null, baseShape: null, onSegments: null });
+    while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
+      attempts++;
+      const ov = randomOverrides(doc2, base2, scale0, rand, opts.perturb);
+      const vals = evaluate(doc2, ov);
+      const why = degenerate(doc2, vals, ctx);
+      if (why) {
+        rejected[why] = (rejected[why] || 0) + 1;
+        continue;
+      }
+      samples.push({ vals, scale: figureScale(vals, pointIds) });
+    }
+    const all = (fn) => samples.every(({ vals, scale }) => fn(vals, opts.tol * scale, scale));
+    const repOf = new Map(pointIds.map((id) => [id, id]));
+    const classes = [];
+    for (const id of pointIds) {
+      if (repOf.get(id) !== id) continue;
+      const cls = [id];
+      for (const j of pointIds) {
+        if (j === id || repOf.get(j) !== j || !sameClassPairs.has(id + "|" + j)) continue;
+        if (all((v, e) => T4.coincide(v.get(id), v.get(j), e))) {
+          cls.push(j);
+          repOf.set(j, id);
+        }
+      }
+      if (cls.length > 1) classes.push(cls);
+    }
+    const rep = (id) => repOf.get(id) || id;
+    const reps = pointIds.filter((id) => rep(id) === id);
+    const know = new Knowledge(doc2, rep);
+    const special = recognizeSpecial(doc2, samples, reps, circleIds, kindOf, opts, findTriangles(doc2, kindOf, { strict: true }));
+    const rel2 = [];
+    const name2 = (id) => stepById(doc2, id)?.name || id;
+    const desc = (id) => describe(doc2, id);
+    const list = (ids) => ids.map(name2).join(", ");
+    for (const cls of classes) rel2.push({ type: "coincide", ids: cls, text: `${cls.map(name2).join(" \u2261 ")} (tr\xF9ng nhau)` });
+    const lineRep = new Map(lineIds.map((id) => [id, id]));
+    for (let i = 0; i < lineIds.length; i++) {
+      const a = lineIds[i];
+      if (lineRep.get(a) !== a) continue;
+      for (let j = i + 1; j < lineIds.length; j++) {
+        const b = lineIds[j];
+        if (lineRep.get(b) !== b) continue;
+        if (all((v, e, s) => T4.sameLine(v.get(a), v.get(b), e, s))) {
+          lineRep.set(b, a);
+          if (!know.sameLine(a, b)) rel2.push({ type: "same_line", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
+        }
+      }
+    }
+    const circRep = new Map(circleIds.map((id) => [id, id]));
+    for (let i = 0; i < circleIds.length; i++) {
+      const a = circleIds[i];
+      if (circRep.get(a) !== a) continue;
+      for (let j = i + 1; j < circleIds.length; j++) {
+        const b = circleIds[j];
+        if (circRep.get(b) !== b) continue;
+        if (all((v, e) => T4.sameCircle(v.get(a), v.get(b), e))) {
+          circRep.set(b, a);
+          if (!know.sameCircle(a, b)) rel2.push({ type: "same_circle", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
+        }
+      }
+    }
+    const lines = lineIds.filter((id) => lineRep.get(id) === id);
+    const circles = circleIds.filter((id) => circRep.get(id) === id);
+    const v0 = base2, e0 = opts.tol * scale0;
+    const onLineSets = /* @__PURE__ */ new Map();
+    for (const l of lines) {
+      const on = reps.filter((P2) => T4.onLine(v0.get(P2), v0.get(l), e0) && all((v, e) => T4.onLine(v.get(P2), v.get(l), e)));
+      onLineSets.set(l, on);
+      const fresh = on.filter((P2) => !lineIdsSameAs(l, lineIds, lineRep).some((ll) => know.pointOnLineObj(P2, ll)));
+      if (fresh.length) rel2.push({ type: "on_line", ids: [l, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(l)}` });
+    }
+    const onCircleSets = /* @__PURE__ */ new Map();
+    for (const c of circles) {
+      const on = reps.filter((P2) => T4.onCircle(v0.get(P2), v0.get(c), e0) && all((v, e) => T4.onCircle(v.get(P2), v.get(c), e)));
+      onCircleSets.set(c, on);
+      const fresh = on.filter((P2) => !lineIdsSameAs(c, circleIds, circRep).some((cc) => know.pointOnCircleObj(P2, cc)));
+      if (fresh.length) rel2.push({ type: "on_circle", ids: [c, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(c)}` });
+    }
+    const seenCol = /* @__PURE__ */ new Set();
+    for (let i = 0; i < reps.length; i++)
+      for (let j = i + 1; j < reps.length; j++) {
+        const A = reps[i], B = reps[j];
+        const pa = v0.get(A), pb = v0.get(B);
+        const set = [A, B];
+        for (let k = 0; k < reps.length; k++) {
+          if (k === i || k === j) continue;
+          if (T4.collinear(pa, pb, v0.get(reps[k]), e0)) set.push(reps[k]);
+        }
+        if (set.length < 3) continue;
+        const verified = [A, B, ...set.slice(2).filter((C2) => all((v, e) => T4.collinear(v.get(A), v.get(B), v.get(C2), e)))];
+        if (verified.length < 3) continue;
+        const key = [...verified].sort().join(",");
+        if (seenCol.has(key)) continue;
+        seenCol.add(key);
+        if ([...onLineSets.values()].some((on) => verified.every((P2) => on.includes(P2)))) continue;
+        if (know.collinear(verified)) continue;
+        rel2.push({ type: "collinear", ids: sortByDoc(doc2, verified), text: `${list(sortByDoc(doc2, verified))} th\u1EB3ng h\xE0ng` });
+      }
+    const seenCyc = /* @__PURE__ */ new Set();
+    const nR = reps.length;
+    for (let i = 0; i < nR; i++)
+      for (let j = i + 1; j < nR; j++)
+        for (let k = j + 1; k < nR; k++) {
+          const A = reps[i], B = reps[j], C2 = reps[k];
+          const circ = circleThrough(v0.get(A), v0.get(B), v0.get(C2));
+          if (!circ || circ.r > opts.maxRadius * scale0) continue;
+          const set = [A, B, C2];
+          for (let m = k + 1; m < nR; m++) if (T4.onCircle(v0.get(reps[m]), circ, e0)) set.push(reps[m]);
+          if (set.length < 4) continue;
+          const key0 = set.join(",");
+          if (seenCyc.has("raw:" + key0)) continue;
+          const full = reps.filter((P2) => T4.onCircle(v0.get(P2), circ, e0));
+          const ok = full.filter((P2, idx) => idx < 3 || all((v, e) => {
+            const c = circleThrough(v.get(full[0]), v.get(full[1]), v.get(full[2]));
+            return c && T4.onCircle(v.get(P2), c, e);
+          }));
+          const key = [...ok].sort().join(",");
+          seenCyc.add("raw:" + key0);
+          if (ok.length < 4 || seenCyc.has(key)) continue;
+          seenCyc.add(key);
+          if ([...onCircleSets.values()].some((on) => ok.every((P2) => on.includes(P2)))) continue;
+          if (know.concyclic(ok)) continue;
+          const ids = sortByDoc(doc2, ok);
+          rel2.push({ type: "concyclic", ids, text: `${list(ids)} \u0111\u1ED3ng vi\xEAn` });
+        }
+    for (let i = 0; i < lines.length; i++)
+      for (let j = i + 1; j < lines.length; j++) {
+        const a = lines[i], b = lines[j];
+        if (T4.parallel(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T4.parallel(v.get(a), v.get(b), e, s)) && !know.parallel(a, b))
+          rel2.push({ type: "parallel", ids: [a, b], text: `${desc(a)} \u2225 ${desc(b)}` });
+        if (T4.perpendicular(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T4.perpendicular(v.get(a), v.get(b), e, s)) && !know.perpendicular(a, b))
+          rel2.push({ type: "perpendicular", ids: [a, b], text: `${desc(a)} \u22A5 ${desc(b)}` });
+      }
+    for (const l of lines)
+      for (const c of circles)
+        if (T4.tangentLC(v0.get(l), v0.get(c), e0) && all((v, e) => T4.tangentLC(v.get(l), v.get(c), e)) && !know.tangent(l, c))
+          rel2.push({ type: "tangent", ids: [l, c], text: `${desc(l)} ti\u1EBFp x\xFAc ${desc(c)}` });
+    for (let i = 0; i < circles.length; i++)
+      for (let j = i + 1; j < circles.length; j++) {
+        const a = circles[i], b = circles[j];
+        if (T4.tangentCC(v0.get(a), v0.get(b), e0) && all((v, e) => T4.tangentCC(v.get(a), v.get(b), e)) && !know.tangent(a, b))
+          rel2.push({ type: "tangent", ids: [a, b], text: `${desc(a)} ti\u1EBFp x\xFAc ${desc(b)}` });
+      }
+    const curves = [...lines, ...circles];
+    const seenConc = /* @__PURE__ */ new Set();
+    for (let i = 0; i < curves.length; i++)
+      for (let j = i + 1; j < curves.length; j++) {
+        const a = curves[i], b = curves[j];
+        for (const X of intersect(v0.get(a), v0.get(b))) {
+          if (dist(X, { x: 0, y: 0 }) > 1e6 || reps.some((P2) => dist(v0.get(P2), X) < 1e3 * e0)) continue;
+          if (pointIds.length && minDistToPoints(X, v0, pointIds) > 20 * scale0) continue;
+          const through = curves.filter((c) => c !== a && c !== b && onCurve(X, v0.get(c), e0));
+          if (!through.length) continue;
+          const set = [a, b, ...through];
+          const key = [...set].sort().join(",");
+          if (seenConc.has(key)) continue;
+          seenConc.add(key);
+          const ok = all((v, e) => intersect(v.get(a), v.get(b)).some((Y) => through.every((c) => onCurve(Y, v.get(c), e))));
+          if (!ok) continue;
+          const allLines = set.every((c) => kindOf.get(c) === "line");
+          rel2.push({ type: "concurrent", ids: set, text: allLines ? `${set.map(desc).join(", ")} \u0111\u1ED3ng quy` : `${set.map(desc).join(", ")} c\xF9ng \u0111i qua m\u1ED9t \u0111i\u1EC3m` });
+        }
+      }
+    const final = rel2.filter((r) => !((r.type === "collinear" || r.type === "concyclic") && rel2.some((o) => o !== r && o.type === r.type && o.ids.length > r.ids.length && r.ids.every((x) => o.ids.includes(x)))));
+    for (const r of final) {
+      r.score = scoreOf(r, doc2, kindOf, special);
+      const notes = [...new Set(r.ids.filter((id) => special.has(id) && !STEP_TYPES[stepById(doc2, id)?.type]?.tag).map((id) => `${describe(doc2, id)} l\xE0 ${special.get(id).label}`))];
+      if (notes.length) r.note = notes.join("; ");
+    }
+    final.sort((a, b) => b.score - a.score || a.ids.length - b.ids.length);
+    return {
+      relations: final,
+      stats: {
+        samples: samples.length - 1,
+        attempts,
+        rejected,
+        baseDegenerate,
+        points: reps.length,
+        lines: lines.length,
+        circles: circles.length,
+        ms: Date.now() - t0
+      }
+    };
+  }
+  function lineIdsSameAs(id, ids, repMap) {
+    return ids.filter((x) => repMap.get(x) === id);
+  }
+  function onCurve(P2, c, e) {
+    return c.kind === "line" ? T4.onLine(P2, c, e) : T4.onCircle(P2, c, e);
+  }
+  function minDistToPoints(X, vals, ids) {
+    let m = Infinity;
+    for (const id of ids) m = Math.min(m, dist(vals.get(id), X));
+    return m;
+  }
+  function sortByDoc(doc2, ids) {
+    const idx = new Map(doc2.steps.map((s, i) => [s.id, i]));
+    return [...ids].sort((a, b) => idx.get(a) - idx.get(b));
+  }
+  var BASE_SCORE = { tangent: 6, concurrent: 5, concyclic: 5, on_circle: 5, collinear: 5, on_line: 3.5, perpendicular: 3, parallel: 3, coincide: 3, same_line: 3, same_circle: 3 };
+  var SPECIAL_NAMES = /* @__PURE__ */ new Set(["O", "I", "H"]);
+  function specialWeight(step) {
+    const tag = STEP_TYPES[step.type]?.tag;
+    if (tag === "circumcircle" || tag === "incircle" || tag === "ninepoint") return 3;
+    if (tag === "O" || tag === "I" || tag === "H") return 3;
+    if (SPECIAL_NAMES.has(step.name)) return 2.5;
+    if (tag === "G" || tag === "N") return 2;
+    return 0;
+  }
+  function scoreOf(r, doc2, kindOf, recognized) {
+    let s = BASE_SCORE[r.type] || 2;
+    let special = 0;
+    for (const id of r.ids) special += Math.max(specialWeight(stepById(doc2, id) || {}), recognized.get(id)?.weight || 0);
+    s += Math.min(special, 7);
+    if (r.ids.some((id) => kindOf.get(id) === "circle")) s += 0.5;
+    return Math.round(s * 10) / 10;
+  }
+  function recognizeSpecial(doc2, samples, reps, circleIds, kindOf, opts, tri2) {
+    const out = /* @__PURE__ */ new Map();
+    const name2 = (id) => stepById(doc2, id)?.name || id;
+    let count = 0;
+    for (const [A, B, C2] of tri2) {
+      if (++count > 12) break;
+      const triName = name2(A) + name2(B) + name2(C2);
+      const at = (v) => [v.get(A), v.get(B), v.get(C2)];
+      const PTS = [
+        ["O", 3, "t\xE2m ngo\u1EA1i ti\u1EBFp", circumcenter],
+        ["H", 3, "tr\u1EF1c t\xE2m", orthocenter],
+        ["I", 3, "t\xE2m n\u1ED9i ti\u1EBFp", incenter],
+        ["G", 2, "tr\u1ECDng t\xE2m", centroid],
+        ["N", 2, "t\xE2m \u0111\u01B0\u1EDDng tr\xF2n Euler", ninePointCenter]
+      ];
+      for (const [, w, label, f] of PTS)
+        for (const P2 of reps) {
+          if (out.has(P2) && out.get(P2).weight >= w) continue;
+          if (samples.every(({ vals, scale }) => {
+            const X = f(...at(vals));
+            return X && dist(X, vals.get(P2)) < opts.tol * scale;
+          }))
+            out.set(P2, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
+        }
+      const CIRC = [
+        [3, "\u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", (a, b, c) => circleThrough(a, b, c)],
+        [3, "\u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp", (a, b, c) => circle(incenter(a, b, c), inradius(a, b, c))],
+        [3, "\u0111\u01B0\u1EDDng tr\xF2n Euler", (a, b, c) => circleThrough(mid(a, b), mid(b, c), mid(c, a))]
+      ];
+      for (const [w, label, f] of CIRC)
+        for (const c of circleIds) {
+          if (out.has(c)) continue;
+          if (samples.every(({ vals, scale }) => {
+            const X = f(...at(vals));
+            const Y = vals.get(c);
+            return X && Y && T4.sameCircle(X, Y, opts.tol * scale);
+          }))
+            out.set(c, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
+        }
+    }
+    return out;
+  }
+
+  // src/ui/explorePanel.js
+  init_dialog();
+  var TYPE_LABEL = {
+    collinear: "Th\u1EB3ng h\xE0ng",
+    concyclic: "\u0110\u1ED3ng vi\xEAn",
+    concurrent: "\u0110\u1ED3ng quy",
+    parallel: "Song song",
+    perpendicular: "Vu\xF4ng g\xF3c",
+    tangent: "Ti\u1EBFp x\xFAc",
+    on_circle: "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n",
+    on_line: "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng",
+    coincide: "Tr\xF9ng nhau",
+    same_line: "Tr\xF9ng nhau",
+    same_circle: "Tr\xF9ng nhau"
+  };
+  var esc4 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  function setupExplore(app) {
+    const pane = document.getElementById("tab-explore");
+    let result = null;
+    let stale = false;
+    let active = -1;
+    const render3 = () => {
+      let html = `<div class="explore-head">
+      <button id="btn-run-explore" class="primary">\u{1F50D} Kh\xE1m ph\xE1 h\xECnh n\xE0y</button>
+      <div class="note">X\xEA d\u1ECBch ng\u1EABu nhi\xEAn c\xE1c \u0111i\u1EC3m t\u1EF1 do nhi\u1EC1u l\u1EA7n, ch\u1EC9 gi\u1EEF quan h\u1EC7 \u0111\xFAng tr\xEAn <b>m\u1ECDi</b> m\u1EABu, b\u1ECF quan h\u1EC7 hi\u1EC3n nhi\xEAn t\u1EEB c\xE1ch d\u1EF1ng.</div>
+    </div>`;
+      if (result) {
+        const st = result.stats;
+        html += `<div class="explore-stats">${result.relations.length} quan h\u1EC7 \xB7 ${st.samples} m\u1EABu ng\u1EABu nhi\xEAn (${st.attempts} l\u1EA7n th\u1EED) \xB7 ${st.ms} ms${stale ? ' \xB7 <b class="stale">h\xECnh \u0111\xE3 thay \u0111\u1ED5i, h\xE3y kh\xE1m ph\xE1 l\u1EA1i</b>' : ""}</div>`;
+        if (st.samples < 5) html += `<div class="note warn">\xCDt m\u1EABu h\u1EE3p l\u1EC7 \u2013 h\xECnh c\xF3 th\u1EC3 g\u1EA7n suy bi\u1EBFn; k\u1EBFt qu\u1EA3 k\xE9m tin c\u1EADy.</div>`;
+        if (!result.relations.length) html += '<div class="empty">Kh\xF4ng t\xECm th\u1EA5y quan h\u1EC7 n\xE0o ngo\xE0i c\xE1c quan h\u1EC7 hi\u1EC3n nhi\xEAn.</div>';
+        html += '<div class="rel-list">' + result.relations.map((r, i) => `<div class="rel ${i === active ? "active" : ""}" data-i="${i}">
+          <span class="rel-score" title="\u0110i\u1EC3m x\u1EBFp h\u1EA1ng">${r.score}</span>
+          <div class="rel-body"><div class="rel-type">${TYPE_LABEL[r.type] || r.type}</div><div class="rel-text">${esc4(r.text)}</div>${r.note ? `<div class="rel-note">${esc4(r.note)}</div>` : ""}</div>
+        </div>`).join("") + "</div>";
+      }
+      pane.innerHTML = html;
+      pane.querySelector("#btn-run-explore").onclick = run2;
+      pane.querySelectorAll(".rel").forEach((el) => el.onclick = () => select(+el.dataset.i));
+    };
+    const run2 = () => {
+      const btn = pane.querySelector("#btn-run-explore");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "\u0110ang kh\xE1m ph\xE1\u2026";
+      }
+      app.togglePanel(true);
+      document.querySelector('[data-tab="tab-explore"]').click();
+      setTimeout(() => {
+        try {
+          result = explore(app.doc);
+          stale = false;
+          active = -1;
+          app.setRelation(null);
+          toast(`T\xECm th\u1EA5y ${result.relations.length} quan h\u1EC7`);
+        } catch (e) {
+          console.error(e);
+          toast("L\u1ED7i khi kh\xE1m ph\xE1: " + e.message, 5e3);
+        }
+        render3();
+      }, 30);
+    };
+    const select = (i) => {
+      active = active === i ? -1 : i;
+      app.setRelation(active >= 0 ? result.relations[active] : null);
+      render3();
+    };
+    app.on("load", () => {
+      result = null;
+      active = -1;
+      render3();
+    });
+    app.on("change", () => {
+      if (result && !stale) {
+        stale = true;
+        render3();
+      }
+    });
+    const top2 = document.getElementById("btn-explore");
+    if (top2) top2.onclick = run2;
+    render3();
+  }
+  function drawRelationOverlay(app) {
+    const r = app.relation;
+    if (!r) return;
+    const R = app.renderer;
+    const V = (id) => app.values.get(id);
+    const style = { color: "#f59e0b", width: 2.2, dash: true };
+    if (r.type === "collinear") {
+      const ids = r.ids;
+      let best = [ids[0], ids[1]], bd = -1;
+      for (const a of ids) for (const b of ids) {
+        const d = V(a) && V(b) ? dist(V(a), V(b)) : 0;
+        if (d > bd) {
+          bd = d;
+          best = [a, b];
+        }
+      }
+      R.addExtra({ type: "line", pts: best.map((id) => () => V(id)), style });
+    } else if (r.type === "concyclic") {
+      R.addExtra({ type: "circle3", pts: r.ids.slice(0, 3).map((id) => () => V(id)), style });
+    } else if (r.type === "concurrent") {
+      const common = () => {
+        const [a, b, ...rest] = r.ids.map(V);
+        if (!a || !b) return null;
+        let best = null, bd = Infinity;
+        for (const X of intersect(a, b)) {
+          const d = rest.reduce((s, c) => s + (c ? distToObject(c, X) : 1e9), 0);
+          if (d < bd) {
+            bd = d;
+            best = X;
+          }
+        }
+        return best;
+      };
+      R.addExtra({ type: "point", pts: [common], style: { color: "#f59e0b", fill: "#fde68a", size: 7 } });
+    }
+  }
+
+  // src/export/tikz.js
+  var NAMED_COLORS = Object.fromEntries([
+    ["#000000", "black"],
+    ["#111827", "black"],
+    ["#1f2937", "black"],
+    ...PALETTE.slice(1).map((c) => [c.hex, c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/[^A-Za-z]/g, "").toLowerCase()])
+  ]);
+  var PT_PER_PX = 0.4;
+  var f3 = (v) => {
+    const s = (Math.round(v * 1e3) / 1e3).toFixed(3).replace(/\.?0+$/, "");
+    return s === "-0" ? "0" : s;
+  };
+  var xy = (P2) => `(${f3(P2.x)}, ${f3(P2.y)})`;
+  function coordName(name2, used) {
+    let base2 = (name2 || "P").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/'/g, "p").replace(/[^A-Za-z0-9]/g, "");
+    if (!base2 || /^\d/.test(base2)) base2 = "P" + base2;
+    let n = base2, i = 2;
+    while (used.has(n)) n = base2 + "-" + i++;
+    used.add(n);
+    return n;
+  }
+  function anchorFor(off) {
+    const a = Math.atan2(off[1], off[0]) * 180 / Math.PI;
+    const dirs = ["right", "above right", "above", "above left", "left", "below left", "below", "below right"];
+    return dirs[(Math.round(a / 45) % 8 + 8) % 8];
+  }
+  function clipLine(l, box, tMin = -Infinity) {
+    let t0 = tMin, t1 = Infinity;
+    const { p, d } = l;
+    for (const [pp, dd, lo, hi] of [[p.x, d.x, box.x1, box.x2], [p.y, d.y, box.y1, box.y2]]) {
+      if (Math.abs(dd) < 1e-14) {
+        if (pp < lo || pp > hi) return null;
+        continue;
+      }
+      let a = (lo - pp) / dd, b = (hi - pp) / dd;
+      if (a > b) [a, b] = [b, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, b);
+    }
+    if (t0 >= t1) return null;
+    return [{ x: p.x + t0 * d.x, y: p.y + t0 * d.y }, { x: p.x + t1 * d.x, y: p.y + t1 * d.y }];
+  }
+  function toTikZ(doc2, opts = {}) {
+    const width = opts.width || 12;
+    const theme2 = opts.theme || "mono";
+    const vals = opts.values || evaluate(doc2);
+    const k = kinds(doc2);
+    const visible = doc2.steps.filter((s) => !s.hidden && vals.get(s.id));
+    const pts = [];
+    for (const s of visible) {
+      const v = vals.get(s.id);
+      if (v.kind === "point") pts.push(v);
+      if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
+    }
+    if (!pts.length) return "% H\xECnh tr\u1ED1ng\n";
+    let x1 = Math.min(...pts.map((p) => p.x)), x2 = Math.max(...pts.map((p) => p.x));
+    let y1 = Math.min(...pts.map((p) => p.y)), y2 = Math.max(...pts.map((p) => p.y));
+    const span = Math.max(x2 - x1, y2 - y1, 1e-6);
+    const m = span * 0.08;
+    const box = { x1: x1 - m, x2: x2 + m, y1: y1 - m, y2: y2 + m };
+    const unit2 = width / (box.x2 - box.x1);
+    const cm = (c) => c / unit2;
+    const colorDefs = /* @__PURE__ */ new Map();
+    const full = (s) => styleOf(s, k.get(s.id), theme2);
+    const hexName = (hex) => {
+      hex = hex.toLowerCase();
+      if (NAMED_COLORS[hex]) {
+        if (NAMED_COLORS[hex] !== "black") colorDefs.set(NAMED_COLORS[hex], hex);
+        return NAMED_COLORS[hex];
+      }
+      const nm = "c" + hex.replace("#", "");
+      colorDefs.set(nm, hex);
+      return nm;
+    };
+    const col = (s) => hexName(full(s).color || "#000000");
+    const baseWidth = styleOf({ type: "line" }, "line", theme2).width;
+    const opt = (...xs) => {
+      const o = xs.filter((x) => x && x !== "black");
+      return o.length ? `[${o.join(", ")}]` : "";
+    };
+    const lineOpts = (s) => {
+      const st = full(s);
+      const w = st.width && Math.abs(st.width - baseWidth) > 1e-9 ? `line width=${f3(st.width * PT_PER_PX)}pt` : "";
+      return opt(col(s), st.dash ? "dashed" : "", w);
+    };
+    const centerOf = /* @__PURE__ */ new Map();
+    for (const s of doc2.steps) if (s.type === "center" && !centerOf.has(s.args[0])) centerOf.set(s.args[0], s.id);
+    const used = /* @__PURE__ */ new Set();
+    const cname = /* @__PURE__ */ new Map();
+    for (const s of visible) if (k.get(s.id) === "point") cname.set(s.id, coordName(s.name, used));
+    for (const s of visible) if (k.get(s.id) === "mark" || ["segment", "circle"].includes(s.type)) for (const a of s.args) {
+      if (!cname.has(a) && vals.get(a)) cname.set(a, coordName(stepById(doc2, a)?.name || a, used));
+    }
+    const ref = (id) => `(${cname.get(id)})`;
+    const autoDirs = autoLabelDirs(doc2, vals);
+    const out = { coords: [], fills: [], circles: [], lines: [], marks: [], points: [], labels: [] };
+    for (const [id, n] of cname) out.coords.push(`\\coordinate (${n}) at ${xy(vals.get(id))};${stepById(doc2, id)?.hidden ? " % \u0111i\u1EC3m \u1EA9n" : ""}`);
+    for (const s of visible) {
+      const v = vals.get(s.id);
+      const st = full(s);
+      const kind = k.get(s.id);
+      if (kind === "circle") {
+        const cId = s.type === "circle" || s.type === "circle_radius" ? s.args[0] : centerOf.get(s.id);
+        const cAt = cId && cname.has(cId) ? cId : [...cname.keys()].find((id) => dist(vals.get(id), v.c) < 1e-9 * (1 + v.r));
+        const center = cAt ? ref(cAt) : xy(v.c);
+        const fill = st.fill || 0;
+        if (fill > 0) out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(fill)}] ${center} circle (${f3(v.r)});`);
+        out.circles.push(`\\draw${lineOpts(s)} ${center} circle (${f3(v.r)}); % ${s.name || ""}`);
+        if (st.showLabel && s.name) {
+          const P2 = { x: v.c.x + v.r * Math.cos(Math.PI / 4), y: v.c.y + v.r * Math.sin(Math.PI / 4) };
+          out.labels.push(`\\node[above right, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
+        }
+      } else if (kind === "line") {
+        const sub4 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
+        const desc = s.type === "line" || s.type === "segment" || s.type === "ray" ? s.args.map((a) => stepById(doc2, a)?.name).join("") : s.name;
+        if (sub4 === "segment" && s.type === "segment") out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
+        else if (sub4 === "segment") out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(add(v.p, v.d))};`);
+        else {
+          const rg = opts.trimLines ? trimmedRange(v, sub4, visible.filter((x) => k.get(x.id) === "point").map((x) => vals.get(x.id)), 1e-9 * (box.x2 - box.x1), cm(0.35), cm(1.1)) : null;
+          const seg = rg ? [add(v.p, mul(v.d, rg[0])), add(v.p, mul(v.d, rg[1]))] : clipLine(v, box, sub4 === "ray" ? 0 : -Infinity);
+          if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub4 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub4 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${desc}`);
+          if (seg && st.showLabel && s.name) {
+            const P2 = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
+            out.labels.push(`\\node[above, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
+          }
+        }
+      } else if (s.type === "polygon") {
+        const path2 = s.args.map(ref).join(" -- ") + " -- cycle";
+        out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.1)}] ${path2};`);
+        if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path2};`);
+      } else if (s.type === "angle_mark") {
+        out.marks.push(...angleMark(v, s, col(s), cm, ref));
+      } else if (s.type === "segment_mark") {
+        out.marks.push(...segMark(v, s, col(s), cm));
+      } else if (kind === "point") {
+        const r = f3((st.size || 3) * 0.5);
+        if (st.hollow) out.points.push(`\\filldraw[fill=white${col(s) === "black" ? "" : ", draw=" + col(s)}] ${ref(s.id)} circle (${r}pt);`);
+        else out.points.push(`\\fill${opt(hexName(st.fillColor || st.color))} ${ref(s.id)} circle (${r}pt);`);
+        const dir = st.labelOffset || (autoDirs.get(s.id) ? [autoDirs.get(s.id).x, autoDirs.get(s.id).y] : [1, 1]);
+        if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}, inner sep=1.5pt] at ${ref(s.id)} {${texLabel(s.name)}};`);
+      }
+    }
+    const L = [];
+    L.push(`% ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
+    L.push("% C\u1EA7n trong ph\u1EA7n m\u1EDF \u0111\u1EA7u: \\usepackage{tikz}");
+    L.push("% \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc h\xECnh: s\u1EEDa x=\u2026, y=\u2026 (\u0111\u01A1n v\u1ECB c\u1EE7a m\u1ED9t \xF4 to\u1EA1 \u0111\u1ED9).");
+    if (doc2.images && doc2.images.length) L.push(`% (${doc2.images.length} \u1EA3nh d\xE1n v\xE0o h\xECnh kh\xF4ng \u0111\u01B0\u1EE3c xu\u1EA5t sang TikZ)`);
+    L.push(`\\begin{tikzpicture}[x=${f3(unit2)}cm, y=${f3(unit2)}cm, line width=${f3(baseWidth * PT_PER_PX)}pt, line cap=round, line join=round]`);
+    if (colorDefs.size) {
+      L.push("  % M\xE0u");
+      for (const [n, hex] of colorDefs) L.push(`  \\definecolor{${n}}{HTML}{${hex.slice(1).toUpperCase()}}`);
+    }
+    const sec = (title, arr) => {
+      if (arr.length) {
+        L.push(`  % ${title}`);
+        for (const x of arr) L.push("  " + x);
+      }
+    };
+    sec("To\u1EA1 \u0111\u1ED9 c\xE1c \u0111i\u1EC3m", out.coords);
+    sec("T\xF4 n\u1EC1n", out.fills);
+    sec("\u0110\u01B0\u1EDDng tr\xF2n", out.circles);
+    sec("\u0110\u01B0\u1EDDng th\u1EB3ng, \u0111o\u1EA1n th\u1EB3ng, tia", out.lines);
+    sec("\u0110\xE1nh d\u1EA5u g\xF3c, \u0111o\u1EA1n b\u1EB1ng nhau", out.marks);
+    sec("\u0110i\u1EC3m", out.points);
+    sec("Nh\xE3n", out.labels);
+    L.push("\\end{tikzpicture}");
+    return L.join("\n") + "\n";
+  }
+  function angleMark(v, s, color, cm, ref) {
+    const { A, B, C: C2 } = v;
+    const st = s.style || {};
+    const a1 = Math.atan2(A.y - B.y, A.x - B.x);
+    let diff = Math.atan2(C2.y - B.y, C2.x - B.x) - a1;
+    while (diff <= -Math.PI) diff += 2 * Math.PI;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    const deg = (r) => f3(r * 180 / Math.PI);
+    const r0 = cm(0.45);
+    const vtx = ref(s.args[1]);
+    const o = color === "black" ? "" : `[${color}]`;
+    if (Math.abs(Math.abs(diff) - Math.PI / 2) < 1e-6 && st.right !== false) {
+      const r = r0 * 0.7;
+      return [`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) -- ++(${deg(a1 + diff)}:${f3(r)}) -- ++(${deg(a1 + Math.PI)}:${f3(r)}); % g\xF3c vu\xF4ng`];
+    }
+    const n = Math.max(1, Math.min(4, st.arcs || 1));
+    const outL = [];
+    for (let i = 0; i < n; i++) {
+      const r = r0 + i * cm(0.09);
+      outL.push(`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) arc[start angle=${deg(a1)}, end angle=${deg(a1 + diff)}, radius=${f3(r)}];`);
+    }
+    return outL;
+  }
+  function segMark(v, s, color, cm) {
+    const { A, B } = v;
+    const st = s.style || {};
+    const L = dist(A, B);
+    const u = { x: (B.x - A.x) / L, y: (B.y - A.y) / L };
+    const n = { x: -u.y, y: u.x };
+    const M = mid(A, B);
+    const kk = Math.max(1, Math.min(4, st.ticks || 1));
+    const h = cm(0.13), gap = cm(0.08);
+    const o = color === "black" ? "" : `[${color}]`;
+    const outL = [];
+    for (let i = 0; i < kk; i++) {
+      const off = (i - (kk - 1) / 2) * gap;
+      const c = { x: M.x + off * u.x, y: M.y + off * u.y };
+      outL.push(`\\draw${o} ${xy({ x: c.x - h * n.x, y: c.y - h * n.y })} -- ${xy({ x: c.x + h * n.x, y: c.y + h * n.y })};`);
+    }
+    return outL;
+  }
+
+  // src/ui/main.js
+  init_dialog();
+
+  // examples/thu-vien/muc-luc.json
+  var muc_luc_default = [
+    {
+      id: "imo2008-1",
+      nhom: "IMO",
+      ten: "IMO 2008 \u2013 B\xE0i 1",
+      de: "Tam gi\xE1c nh\u1ECDn ABC, tr\u1EF1c t\xE2m H. \u0110\u01B0\u1EDDng tr\xF2n t\xE2m l\xE0 trung \u0111i\u1EC3m BC \u0111i qua H c\u1EAFt \u0111\u01B0\u1EDDng th\u1EB3ng BC t\u1EA1i A\u2081, A\u2082; t\u01B0\u01A1ng t\u1EF1 B\u2081, B\u2082 (v\u1EDBi CA) v\xE0 C\u2081, C\u2082 (v\u1EDBi AB). Ch\u1EE9ng minh s\xE1u \u0111i\u1EC3m A\u2081, A\u2082, B\u2081, B\u2082, C\u2081, C\u2082 c\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n."
+    },
+    {
+      id: "imo2010-2",
+      nhom: "IMO",
+      ten: "IMO 2010 \u2013 B\xE0i 2",
+      de: "I l\xE0 t\xE2m n\u1ED9i ti\u1EBFp tam gi\xE1c ABC, \u0393 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp. AI c\u1EAFt \u0393 l\u1EA7n n\u1EEFa t\u1EA1i D. E thu\u1ED9c cung BDC, F thu\u1ED9c c\u1EA1nh BC sao cho \u2220BAF = \u2220CAE. G l\xE0 trung \u0111i\u1EC3m IF. Ch\u1EE9ng minh DG v\xE0 EI c\u1EAFt nhau tr\xEAn \u0393."
+    },
+    {
+      id: "imo2012-5",
+      nhom: "IMO",
+      ten: "IMO 2012 \u2013 B\xE0i 5",
+      de: "Tam gi\xE1c ABC vu\xF4ng t\u1EA1i C, D l\xE0 ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB C. X n\u1EB1m trong \u0111o\u1EA1n CD. K thu\u1ED9c \u0111o\u1EA1n AX v\u1EDBi BK = BC; L thu\u1ED9c \u0111o\u1EA1n BX v\u1EDBi AL = AC. M l\xE0 giao \u0111i\u1EC3m c\u1EE7a AL v\xE0 BK. Ch\u1EE9ng minh MK = ML."
+    },
+    {
+      id: "imo2013-4",
+      nhom: "IMO",
+      ten: "IMO 2013 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c nh\u1ECDn ABC, tr\u1EF1c t\xE2m H, W thu\u1ED9c c\u1EA1nh BC. M, N l\xE0 ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB B, C. \u03C9\u2081 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (BWN), X \u2208 \u03C9\u2081 v\u1EDBi WX l\xE0 \u0111\u01B0\u1EDDng k\xEDnh; \u03C9\u2082 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (CWM), Y \u2208 \u03C9\u2082 v\u1EDBi WY l\xE0 \u0111\u01B0\u1EDDng k\xEDnh. Ch\u1EE9ng minh X, Y, H th\u1EB3ng h\xE0ng."
+    },
+    {
+      id: "imo2014-4",
+      nhom: "IMO",
+      ten: "IMO 2014 \u2013 B\xE0i 4",
+      de: "P, Q thu\u1ED9c c\u1EA1nh BC c\u1EE7a tam gi\xE1c nh\u1ECDn ABC sao cho \u2220PAB = \u2220BCA v\xE0 \u2220CAQ = \u2220ABC. M, N thu\u1ED9c AP, AQ sao cho P l\xE0 trung \u0111i\u1EC3m AM, Q l\xE0 trung \u0111i\u1EC3m AN. Ch\u1EE9ng minh BM v\xE0 CN c\u1EAFt nhau tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp ABC."
+    },
+    {
+      id: "imo2015-4",
+      nhom: "IMO",
+      ten: "IMO 2015 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c ABC n\u1ED9i ti\u1EBFp \u03A9 t\xE2m O. \u0110\u01B0\u1EDDng tr\xF2n \u0393 t\xE2m A c\u1EAFt BC t\u1EA1i D, E (B, D, E, C theo th\u1EE9 t\u1EF1) v\xE0 c\u1EAFt \u03A9 t\u1EA1i F, G (A, F, B, C, G theo th\u1EE9 t\u1EF1). \u0110\u01B0\u1EDDng tr\xF2n (BDF) c\u1EAFt AB l\u1EA7n n\u1EEFa t\u1EA1i K, (CGE) c\u1EAFt CA l\u1EA7n n\u1EEFa t\u1EA1i L. FK v\xE0 GL c\u1EAFt nhau t\u1EA1i X. Ch\u1EE9ng minh X thu\u1ED9c AO."
+    },
+    {
+      id: "imo2017-4",
+      nhom: "IMO",
+      ten: "IMO 2017 \u2013 B\xE0i 4",
+      de: "R, S thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n \u03A9, RS kh\xF4ng l\xE0 \u0111\u01B0\u1EDDng k\xEDnh; \u2113 l\xE0 ti\u1EBFp tuy\u1EBFn c\u1EE7a \u03A9 t\u1EA1i R. T sao cho S l\xE0 trung \u0111i\u1EC3m RT. J thu\u1ED9c cung nh\u1ECF RS sao cho \u0111\u01B0\u1EDDng tr\xF2n \u0393 ngo\u1EA1i ti\u1EBFp JST c\u1EAFt \u2113 t\u1EA1i hai \u0111i\u1EC3m; A l\xE0 giao \u0111i\u1EC3m g\u1EA7n R h\u01A1n. AJ c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i K. Ch\u1EE9ng minh KT ti\u1EBFp x\xFAc \u0393."
+    },
+    {
+      id: "imo2018-1",
+      nhom: "IMO",
+      ten: "IMO 2018 \u2013 B\xE0i 1",
+      de: "\u0393 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp tam gi\xE1c nh\u1ECDn ABC. D, E thu\u1ED9c c\xE1c \u0111o\u1EA1n AB, AC v\u1EDBi AD = AE. Trung tr\u1EF1c c\u1EE7a BD v\xE0 CE c\u1EAFt c\xE1c cung nh\u1ECF AB, AC c\u1EE7a \u0393 t\u1EA1i F, G. Ch\u1EE9ng minh DE \u2225 FG (ho\u1EB7c tr\xF9ng)."
+    },
+    {
+      id: "imo2019-6",
+      nhom: "IMO",
+      ten: "IMO 2019 \u2013 B\xE0i 6",
+      de: "I l\xE0 t\xE2m n\u1ED9i ti\u1EBFp tam gi\xE1c nh\u1ECDn ABC (AB \u2260 AC), \u03C9 ti\u1EBFp x\xFAc BC, CA, AB t\u1EA1i D, E, F. \u0110\u01B0\u1EDDng th\u1EB3ng qua D vu\xF4ng g\xF3c EF c\u1EAFt \u03C9 l\u1EA7n n\u1EEFa t\u1EA1i R. AR c\u1EAFt \u03C9 l\u1EA7n n\u1EEFa t\u1EA1i P. \u0110\u01B0\u1EDDng tr\xF2n (PCE) v\xE0 (PBF) c\u1EAFt nhau l\u1EA7n n\u1EEFa t\u1EA1i Q. Ch\u1EE9ng minh DI v\xE0 PQ c\u1EAFt nhau tr\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng qua A vu\xF4ng g\xF3c AI."
+    },
+    {
+      id: "imo2021-4",
+      nhom: "IMO",
+      ten: "IMO 2021 \u2013 B\xE0i 4",
+      de: "\u0110\u01B0\u1EDDng tr\xF2n \u0393 t\xE2m I ti\u1EBFp x\xFAc b\u1ED1n c\u1EA1nh c\u1EE7a t\u1EE9 gi\xE1c l\u1ED3i ABCD. \u03A9 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (AIC). Tia \u0111\u1ED1i c\u1EE7a AB\u2026 c\u1EAFt \u03A9 t\u1EA1i X (BA k\xE9o d\xE0i qua A), Z (BC k\xE9o d\xE0i qua C); AD, CD k\xE9o d\xE0i qua D c\u1EAFt \u03A9 t\u1EA1i Y, T. Ch\u1EE9ng minh AD + DT + TX + XA = CD + DY + YZ + ZC."
+    },
+    {
+      id: "imo2023-2",
+      nhom: "IMO",
+      ten: "IMO 2023 \u2013 B\xE0i 2",
+      de: "Tam gi\xE1c nh\u1ECDn ABC, AB < AC, \u03A9 ngo\u1EA1i ti\u1EBFp. S l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung CB ch\u1EE9a A. \u0110\u01B0\u1EDDng vu\xF4ng g\xF3c t\u1EEB A xu\u1ED1ng BC c\u1EAFt BS t\u1EA1i D, c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i E. \u0110\u01B0\u1EDDng qua D song song BC c\u1EAFt BE t\u1EA1i L. \u03C9 = (BDL) c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i P. Ch\u1EE9ng minh ti\u1EBFp tuy\u1EBFn c\u1EE7a \u03C9 t\u1EA1i P c\u1EAFt BS tr\xEAn ph\xE2n gi\xE1c trong g\xF3c BAC."
+    },
+    {
+      id: "imo2024-4",
+      nhom: "IMO",
+      ten: "IMO 2024 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c ABC v\u1EDBi AB < AC < BC, t\xE2m n\u1ED9i ti\u1EBFp I, \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp \u03C9. X \u2260 C thu\u1ED9c BC sao cho \u0111\u01B0\u1EDDng qua X song song AC ti\u1EBFp x\xFAc \u03C9; Y \u2260 B thu\u1ED9c BC sao cho \u0111\u01B0\u1EDDng qua Y song song AB ti\u1EBFp x\xFAc \u03C9. AI c\u1EAFt (ABC) l\u1EA7n n\u1EEFa t\u1EA1i P. K, L l\xE0 trung \u0111i\u1EC3m AC, AB. Ch\u1EE9ng minh \u2220KIL + \u2220YPX = 180\xB0."
+    },
+    {
+      id: "imo2025-2",
+      nhom: "IMO",
+      ten: "IMO 2025 \u2013 B\xE0i 2",
+      de: "\u03A9 t\xE2m M v\xE0 \u0393 t\xE2m N (b\xE1n k\xEDnh \u03A9 nh\u1ECF h\u01A1n) c\u1EAFt nhau t\u1EA1i A, B. MN c\u1EAFt \u03A9 t\u1EA1i C, c\u1EAFt \u0393 t\u1EA1i D (C, M, N, D theo th\u1EE9 t\u1EF1). P l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp ACD. AP c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i E, c\u1EAFt \u0393 l\u1EA7n n\u1EEFa t\u1EA1i F. H l\xE0 tr\u1EF1c t\xE2m PMN. Ch\u1EE9ng minh \u0111\u01B0\u1EDDng qua H song song AP ti\u1EBFp x\xFAc \u0111\u01B0\u1EDDng tr\xF2n (BEF)."
+    },
+    {
+      id: "vmo2014-4",
+      nhom: "VMO",
+      ten: "VMO 2014 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c nh\u1ECDn ABC (AB < AC) n\u1ED9i ti\u1EBFp (O); I l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A. K \u2260 C thu\u1ED9c AC v\u1EDBi IK = IC. BK c\u1EAFt (O) t\u1EA1i D (D \u2260 B), c\u1EAFt AI t\u1EA1i E. DI c\u1EAFt AC t\u1EA1i F. a) EF = BC/2. b) M thu\u1ED9c DI v\u1EDBi CM \u2225 AD; KM c\u1EAFt BC t\u1EA1i N; (BKN) c\u1EAFt (O) t\u1EA1i P \u2260 B. Ch\u1EE9ng minh PK \u0111i qua trung \u0111i\u1EC3m AD."
+    },
+    {
+      id: "vmo2016-3",
+      nhom: "VMO",
+      ten: "VMO 2016 \u2013 B\xE0i 3",
+      de: "B, C c\u1ED1 \u0111\u1ECBnh, A thay \u0111\u1ED5i (tam gi\xE1c ABC nh\u1ECDn). D l\xE0 trung \u0111i\u1EC3m BC; E, F l\xE0 h\xECnh chi\u1EBFu c\u1EE7a D tr\xEAn AB, AC. O l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp; EF c\u1EAFt AO, BC t\u1EA1i M, N. a) \u0110\u01B0\u1EDDng tr\xF2n (AMN) lu\xF4n \u0111i qua m\u1ED9t \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh. b) Ti\u1EBFp tuy\u1EBFn t\u1EA1i E, F c\u1EE7a (AEF) c\u1EAFt nhau t\u1EA1i T; T thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng c\u1ED1 \u0111\u1ECBnh."
+    },
+    {
+      id: "noi-bang-tiep",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "B\u1ED5 \u0111\u1EC1 t\xE2m n\u1ED9i ti\u1EBFp \u2013 b\xE0ng ti\u1EBFp",
+      de: "S l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A c\u1EE7a (ABC). Ch\u1EE9ng minh B, C, I, I_A c\xF9ng n\u1EB1m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n t\xE2m S (S l\xE0 trung \u0111i\u1EC3m II_A)."
+    },
+    {
+      id: "euler-feuerbach",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "\u0110\u01B0\u1EDDng tr\xF2n Euler \u2013 \u0111\u1ECBnh l\xFD Feuerbach",
+      de: "\u0110\u01B0\u1EDDng tr\xF2n Euler c\u1EE7a tam gi\xE1c ABC ti\u1EBFp x\xFAc v\u1EDBi \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp v\xE0 ba \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp."
+    },
+    {
+      id: "mixtilinear",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear",
+      de: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear n\u1ED9i \u1EE9ng v\u1EDBi A ti\u1EBFp x\xFAc AB, AC t\u1EA1i K, L v\xE0 ti\u1EBFp x\xFAc trong (O) t\u1EA1i T. Ch\u1EE9ng minh I l\xE0 trung \u0111i\u1EC3m KL v\xE0 T, I v\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BAC th\u1EB3ng h\xE0ng."
+    },
+    {
+      id: "nghich-dao-bc",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "Ngh\u1ECBch \u0111\u1EA3o \u221A(bc)",
+      de: "Ph\xE9p ngh\u1ECBch \u0111\u1EA3o t\xE2m A b\xE1n k\xEDnh \u221A(AB\xB7AC) h\u1EE3p v\u1EDBi ph\xE9p \u0111\u1ED1i x\u1EE9ng qua ph\xE2n gi\xE1c g\xF3c A \u0111\u1ED5i ch\u1ED7 B v\xE0 C, bi\u1EBFn (ABC) th\xE0nh \u0111\u01B0\u1EDDng th\u1EB3ng BC v\xE0 bi\u1EBFn \u0111\u01B0\u1EDDng tr\xF2n mixtilinear n\u1ED9i th\xE0nh \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp g\xF3c A."
+    },
+    {
+      id: "brocard",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp \u2013 \u0111\u1ECBnh l\xFD Brocard",
+      de: "T\u1EE9 gi\xE1c ABCD n\u1ED9i ti\u1EBFp (O). P = AC \u2229 BD, Q = AB \u2229 CD, R = AD \u2229 BC. Ch\u1EE9ng minh O l\xE0 tr\u1EF1c t\xE2m tam gi\xE1c PQR."
+    },
+    {
+      id: "monge",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "Ti\u1EBFp tuy\u1EBFn chung \u2013 \u0111\u1ECBnh l\xFD Monge",
+      de: "Ba \u0111\u01B0\u1EDDng tr\xF2n c\xF3 b\xE1n k\xEDnh kh\xE1c nhau. Hai ti\u1EBFp tuy\u1EBFn chung ngo\xE0i c\u1EE7a m\u1ED7i c\u1EB7p c\u1EAFt nhau t\u1EA1i t\xE2m v\u1ECB t\u1EF1 ngo\xE0i; ba t\xE2m v\u1ECB t\u1EF1 ngo\xE0i th\u1EB3ng h\xE0ng."
+    },
+    {
+      id: "dong-dang-xoan",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "T\xE2m \u0111\u1ED3ng d\u1EA1ng xo\u1EAFn (quay + v\u1ECB t\u1EF1)",
+      de: "X = AB \u2229 CD; (XAC) v\xE0 (XBD) c\u1EAFt nhau l\u1EA7n n\u1EEFa t\u1EA1i S. Ph\xE9p quay t\xE2m S g\xF3c \u2220ASC r\u1ED3i v\u1ECB t\u1EF1 t\xE2m S t\u1EC9 s\u1ED1 SC/SA bi\u1EBFn A th\xE0nh C v\xE0 B th\xE0nh D."
+    },
+    {
+      id: "hinh-day",
+      nhom: "H\xECnh d\xE0y",
+      ten: "Tam gi\xE1c v\u1EDBi ba t\xE2m b\xE0ng ti\u1EBFp (h\xECnh d\xE0y)",
+      de: "Tam gi\xE1c ABC, t\xE2m n\u1ED9i ti\u1EBFp I, ba t\xE2m b\xE0ng ti\u1EBFp I_A, I_B, I_C, \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp v\xE0 ba \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp. (O) l\xE0 \u0111\u01B0\u1EDDng tr\xF2n Euler c\u1EE7a tam gi\xE1c I_AI_BI_C, I l\xE0 tr\u1EF1c t\xE2m c\u1EE7a n\xF3, trung \u0111i\u1EC3m M_A c\u1EE7a II_A n\u1EB1m tr\xEAn (O). K\xE8m nh\xE3n c\xF3 ch\u1EC9 s\u1ED1 d\u01B0\u1EDBi v\xE0 d\u1EA5u ph\u1EA9y."
+    }
+  ];
+
+  // examples/thu-vien/imo2008-1.json
+  var imo2008_1_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2008 \u2013 B\xE0i 1",
+    view: {
+      bbox: [
+        -7.963,
+        4.407,
+        8.13,
+        -5.277
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.8,
+          y: 3.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -2
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.8,
+          y: -2
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "orthocenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "H"
+      },
+      {
+        id: "s8",
+        type: "midpoint",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "M_a"
+      },
+      {
+        id: "s9",
+        type: "circle",
+        args: [
+          "s8",
+          "s7"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s9",
+          "s5"
+        ],
+        params: {
+          which: 0
+        },
+        name: "A_1"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s9",
+          "s5",
+          "s10"
+        ],
+        name: "A_2"
+      },
+      {
+        id: "s12",
+        type: "midpoint",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "M_b"
+      },
+      {
+        id: "s13",
+        type: "circle",
+        args: [
+          "s12",
+          "s7"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s13",
+          "s6"
+        ],
+        params: {
+          which: 0
+        },
+        name: "B_1"
+      },
+      {
+        id: "s15",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s6",
+          "s14"
+        ],
+        name: "B_2"
+      },
+      {
+        id: "s16",
+        type: "midpoint",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "M_c"
+      },
+      {
+        id: "s17",
+        type: "circle",
+        args: [
+          "s16",
+          "s7"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s18",
+        type: "intersection",
+        args: [
+          "s17",
+          "s4"
+        ],
+        params: {
+          which: 0
+        },
+        name: "C_1"
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s17",
+          "s4",
+          "s18"
+        ],
+        name: "C_2"
+      },
+      {
+        id: "s20",
+        type: "circle_3pts",
+        args: [
+          "s10",
+          "s11",
+          "s14"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s21",
+        type: "center",
+        args: [
+          "s20"
+        ],
+        name: "O",
+        joinPrev: true
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2010-2.json
+  var imo2010_2_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2010 \u2013 B\xE0i 2",
+    view: {
+      bbox: [
+        -7.93,
+        4.621,
+        8.13,
+        -5.043
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.2,
+          y: 3.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.8,
+          y: -1.8
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I"
+      },
+      {
+        id: "s10",
+        type: "line",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s7",
+          "s1"
+        ],
+        name: "D"
+      },
+      {
+        id: "s12",
+        type: "point_on",
+        args: [
+          "s7"
+        ],
+        params: {
+          t: -0.9075712557190003
+        },
+        name: "E"
+      },
+      {
+        id: "s13",
+        type: "isogonal_line",
+        args: [
+          "s2",
+          "s1",
+          "s3",
+          "s12"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s13",
+          "s5"
+        ],
+        name: "F"
+      },
+      {
+        id: "s15",
+        type: "midpoint",
+        args: [
+          "s9",
+          "s14"
+        ],
+        name: "G"
+      },
+      {
+        id: "s16",
+        type: "line",
+        args: [
+          "s11",
+          "s15"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s12",
+          "s9"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s18",
+        type: "intersection",
+        args: [
+          "s17",
+          "s16"
+        ],
+        name: "X"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2012-5.json
+  var imo2012_5_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2012 \u2013 B\xE0i 5",
+    view: {
+      bbox: [
+        -15.548,
+        7.198,
+        12.697,
+        -9.799
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.5,
+          y: 3.5
+        },
+        name: "C"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4.5,
+          y: -1.5
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s4",
+        type: "perpendicular",
+        args: [
+          "s1",
+          "s3"
+        ],
+        name: "d2",
+        hidden: true,
+        joinPrev: true
+      },
+      {
+        id: "s5",
+        type: "point_on",
+        args: [
+          "s4"
+        ],
+        params: {
+          t: 0.75
+        },
+        name: "A",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s1",
+          "s5"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "segment",
+        args: [
+          "s2",
+          "s5"
+        ],
+        name: "d4",
+        joinPrev: true
+      },
+      {
+        id: "s8",
+        type: "altitude_foot",
+        args: [
+          "s1",
+          "s5",
+          "s2"
+        ],
+        name: "D"
+      },
+      {
+        id: "s9",
+        type: "segment",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d5",
+        style: {
+          dash: true
+        },
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "point_on",
+        args: [
+          "s9"
+        ],
+        params: {
+          t: 0.5499999576752862
+        },
+        name: "X"
+      },
+      {
+        id: "s11",
+        type: "segment",
+        args: [
+          "s5",
+          "s10"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s2",
+          "s10"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s13",
+        type: "circle",
+        args: [
+          "s2",
+          "s1"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s14",
+        type: "circle",
+        args: [
+          "s5",
+          "s1"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s13",
+          "s11"
+        ],
+        params: {
+          which: 0
+        },
+        name: "K"
+      },
+      {
+        id: "s16",
+        type: "intersection",
+        args: [
+          "s14",
+          "s12"
+        ],
+        params: {
+          which: 0
+        },
+        name: "L"
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s5",
+          "s16"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s2",
+          "s15"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s19",
+        type: "intersection",
+        args: [
+          "s18",
+          "s17"
+        ],
+        name: "M"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2013-4.json
+  var imo2013_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2013 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -6.921,
+        4.637,
+        7.825,
+        -4.237
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.8,
+          y: -1.8
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "orthocenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "H"
+      },
+      {
+        id: "s8",
+        type: "point_on",
+        args: [
+          "s5"
+        ],
+        params: {
+          t: 0.6074999640969668
+        },
+        name: "W"
+      },
+      {
+        id: "s9",
+        type: "altitude_foot",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "M"
+      },
+      {
+        id: "s10",
+        type: "segment",
+        args: [
+          "s2",
+          "s9"
+        ],
+        name: "d4",
+        style: {
+          dash: true
+        },
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "altitude_foot",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "N"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s3",
+          "s11"
+        ],
+        name: "d5",
+        style: {
+          dash: true
+        },
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s8",
+          "s11"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "O_1",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "reflect",
+        args: [
+          "s8",
+          "s14"
+        ],
+        name: "X"
+      },
+      {
+        id: "s16",
+        type: "circle_3pts",
+        args: [
+          "s3",
+          "s8",
+          "s9"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s17",
+        type: "center",
+        args: [
+          "s16"
+        ],
+        name: "O_2",
+        joinPrev: true
+      },
+      {
+        id: "s18",
+        type: "reflect",
+        args: [
+          "s8",
+          "s17"
+        ],
+        name: "Y"
+      },
+      {
+        id: "s19",
+        type: "line",
+        args: [
+          "s15",
+          "s18"
+        ],
+        name: "d6"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2014-4.json
+  var imo2014_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2014 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -12.147,
+        6.401,
+        11.831,
+        -8.028
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 3.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.8,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.6,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "circle_tangent_at",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s9",
+          "s5",
+          "s3"
+        ],
+        name: "P"
+      },
+      {
+        id: "s12",
+        type: "circle_tangent_at",
+        args: [
+          "s1",
+          "s3",
+          "s2"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s13",
+        type: "center",
+        args: [
+          "s12"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s14",
+        type: "intersection_other",
+        args: [
+          "s12",
+          "s5",
+          "s2"
+        ],
+        name: "Q"
+      },
+      {
+        id: "s15",
+        type: "reflect",
+        args: [
+          "s1",
+          "s11"
+        ],
+        name: "M"
+      },
+      {
+        id: "s16",
+        type: "reflect",
+        args: [
+          "s1",
+          "s14"
+        ],
+        name: "N"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s2",
+          "s15"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s18",
+        type: "line",
+        args: [
+          "s3",
+          "s16"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s19",
+        type: "intersection",
+        args: [
+          "s18",
+          "s17"
+        ],
+        name: "X"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2015-4.json
+  var imo2015_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2015 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -14.59,
+        10.895,
+        13.39,
+        -5.943
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "point_on",
+        args: [
+          "s5"
+        ],
+        params: {
+          t: 0.19999997756060434
+        },
+        name: "D"
+      },
+      {
+        id: "s10",
+        type: "circle",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s5",
+          "s9"
+        ],
+        name: "E"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s10",
+          "s7"
+        ],
+        params: {
+          which: 0
+        },
+        name: "F"
+      },
+      {
+        id: "s13",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s7",
+          "s12"
+        ],
+        name: "G"
+      },
+      {
+        id: "s14",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s9",
+          "s12"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s15",
+        type: "center",
+        args: [
+          "s14"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s16",
+        type: "intersection_other",
+        args: [
+          "s14",
+          "s4",
+          "s2"
+        ],
+        name: "K"
+      },
+      {
+        id: "s17",
+        type: "circle_3pts",
+        args: [
+          "s3",
+          "s13",
+          "s11"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s17",
+          "s6",
+          "s3"
+        ],
+        name: "L"
+      },
+      {
+        id: "s20",
+        type: "line",
+        args: [
+          "s12",
+          "s16"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s21",
+        type: "line",
+        args: [
+          "s13",
+          "s19"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s22",
+        type: "intersection",
+        args: [
+          "s21",
+          "s20"
+        ],
+        name: "X"
+      },
+      {
+        id: "s23",
+        type: "line",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d6"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2017-4.json
+  var imo2017_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2017 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -17.9,
+        7.762,
+        41.519,
+        -27.995
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: 0.6
+        },
+        name: "O"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: -3.4
+        },
+        name: "R"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -0.3490659190754673
+        },
+        name: "S"
+      },
+      {
+        id: "s5",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s6",
+        type: "reflect",
+        args: [
+          "s2",
+          "s4"
+        ],
+        name: "T"
+      },
+      {
+        id: "s7",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -1.0471975535926368
+        },
+        name: "J"
+      },
+      {
+        id: "s8",
+        type: "circle_3pts",
+        args: [
+          "s7",
+          "s4",
+          "s6"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s9",
+        type: "center",
+        args: [
+          "s8"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s8",
+          "s5"
+        ],
+        params: {
+          which: 0
+        },
+        name: "A"
+      },
+      {
+        id: "s11",
+        type: "line",
+        args: [
+          "s10",
+          "s7"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s12",
+        type: "intersection_other",
+        args: [
+          "s11",
+          "s3",
+          "s7"
+        ],
+        name: "K"
+      },
+      {
+        id: "s13",
+        type: "line",
+        args: [
+          "s12",
+          "s6"
+        ],
+        name: "d3"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2018-1.json
+  var imo2018_1_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2018 \u2013 B\xE0i 1",
+    view: {
+      bbox: [
+        -12.507,
+        9.097,
+        12.237,
+        -5.793
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "point_on",
+        args: [
+          "s4"
+        ],
+        params: {
+          t: 0.6250000268505589
+        },
+        name: "D"
+      },
+      {
+        id: "s10",
+        type: "circle",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "intersection",
+        args: [
+          "s10",
+          "s6"
+        ],
+        params: {
+          which: 0
+        },
+        name: "E"
+      },
+      {
+        id: "s12",
+        type: "perp_bisector",
+        args: [
+          "s2",
+          "s9"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s12",
+          "s7"
+        ],
+        params: {
+          which: 1
+        },
+        name: "F"
+      },
+      {
+        id: "s14",
+        type: "perp_bisector",
+        args: [
+          "s3",
+          "s11"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s14",
+          "s7"
+        ],
+        params: {
+          which: 0
+        },
+        name: "G"
+      },
+      {
+        id: "s16",
+        type: "segment",
+        args: [
+          "s9",
+          "s11"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s13",
+          "s15"
+        ],
+        name: "d7"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2019-6.json
+  var imo2019_6_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2019 \u2013 B\xE0i 6",
+    view: {
+      bbox: [
+        -7.599,
+        4.636,
+        7.487,
+        -4.443
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.8,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.8,
+          y: -1.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.8
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incircle_touch",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "D"
+      },
+      {
+        id: "s10",
+        type: "incircle_touch",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "E"
+      },
+      {
+        id: "s11",
+        type: "incircle_touch",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "F"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s10",
+          "s11"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "perpendicular",
+        args: [
+          "s9",
+          "s12"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s14",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s7",
+          "s9"
+        ],
+        name: "R"
+      },
+      {
+        id: "s15",
+        type: "line",
+        args: [
+          "s1",
+          "s14"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s16",
+        type: "intersection_other",
+        args: [
+          "s15",
+          "s7",
+          "s14"
+        ],
+        name: "P"
+      },
+      {
+        id: "s17",
+        type: "circle_3pts",
+        args: [
+          "s16",
+          "s3",
+          "s10"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "circle_3pts",
+        args: [
+          "s16",
+          "s2",
+          "s11"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s20",
+        type: "center",
+        args: [
+          "s19"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s21",
+        type: "intersection_other",
+        args: [
+          "s19",
+          "s17",
+          "s16"
+        ],
+        name: "Q"
+      },
+      {
+        id: "s22",
+        type: "line",
+        args: [
+          "s9",
+          "s8"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s23",
+        type: "line",
+        args: [
+          "s16",
+          "s21"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s24",
+        type: "line",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s25",
+        type: "perpendicular",
+        args: [
+          "s1",
+          "s24"
+        ],
+        name: "d10"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2021-4.json
+  var imo2021_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2021 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -22.661,
+        19.098,
+        18.072,
+        -5.413
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: 0
+        },
+        name: "I"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: -2.2
+        },
+        name: "U"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: 1.5707963267948966
+        },
+        name: "T_1"
+      },
+      {
+        id: "s5",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: 2.443460752297466
+        },
+        name: "T_2"
+      },
+      {
+        id: "s6",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -2.2689280718183586
+        },
+        name: "T_3"
+      },
+      {
+        id: "s7",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -0.523598796373967
+        },
+        name: "T_4"
+      },
+      {
+        id: "s8",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s4"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s9",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s5"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s10",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s6"
+        ],
+        name: "d3"
+      },
+      {
+        id: "s11",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s7"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s9",
+          "s8"
+        ],
+        name: "D"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s10",
+          "s9"
+        ],
+        name: "A"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s11",
+          "s10"
+        ],
+        name: "B"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s11",
+          "s8"
+        ],
+        name: "C"
+      },
+      {
+        id: "s16",
+        type: "circle_3pts",
+        args: [
+          "s13",
+          "s1",
+          "s15"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s17",
+        type: "center",
+        args: [
+          "s16"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s18",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s10",
+          "s13"
+        ],
+        name: "X"
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s11",
+          "s15"
+        ],
+        name: "Z"
+      },
+      {
+        id: "s20",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s9",
+          "s13"
+        ],
+        name: "Y"
+      },
+      {
+        id: "s21",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s8",
+          "s15"
+        ],
+        name: "T"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2023-2.json
+  var imo2023_2_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2023 \u2013 B\xE0i 2",
+    view: {
+      bbox: [
+        -11.179,
+        6.101,
+        8.115,
+        -5.51
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: true
+        },
+        name: "S"
+      },
+      {
+        id: "s10",
+        type: "perpendicular",
+        args: [
+          "s1",
+          "s5"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s11",
+        type: "line",
+        args: [
+          "s2",
+          "s9"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s11",
+          "s10"
+        ],
+        name: "D"
+      },
+      {
+        id: "s13",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s7",
+          "s1"
+        ],
+        name: "E"
+      },
+      {
+        id: "s14",
+        type: "parallel",
+        args: [
+          "s12",
+          "s5"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s15",
+        type: "line",
+        args: [
+          "s2",
+          "s13"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s16",
+        type: "intersection",
+        args: [
+          "s15",
+          "s14"
+        ],
+        name: "L"
+      },
+      {
+        id: "s17",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s12",
+          "s16"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s17",
+          "s7",
+          "s2"
+        ],
+        name: "P"
+      },
+      {
+        id: "s20",
+        type: "tangent_at",
+        args: [
+          "s17",
+          "s19"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s21",
+        type: "intersection",
+        args: [
+          "s20",
+          "s11"
+        ],
+        name: "X"
+      },
+      {
+        id: "s22",
+        type: "line",
+        args: [
+          "s1",
+          "s21"
+        ],
+        name: "d9"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2024-4.json
+  var imo2024_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2024 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -7.613,
+        4.325,
+        8.813,
+        -5.56
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0.5,
+          y: 3.5
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.4,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.600001,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "reflect",
+        args: [
+          "s6",
+          "s8"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s9",
+          "s5"
+        ],
+        name: "X"
+      },
+      {
+        id: "s11",
+        type: "reflect",
+        args: [
+          "s4",
+          "s8"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s11",
+          "s5"
+        ],
+        name: "Y"
+      },
+      {
+        id: "s13",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "line",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s16",
+        type: "intersection_other",
+        args: [
+          "s15",
+          "s13",
+          "s1"
+        ],
+        name: "P"
+      },
+      {
+        id: "s17",
+        type: "midpoint",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "K"
+      },
+      {
+        id: "s18",
+        type: "midpoint",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "L"
+      },
+      {
+        id: "s19",
+        type: "segment",
+        args: [
+          "s17",
+          "s8"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s20",
+        type: "segment",
+        args: [
+          "s8",
+          "s18"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s21",
+        type: "segment",
+        args: [
+          "s12",
+          "s16"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s22",
+        type: "segment",
+        args: [
+          "s16",
+          "s10"
+        ],
+        name: "d10"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2025-2.json
+  var imo2025_2_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2025 \u2013 B\xE0i 2",
+    view: {
+      bbox: [
+        -6.227,
+        4.25,
+        7.727,
+        -4.147
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.5,
+          y: 0.3
+        },
+        name: "M"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.5,
+          y: -1.7
+        },
+        name: "U"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.9,
+          y: 0.3
+        },
+        name: "N"
+      },
+      {
+        id: "s5",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.9,
+          y: -2.8
+        },
+        name: "V"
+      },
+      {
+        id: "s6",
+        type: "circle",
+        args: [
+          "s4",
+          "s5"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s7",
+        type: "intersection",
+        args: [
+          "s6",
+          "s3"
+        ],
+        params: {
+          which: 0
+        },
+        name: "A"
+      },
+      {
+        id: "s8",
+        type: "intersection_other",
+        args: [
+          "s6",
+          "s3",
+          "s7"
+        ],
+        name: "B"
+      },
+      {
+        id: "s9",
+        type: "line",
+        args: [
+          "s1",
+          "s4"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s9",
+          "s3"
+        ],
+        params: {
+          which: 0
+        },
+        name: "C"
+      },
+      {
+        id: "s11",
+        type: "intersection",
+        args: [
+          "s9",
+          "s6"
+        ],
+        params: {
+          which: 1
+        },
+        name: "D"
+      },
+      {
+        id: "s12",
+        type: "circumcenter",
+        args: [
+          "s7",
+          "s10",
+          "s11"
+        ],
+        name: "P"
+      },
+      {
+        id: "s13",
+        type: "line",
+        args: [
+          "s7",
+          "s12"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s14",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s3",
+          "s7"
+        ],
+        name: "E"
+      },
+      {
+        id: "s15",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s6",
+          "s7"
+        ],
+        name: "F"
+      },
+      {
+        id: "s16",
+        type: "orthocenter",
+        args: [
+          "s12",
+          "s1",
+          "s4"
+        ],
+        name: "H"
+      },
+      {
+        id: "s17",
+        type: "parallel",
+        args: [
+          "s16",
+          "s13"
+        ],
+        name: "d3"
+      },
+      {
+        id: "s18",
+        type: "circle_3pts",
+        args: [
+          "s8",
+          "s14",
+          "s15"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s19",
+        type: "center",
+        args: [
+          "s18"
+        ],
+        name: "O",
+        joinPrev: true
+      }
+    ]
+  };
+
+  // examples/thu-vien/vmo2014-4.json
+  var vmo2014_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "VMO 2014 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -12.75,
+        5.387,
+        13.35,
+        -10.319
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.2,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: false
+        },
+        name: "I"
+      },
+      {
+        id: "s10",
+        type: "circle",
+        args: [
+          "s9",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s6",
+          "s3"
+        ],
+        name: "K"
+      },
+      {
+        id: "s12",
+        type: "line",
+        args: [
+          "s2",
+          "s11"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "intersection_other",
+        args: [
+          "s12",
+          "s7",
+          "s2"
+        ],
+        name: "D"
+      },
+      {
+        id: "s14",
+        type: "line",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s14",
+          "s12"
+        ],
+        name: "E"
+      },
+      {
+        id: "s16",
+        type: "line",
+        args: [
+          "s13",
+          "s9"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s17",
+        type: "intersection",
+        args: [
+          "s16",
+          "s6"
+        ],
+        name: "F"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s15",
+          "s17"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s19",
+        type: "line",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s20",
+        type: "parallel",
+        args: [
+          "s3",
+          "s19"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s21",
+        type: "intersection",
+        args: [
+          "s20",
+          "s16"
+        ],
+        name: "M"
+      },
+      {
+        id: "s22",
+        type: "line",
+        args: [
+          "s11",
+          "s21"
+        ],
+        name: "d10"
+      },
+      {
+        id: "s23",
+        type: "intersection",
+        args: [
+          "s22",
+          "s5"
+        ],
+        name: "N"
+      },
+      {
+        id: "s24",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s11",
+          "s23"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s25",
+        type: "center",
+        args: [
+          "s24"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s26",
+        type: "intersection_other",
+        args: [
+          "s24",
+          "s7",
+          "s2"
+        ],
+        name: "P"
+      },
+      {
+        id: "s27",
+        type: "midpoint",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "J"
+      },
+      {
+        id: "s28",
+        type: "line",
+        args: [
+          "s26",
+          "s11"
+        ],
+        name: "d11"
+      }
+    ]
+  };
+
+  // examples/thu-vien/vmo2016-3.json
+  var vmo2016_3_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "VMO 2016 \u2013 B\xE0i 3",
+    view: {
+      bbox: [
+        -18.274,
+        17.933,
+        46.614,
+        -21.115
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0.8,
+          y: 3.4
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.6,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "midpoint",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "D"
+      },
+      {
+        id: "s8",
+        type: "projection",
+        args: [
+          "s7",
+          "s4"
+        ],
+        name: "E"
+      },
+      {
+        id: "s9",
+        type: "projection",
+        args: [
+          "s7",
+          "s6"
+        ],
+        name: "F"
+      },
+      {
+        id: "s10",
+        type: "circumcenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "O"
+      },
+      {
+        id: "s11",
+        type: "line",
+        args: [
+          "s8",
+          "s9"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s12",
+        type: "line",
+        args: [
+          "s1",
+          "s10"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s12",
+          "s11"
+        ],
+        name: "M"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s11",
+          "s5"
+        ],
+        name: "N"
+      },
+      {
+        id: "s15",
+        type: "circle_3pts",
+        args: [
+          "s1",
+          "s13",
+          "s14"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s16",
+        type: "center",
+        args: [
+          "s15"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "circle_diameter",
+        args: [
+          "s1",
+          "s7"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "tangent_at",
+        args: [
+          "s17",
+          "s8"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s20",
+        type: "tangent_at",
+        args: [
+          "s17",
+          "s9"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s21",
+        type: "intersection",
+        args: [
+          "s20",
+          "s19"
+        ],
+        name: "T"
+      },
+      {
+        id: "s22",
+        type: "perp_bisector",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d8"
+      }
+    ]
+  };
+
+  // examples/thu-vien/noi-bang-tiep.json
+  var noi_bang_tiep_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "B\u1ED5 \u0111\u1EC1 t\xE2m n\u1ED9i ti\u1EBFp \u2013 b\xE0ng ti\u1EBFp",
+    view: {
+      bbox: [
+        -9.034,
+        5.358,
+        9.234,
+        -5.635
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 4.4
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -2.6,
+          y: 0.2
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2.8,
+          y: 0.2
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I"
+      },
+      {
+        id: "s10",
+        type: "excenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I_A"
+      },
+      {
+        id: "s11",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: false
+        },
+        name: "S"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s1",
+          "s10"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "circle",
+        args: [
+          "s11",
+          "s2"
+        ],
+        name: "\u03C92"
+      }
+    ]
+  };
+
+  // examples/thu-vien/euler-feuerbach.json
+  var euler_feuerbach_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "\u0110\u01B0\u1EDDng tr\xF2n Euler \u2013 \u0111\u1ECBnh l\xFD Feuerbach",
+    view: {
+      bbox: [
+        -14.652,
+        8.752,
+        16.048,
+        -9.722
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 2.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -2,
+          y: -0.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2.2,
+          y: -0.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "nine_point_circle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "N",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "excircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s12",
+        type: "center",
+        args: [
+          "s11"
+        ],
+        name: "I_A",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "excircle",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "I_B",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "excircle",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "\u03C95"
+      },
+      {
+        id: "s16",
+        type: "center",
+        args: [
+          "s15"
+        ],
+        name: "I_C",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "intersection",
+        args: [
+          "s9",
+          "s7"
+        ],
+        params: {
+          which: 1
+        },
+        name: "F_e"
+      }
+    ]
+  };
+
+  // examples/thu-vien/mixtilinear.json
+  var mixtilinear_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear",
+    view: {
+      bbox: [
+        -8.107,
+        4.654,
+        8.307,
+        -5.224
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.8,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "mixtilinear",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "J",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "incenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s9",
+          "s7"
+        ],
+        params: {
+          which: 0
+        },
+        name: "T"
+      },
+      {
+        id: "s13",
+        type: "projection",
+        args: [
+          "s10",
+          "s4"
+        ],
+        name: "K"
+      },
+      {
+        id: "s14",
+        type: "projection",
+        args: [
+          "s10",
+          "s6"
+        ],
+        name: "L"
+      },
+      {
+        id: "s15",
+        type: "segment",
+        args: [
+          "s13",
+          "s14"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s16",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: true
+        },
+        name: "S"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s12",
+          "s16"
+        ],
+        name: "d5"
+      }
+    ]
+  };
+
+  // examples/thu-vien/nghich-dao-bc.json
+  var nghich_dao_bc_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "Ngh\u1ECBch \u0111\u1EA3o \u221A(bc)",
+    view: {
+      bbox: [
+        -24.071,
+        12.332,
+        25.24,
+        -17.341
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3,
+          y: -0.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.4
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "angle_bisector",
+        args: [
+          "s2",
+          "s1",
+          "s3"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s10",
+        type: "reflect",
+        args: [
+          "s3",
+          "s9"
+        ],
+        name: "C'"
+      },
+      {
+        id: "s11",
+        type: "circle_diameter",
+        args: [
+          "s2",
+          "s10"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s12",
+        type: "center",
+        args: [
+          "s11"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "tangent_point",
+        args: [
+          "s11",
+          "s1"
+        ],
+        params: {
+          which: 0
+        },
+        name: "T"
+      },
+      {
+        id: "s14",
+        type: "line",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "d5",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "tangent_point",
+        args: [
+          "s11",
+          "s1"
+        ],
+        params: {
+          which: 1
+        },
+        name: "E",
+        joinPrev: true
+      },
+      {
+        id: "s16",
+        type: "line",
+        args: [
+          "s1",
+          "s15"
+        ],
+        name: "d6",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "circle",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s18",
+        type: "invert_line",
+        args: [
+          "s7",
+          "s17"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s19",
+        type: "reflect",
+        args: [
+          "s18",
+          "s9"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s20",
+        type: "mixtilinear",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s21",
+        type: "center",
+        args: [
+          "s20"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s22",
+        type: "invert_circle",
+        args: [
+          "s20",
+          "s17"
+        ],
+        name: "\u03C95"
+      },
+      {
+        id: "s23",
+        type: "reflect",
+        args: [
+          "s22",
+          "s9"
+        ],
+        name: "\u03C96"
+      },
+      {
+        id: "s24",
+        type: "excircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C97"
+      },
+      {
+        id: "s25",
+        type: "center",
+        args: [
+          "s24"
+        ],
+        name: "I_A",
+        joinPrev: true
+      }
+    ]
+  };
+
+  // examples/thu-vien/brocard.json
+  var brocard_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp \u2013 \u0111\u1ECBnh l\xFD Brocard",
+    view: {
+      bbox: [
+        -25.633,
+        6.563,
+        34.011,
+        -29.329
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -2.6,
+          y: 2.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.4,
+          y: -1.4
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2.2,
+          y: -2.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "circle_3pts",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s5",
+        type: "center",
+        args: [
+          "s4"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "point_on",
+        args: [
+          "s4"
+        ],
+        params: {
+          t: 0
+        },
+        name: "D",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1",
+        joinPrev: true
+      },
+      {
+        id: "s8",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "segment",
+        args: [
+          "s3",
+          "s6"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "segment",
+        args: [
+          "s6",
+          "s1"
+        ],
+        name: "d4",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "segment",
+        args: [
+          "s1",
+          "s3"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s2",
+          "s6"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s12",
+          "s11"
+        ],
+        name: "P"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s7",
+          "s9"
+        ],
+        name: "Q"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s10",
+          "s8"
+        ],
+        name: "R"
+      },
+      {
+        id: "s16",
+        type: "segment",
+        args: [
+          "s13",
+          "s14"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s14",
+          "s15"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s15",
+          "s13"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s19",
+        type: "perpendicular",
+        args: [
+          "s5",
+          "s17"
+        ],
+        name: "d10"
+      }
+    ]
+  };
+
+  // examples/thu-vien/monge.json
+  var monge_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "Ti\u1EBFp tuy\u1EBFn chung \u2013 \u0111\u1ECBnh l\xFD Monge",
+    view: {
+      bbox: [
+        -18.11,
+        11.234,
+        25.21,
+        -14.834
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4.5,
+          y: -1
+        },
+        name: "O_1"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.78,
+          y: -1.96
+        },
+        name: "R_1"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0.5,
+          y: 2.4
+        },
+        name: "O_2"
+      },
+      {
+        id: "s5",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.58,
+          y: 0.96
+        },
+        name: "R_2"
+      },
+      {
+        id: "s6",
+        type: "circle",
+        args: [
+          "s4",
+          "s5"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s7",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.5
+        },
+        name: "O_3"
+      },
+      {
+        id: "s8",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.68,
+          y: -2.14
+        },
+        name: "R_3"
+      },
+      {
+        id: "s9",
+        type: "circle",
+        args: [
+          "s7",
+          "s8"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s10",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: false,
+          which: 0
+        },
+        name: "d1"
+      },
+      {
+        id: "s11",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: false,
+          which: 1
+        },
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s12",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: true,
+          which: 0
+        },
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: true,
+          which: 1
+        },
+        name: "d4",
+        joinPrev: true
+      },
+      {
+        id: "s14",
+        type: "homothety_center",
+        args: [
+          "s3",
+          "s6"
+        ],
+        name: "S_{12}"
+      },
+      {
+        id: "s15",
+        type: "homothety_center",
+        args: [
+          "s6",
+          "s9"
+        ],
+        name: "S_{23}"
+      },
+      {
+        id: "s16",
+        type: "homothety_center",
+        args: [
+          "s3",
+          "s9"
+        ],
+        name: "S_{13}"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s14",
+          "s15"
+        ],
+        name: "d5"
+      }
+    ]
+  };
+
+  // examples/thu-vien/dong-dang-xoan.json
+  var dong_dang_xoan_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "T\xE2m \u0111\u1ED3ng d\u1EA1ng xo\u1EAFn (quay + v\u1ECB t\u1EF1)",
+    view: {
+      bbox: [
+        -6.453,
+        5.08,
+        6.251,
+        -2.565
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4,
+          y: 1.5
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.6,
+          y: -0.3
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.5,
+          y: 0.3
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.5,
+          y: 2.7
+        },
+        name: "D"
+      },
+      {
+        id: "s5",
+        type: "line",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s6",
+        type: "line",
+        args: [
+          "s3",
+          "s4"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s7",
+        type: "intersection",
+        args: [
+          "s6",
+          "s5"
+        ],
+        name: "X"
+      },
+      {
+        id: "s8",
+        type: "circle_3pts",
+        args: [
+          "s7",
+          "s1",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s9",
+        type: "center",
+        args: [
+          "s8"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "circle_3pts",
+        args: [
+          "s7",
+          "s2",
+          "s4"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "center",
+        args: [
+          "s10"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s12",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s8",
+          "s7"
+        ],
+        name: "S"
+      },
+      {
+        id: "s13",
+        type: "rotate_by",
+        args: [
+          "s2",
+          "s12",
+          "s1",
+          "s12",
+          "s3"
+        ],
+        name: "B_1"
+      },
+      {
+        id: "s14",
+        type: "homothety_by",
+        args: [
+          "s13",
+          "s12",
+          "s12",
+          "s3",
+          "s12",
+          "s1"
+        ],
+        name: "D'"
+      },
+      {
+        id: "s15",
+        type: "segment",
+        args: [
+          "s12",
+          "s2"
+        ],
+        name: "d3"
+      },
+      {
+        id: "s16",
+        type: "segment",
+        args: [
+          "s12",
+          "s14"
+        ],
+        name: "d4"
+      }
+    ]
+  };
+
+  // examples/thu-vien/hinh-day.json
+  var hinh_day_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "Tam gi\xE1c v\u1EDBi ba t\xE2m b\xE0ng ti\u1EBFp (h\xECnh d\xE0y)",
+    view: {
+      bbox: [
+        -13.115,
+        7.517,
+        13.996,
+        -8.798
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.3,
+          y: 2.4
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.8,
+          y: -0.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2,
+          y: -0.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91",
+        joinPrev: true
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "excircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C93",
+        joinPrev: true
+      },
+      {
+        id: "s12",
+        type: "center",
+        args: [
+          "s11"
+        ],
+        name: "I_A",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "excircle",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "\u03C94",
+        joinPrev: true
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "I_B",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "excircle",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "\u03C95",
+        joinPrev: true
+      },
+      {
+        id: "s16",
+        type: "center",
+        args: [
+          "s15"
+        ],
+        name: "I_C",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s14",
+          "s16"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s16",
+          "s12"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s19",
+        type: "segment",
+        args: [
+          "s12",
+          "s14"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s20",
+        type: "midpoint",
+        args: [
+          "s10",
+          "s12"
+        ],
+        name: "M_A"
+      },
+      {
+        id: "s21",
+        type: "midpoint",
+        args: [
+          "s10",
+          "s14"
+        ],
+        name: "M_B"
+      },
+      {
+        id: "s22",
+        type: "midpoint",
+        args: [
+          "s10",
+          "s16"
+        ],
+        name: "M_C"
+      },
+      {
+        id: "s23",
+        type: "projection",
+        args: [
+          "s12",
+          "s5"
+        ],
+        name: "T_A"
+      },
+      {
+        id: "s24",
+        type: "projection",
+        args: [
+          "s14",
+          "s6"
+        ],
+        name: "T_B"
+      },
+      {
+        id: "s25",
+        type: "projection",
+        args: [
+          "s16",
+          "s4"
+        ],
+        name: "T_C"
+      },
+      {
+        id: "s26",
+        type: "reflect",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "A'"
+      },
+      {
+        id: "s27",
+        type: "reflect",
+        args: [
+          "s2",
+          "s8"
+        ],
+        name: "B'"
+      },
+      {
+        id: "s28",
+        type: "reflect",
+        args: [
+          "s3",
+          "s8"
+        ],
+        name: "C'"
+      },
+      {
+        id: "s29",
+        type: "segment",
+        args: [
+          "s1",
+          "s26"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s30",
+        type: "segment",
+        args: [
+          "s10",
+          "s12"
+        ],
+        name: "d8"
+      }
+    ]
+  };
+
+  // src/core/thu-vien.js
+  var DOCS = [imo2008_1_default, imo2010_2_default, imo2012_5_default, imo2013_4_default, imo2014_4_default, imo2015_4_default, imo2017_4_default, imo2018_1_default, imo2019_6_default, imo2021_4_default, imo2023_2_default, imo2024_4_default, imo2025_2_default, vmo2014_4_default, vmo2016_3_default, noi_bang_tiep_default, euler_feuerbach_default, mixtilinear_default, nghich_dao_bc_default, brocard_default, monge_default, dong_dang_xoan_default, hinh_day_default];
+  var THU_VIEN = muc_luc_default.map((m, i) => ({ ...m, doc: DOCS[i] }));
+
+  // src/ui/tabbar.js
+  function setupTabBar(app) {
+    const host = document.getElementById("tabbar");
+    if (!host) return;
+    const label = (doc2, i) => doc2.title || `H\xECnh ${i + 1}`;
+    const render3 = () => {
+      if (host.querySelector("input")) return;
+      host.innerHTML = app.tabs.map((t2, i) => {
+        const doc2 = i === app.tabIdx ? app.doc : t2.doc;
+        return `<div class="dtab${i === app.tabIdx ? " active" : ""}" data-tab="${i}" title="${escapeHTML(label(doc2, i))}${i === app.tabIdx ? " \u2013 nh\xE1y \u0111\xFAp \u0111\u1EC3 \u0111\u1EB7t t\xEAn" : i < 9 ? ` (Alt+${i + 1})` : ""}">
+        <span class="dt-name">${escapeHTML(label(doc2, i))}</span><button class="dt-x" data-close="${i}" title="\u0110\xF3ng h\xECnh">\u2715</button></div>`;
+      }).join("") + '<button id="tab-new" class="dt-new" title="H\xECnh m\u1EDBi (tab m\u1EDBi)">\uFF0B</button>';
+      host.querySelector(".dtab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+    app.renderTabs = render3;
+    app.on("change", render3);
+    app.on("load", render3);
+    host.addEventListener("click", (e) => {
+      const x = e.target.closest("[data-close]");
+      if (x) {
+        e.stopPropagation();
+        app.closeTab(+x.dataset.close);
+        return;
+      }
+      if (e.target.closest("#tab-new")) {
+        app.newTab();
+        return;
+      }
+      const t2 = e.target.closest("[data-tab]");
+      if (t2) app.switchTab(+t2.dataset.tab);
+    });
+    host.addEventListener("dblclick", (e) => {
+      const t2 = e.target.closest(".dtab.active");
+      if (!t2) return;
+      const name2 = t2.querySelector(".dt-name");
+      const inp = document.createElement("input");
+      inp.className = "dt-input";
+      inp.value = app.doc.title || "";
+      inp.placeholder = "T\xEAn h\xECnh\u2026";
+      name2.replaceWith(inp);
+      inp.focus();
+      inp.select();
+      let done = false;
+      const finish = (save) => {
+        if (done) return;
+        done = true;
+        const v = inp.value.trim();
+        inp.remove();
+        if (save && v !== (app.doc.title || "")) app.commit((doc2) => {
+          doc2.title = v;
+        });
+        render3();
+      };
+      inp.addEventListener("keydown", (ev) => {
+        ev.stopPropagation();
+        if (ev.key === "Enter") finish(true);
+        else if (ev.key === "Escape") finish(false);
+      });
+      inp.addEventListener("blur", () => finish(true));
+    });
+    render3();
+  }
+
+  // src/ui/images.js
+  init_dialog();
+  var MAX_SIDE = 1600;
+  function setupImages(app) {
+    document.addEventListener("paste", (e) => {
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || document.querySelector(".modal-back")) return;
+      const item = [...e.clipboardData?.items || []].find((it) => it.kind === "file" && it.type.startsWith("image/"));
+      if (!item) return;
+      e.preventDefault();
+      insertImageFile(app, item.getAsFile(), null, app.textBoxes ? "box" : "background");
+    });
+    const stage = document.getElementById("stage");
+    stage.addEventListener("dragover", (e) => {
+      if ([...e.dataTransfer?.items || []].some((it) => it.kind === "file")) e.preventDefault();
+    });
+    stage.addEventListener("drop", (e) => {
+      const files = [...e.dataTransfer?.files || []].filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+      e.preventDefault();
+      const r = app.view.canvas.getBoundingClientRect();
+      files.forEach((f, i) => insertImageFile(app, f, { sx: e.clientX - r.left + 24 * i, sy: e.clientY - r.top + 24 * i }, app.textBoxes ? "box" : "background"));
+    });
+    const btn = document.getElementById("btn-image");
+    if (btn) btn.onclick = () => {
+      const inp = document.createElement("input");
+      inp.type = "file";
+      inp.accept = "image/*";
+      inp.onchange = () => {
+        if (inp.files[0]) insertImageFile(app, inp.files[0], null, "box");
+      };
+      inp.click();
+    };
+    const bg = document.getElementById("btn-image-bg");
+    if (bg) bg.onclick = () => {
+      const inp = document.createElement("input");
+      inp.type = "file";
+      inp.accept = "image/*";
+      inp.onchange = () => {
+        if (inp.files[0]) insertImageFile(app, inp.files[0], null, "background");
+      };
+      inp.click();
+    };
+  }
+  var readURL = (file) => new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+  var loadImg = (src) => new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error("Kh\xF4ng \u0111\u1ECDc \u0111\u01B0\u1EE3c \u1EA3nh"));
+    im.src = src;
+  });
+  async function insertImageFile(app, file, at = null, as = "background") {
+    let src, img;
+    try {
+      src = await readURL(file);
+      img = await loadImg(src);
+    } catch {
+      toast("Kh\xF4ng \u0111\u1ECDc \u0111\u01B0\u1EE3c \u1EA3nh n\xE0y");
+      return null;
+    }
+    let w = img.naturalWidth, h = img.naturalHeight;
+    if (Math.max(w, h) > MAX_SIDE) {
+      const k = MAX_SIDE / Math.max(w, h);
+      w = Math.round(w * k);
+      h = Math.round(h * k);
+      const cv = document.createElement("canvas");
+      cv.width = w;
+      cv.height = h;
+      cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      src = file.type === "image/png" ? cv.toDataURL("image/png") : cv.toDataURL("image/jpeg", 0.9);
+    }
+    if (as === "box" && app.textBoxes) return app.textBoxes.pasteImage(src, w);
+    return insertImageData(app, src, w, h, at);
+  }
+  function insertImageData(app, src, w, h, at = null) {
+    const v = app.view;
+    const f = Math.min(1, 0.6 * v.W / w, 0.6 * v.H / h);
+    const sw = w * f, sh = h * f;
+    const c = at || { sx: v.W / 2, sy: v.H / 2 };
+    const tl = app.toUser(c.sx - sw / 2, c.sy - sh / 2);
+    const id = "img" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    app.registerImage(id, src);
+    app.commit((doc2) => {
+      (doc2.images || (doc2.images = [])).push({ id, x: round(tl.x), y: round(tl.y), w: round(sw / v.scale), h: round(sh / v.scale) });
+    });
+    if (app.toolId !== "move") app.setTool("move");
+    app.selectImage(id);
+    toast('\u0110\xE3 ch\xE8n \u1EA3nh \u2013 k\xE9o \u0111\u1EC3 d\u1EDDi, k\xE9o g\xF3c d\u01B0\u1EDBi ph\u1EA3i \u0111\u1EC3 \u0111\u1ED5i c\u1EE1; "Kho\xE1 l\xE0m n\u1EC1n" \u0111\u1EC3 \u0111\u1ED3 h\xECnh l\xEAn tr\xEAn', 5e3);
+    return id;
+  }
+  var round = (x) => Math.round(x * 1e4) / 1e4;
 
   // node_modules/@marijn/find-cluster-break/src/index.js
   var rangeFrom = [];
@@ -46220,6 +46255,25 @@
         view.dispatch({ changes: { from: r.from, to: r.to, insert: str }, selection: { anchor: r.from + str.length } });
         view.focus();
       },
+      /**
+       * Chèn tên điểm (bấm điểm trên hình). Ngoài công thức thì bọc $…$; ngay sau một công thức vừa đóng thì chèn vào
+       * trong công thức đó – bấm A, B, C liền nhau ra $ABC$ chứ không phải $A$$B$$C$.
+       */
+      insertName(name2) {
+        const r = view.state.selection.main;
+        const b = before(view.state, r.from);
+        let ins = name2, at = r.from, cur2;
+        if (inMath(b)) cur2 = at + ins.length;
+        else if (r.empty && b.endsWith("$") && !b.endsWith("$$") && inMath(b.slice(0, -1))) {
+          at = r.from - 1;
+          cur2 = r.from + ins.length;
+        } else {
+          ins = `$${name2}$`;
+          cur2 = at + ins.length;
+        }
+        view.dispatch({ changes: { from: at, to: at === r.from ? r.to : at, insert: ins }, selection: { anchor: cur2 } });
+        view.focus();
+      },
       destroy: () => view.destroy()
     };
   }
@@ -46529,7 +46583,7 @@
         e.stopPropagation();
         e.preventDefault();
         if (h) {
-          editing.ed.insert(app.doc.steps.find((s) => s.id === h.id).name);
+          editing.ed.insertName(app.doc.steps.find((s) => s.id === h.id).name);
           return;
         }
       }
