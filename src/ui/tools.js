@@ -43,7 +43,7 @@ export const TOOLS = [
   T('circle_3pts', 'Qua 3 điểm', 'Đường tròn', '⊙', ['point', 'point', 'point'], TRI, withCenter('circle_3pts')),
   T('circle_radius', 'Compa (tâm, bán kính AB)', 'Đường tròn', '⌀', ['point', 'point', 'point'], ['Chọn tâm', 'Chọn đầu mút thứ nhất của bán kính', 'Chọn đầu mút thứ hai'], one('circle_radius')),
 
-  T('reflect', 'Đối xứng', 'Biến hình', '⇋', ['obj', 'pl'], ['Chọn đối tượng cần lấy đối xứng (điểm, đường, đường tròn)', 'Chọn tâm đối xứng (điểm) hoặc trục đối xứng (đường thẳng)'], one('reflect')),
+  T('reflect', 'Đối xứng', 'Biến hình', '⇋', ['obj', 'pl'], ['Chọn đối tượng cần lấy đối xứng (điểm, đường, đường tròn)', 'Chọn tâm đối xứng (điểm) hoặc trục đối xứng (đường thẳng)'], (p) => [{ type: 'reflect', args: p, prime: true }]),
   T('projection', 'Hình chiếu', 'Biến hình', '⊾', ['point', 'line'], ['Chọn điểm và đường thẳng (thứ tự bất kỳ)', 'Chọn nốt đối tượng còn lại'], (p) => [{ type: 'projection', args: p }], { anyOrder: true }),
 
   T('angle_mark', 'Đánh dấu góc', 'Đánh dấu', '∡', ['point', 'point', 'point'], ['Chọn điểm trên cạnh thứ nhất', 'Chọn ĐỈNH góc', 'Chọn điểm trên cạnh thứ hai'], (p, app) => [{ type: 'angle_mark', args: p, style: { ...app.markStyle('angle') } }]),

@@ -11,6 +11,8 @@ import { explore } from '../explore/explorer.js';
 import { toTikZ } from '../export/tikz.js';
 import { textDialog, toast } from './dialog.js';
 import { THU_VIEN } from '../core/thu-vien.js';
+import { setupTabBar } from './tabbar.js';
+import { setupImages } from './images.js';
 
 function start() {
   const app = new App();
@@ -42,13 +44,13 @@ function start() {
     if (!ex) return;
     const doc = ex.build();
     doc.title = ex.title;
-    app.loadDoc(doc, { keepHistory: true });
+    app.openDoc(doc);
     app.zoomFit();
   };
   app.loadLibrary = (id) => {
     const e = THU_VIEN.find((x) => x.id === id);
     if (!e) return;
-    app.loadDoc(JSON.parse(JSON.stringify(e.doc)), { keepHistory: true });
+    app.openDoc(e.doc);
     app.zoomFit();
     toast(`${e.ten}. ${e.de}`, 9000);
   };
@@ -74,14 +76,13 @@ function start() {
   document.getElementById('btn-share').onclick = () => shareLink(app);
   document.getElementById('btn-save').onclick = () => saveFile(app);
   document.getElementById('btn-open').onclick = () => openFile(app);
-  const title = document.getElementById('doc-title');
-  app.on('change', () => { if (document.activeElement !== title) title.value = app.doc.title || ''; });
-  title.onchange = () => app.commit((doc) => { doc.title = title.value.trim(); });
+  setupTabBar(app);
+  setupImages(app);
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(app); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); openFile(app); }
   });
-  initShare(app).then(() => { title.value = app.doc.title || ''; });
+  initShare(app).then(() => app.renderTabs());
 
   // Cho phép dùng từ console / test tự động
   window.__app = app;

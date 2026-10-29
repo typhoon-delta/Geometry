@@ -178,6 +178,7 @@ export function toTikZ(doc, opts = {}) {
   L.push(`% ${doc.title ? doc.title + ' — ' : ''}xuất từ Hình học động`);
   L.push('% Cần trong phần mở đầu: \\usepackage{tikz}');
   L.push('% Đổi kích thước hình: sửa x=…, y=… (đơn vị của một ô toạ độ).');
+  if (doc.images && doc.images.length) L.push(`% (${doc.images.length} ảnh dán vào hình không được xuất sang TikZ)`);
   L.push(`\\begin{tikzpicture}[x=${f3(unit)}cm, y=${f3(unit)}cm, line width=${f3(baseWidth * PT_PER_PX)}pt, line cap=round, line join=round]`);
   if (colorDefs.size) {
     L.push('  % Màu');

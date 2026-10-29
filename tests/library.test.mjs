@@ -582,6 +582,24 @@ const CHECKS = {
   },
 };
 
+test('ảnh qua phép biến hình lấy tên tạo ảnh thêm dấu phẩy (A → A′ → A″), dựng hình vẫn giữ chữ cái', () => {
+  const nameOf = (r, type) => r.created.find((s) => s.type === type).name;
+  assert.equal(nameOf(apply('reflect_point', (f) => [f.P, f.A]), 'reflect'), "P'");
+  assert.equal(nameOf(apply('rotate', (f) => [f.Q, f.A], { angle: 30 }), 'rotate'), "Q'");
+  assert.equal(nameOf(apply('invert', (f) => [f.X, f.c1]), 'invert'), "X'");
+  assert.equal(nameOf(apply('spiral', (f) => [f.B, f.P, f.A, f.B]), 'spiral'), "B'");
+  const f = fixture();
+  const tool = LIBRARY.find((t) => t.id === 'reflect_line');
+  runTool(f.doc, tool, [f.P, f.d]);
+  const P1 = f.doc.steps[f.doc.steps.length - 1].id;
+  runTool(f.doc, tool, [P1, f.d]);
+  runTool(f.doc, tool, [f.P, f.d]);
+  assert.deepEqual(f.doc.steps.slice(-3).map((s) => s.name), ["P'", "P''", "P'''"]);
+  // ảnh của đường thẳng/đường tròn vẫn đặt tên tự động; tam giác đều vẫn là A, B, C
+  assert.match(nameOf(apply('reflect_line', (f) => [f.c2, f.d]), 'reflect'), /^ω/);
+  assert.equal(nameOf(apply('equilateral', (f) => [f.A, f.B]), 'rotate'), 'D');
+});
+
 test('công cụ không tạo hai điểm trùng nhau (dùng lại điểm đã có / vừa dựng)', () => {
   for (const tool of LIBRARY) {
     if (tool.inputs.join() !== 'point,point,point') continue;

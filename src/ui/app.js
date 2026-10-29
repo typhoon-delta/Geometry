@@ -36,6 +36,8 @@ export class App {
     this.theme = loadPref('theme', 'mono');
     setTheme(this.theme);
     this.listeners = { change: [] };
+    this.images = new Map(); // ảnh dán vào hình: id → {src, img} (dữ liệu ảnh để ngoài doc → lịch sử hoàn tác gọn)
+    this.imageSel = null; // id ảnh đang chọn
     this.typeToRename = true; // gõ chữ khi đang chọn một điểm → đặt tên ngay (xem inlineRename)
     this.fitKey = 'Home'; // phím thu phóng vừa hình
   }
@@ -46,6 +48,7 @@ export class App {
     this.view.setBoundingBox([-8, 6, 8, -6]);
     this.renderer = new Renderer(this.view);
     this.renderer.trimLines = loadPref('trim', '1') === '1';
+    this.initTabs();
     this.stage = document.getElementById('stage');
     this.buildToolbar();
     this.bindPointer();
@@ -69,6 +72,8 @@ export class App {
     if (keepHistory) this.pushUndo(JSON.stringify(this.doc));
     else { this.undoStack = []; this.redoStack = []; }
     this.doc = clone(doc);
+    this.takeImages(this.doc);
+    this.imageSel = null;
     this.selection.clear();
     this.highlight.clear();
     this.relation = null;
@@ -77,6 +82,163 @@ export class App {
     this.refresh();
     this.emit('load');
     this.emit('change');
+  }
+
+  // ================= ảnh dán vào hình (bản 1.3) =================
+  // doc.images = [{id, x, y, w, h, opacity?, locked?}] – (x, y) là góc trên-trái theo toạ độ hình (y hướng lên),
+  // w × h theo đơn vị hình nên ảnh phóng/dời theo hình. Dữ liệu ảnh (data URL) giữ trong this.images; khi lưu tệp /
+  // nháp thì gắn vào doc.imageData (withImageData), khi mở thì lấy ra (takeImages).
+  registerImage(id, src) {
+    if (this.images.has(id) || typeof src !== 'string') return;
+    const img = new Image();
+    const rec = { src, img, ready: false };
+    img.onload = () => { rec.ready = true; this.view?.requestDraw(); };
+    img.src = src;
+    this.images.set(id, rec);
+  }
+
+  takeImages(doc) {
+    if (doc && doc.imageData) {
+      for (const [id, src] of Object.entries(doc.imageData)) this.registerImage(id, src);
+      delete doc.imageData;
+    }
+  }
+
+  withImageData(doc) {
+    if (!doc.images || !doc.images.length) return doc;
+    const data = {};
+    for (const im of doc.images) { const r = this.images.get(im.id); if (r) data[im.id] = r.src; }
+    return { ...doc, imageData: data };
+  }
+
+  /** Ảnh (không khoá) tại vị trí màn hình; handle = true nếu trúng ô đổi cỡ ở góc dưới phải. Ảnh trên cùng trước. */
+  imageAt(sx, sy) {
+    const list = this.doc.images || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const im = list[i];
+      if (im.locked) continue;
+      const a = this.toScreen({ x: im.x, y: im.y }), b = this.toScreen({ x: im.x + im.w, y: im.y - im.h });
+      if (Math.abs(sx - b.x) <= 9 && Math.abs(sy - b.y) <= 9 && this.imageSel === im.id) return { id: im.id, handle: true };
+      if (sx >= a.x && sx <= b.x && sy >= a.y && sy <= b.y) return { id: im.id, handle: false };
+    }
+    return null;
+  }
+
+  selectImage(id) {
+    this.imageSel = id;
+    if (id) this.selection.clear();
+    this.refresh();
+  }
+
+  /** Kéo ảnh (dời) hoặc kéo ô góc dưới phải (đổi cỡ, giữ tỉ lệ). */
+  startImageDrag(e, id, resize) {
+    const im = (this.doc.images || []).find((x) => x.id === id);
+    if (!im) return;
+    const start = JSON.stringify(this.doc);
+    const p0 = this.eventPos(e);
+    const P0 = this.toUser(p0.sx, p0.sy);
+    const o = { x: im.x, y: im.y, w: im.w, h: im.h };
+    this.drag = { kind: 'image', id };
+    const move = (ev) => {
+      const { sx, sy } = this.eventPos(ev);
+      const P = this.toUser(sx, sy);
+      if (resize) {
+        const w = Math.max(20 / this.view.scale, o.w + (P.x - P0.x));
+        im.w = w;
+        im.h = (w * o.h) / o.w;
+      } else {
+        im.x = o.x + P.x - P0.x;
+        im.y = o.y + P.y - P0.y;
+      }
+      this.view.requestDraw();
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+      this.drag = null;
+      if (JSON.stringify(this.doc) !== start) { this.pushUndo(start); this.afterChange(); }
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  }
+
+  setImageProp(id, patch) {
+    this.commit((doc) => { const im = (doc.images || []).find((x) => x.id === id); if (im) Object.assign(im, patch); });
+  }
+
+  deleteImage(id) {
+    this.commit((doc) => { doc.images = (doc.images || []).filter((x) => x.id !== id); if (!doc.images.length) delete doc.images; });
+    this.imageSel = null;
+    this.refresh();
+  }
+
+  // ================= nhiều tab hình (bản 1.3) =================
+  // Mỗi tab giữ hình, lịch sử hoàn tác/làm lại và khung nhìn riêng. Tab đang mở dùng trực tiếp this.doc,
+  // this.undoStack… (như trước); khi đổi tab thì cất vào this.tabs[i] rồi lấy tab kia ra.
+  initTabs() {
+    this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null }];
+    this.tabIdx = 0;
+  }
+
+  stashTab() {
+    const t = this.tabs[this.tabIdx];
+    Object.assign(t, { doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: this.view.getBoundingBox() });
+  }
+
+  /** Hiện tab i (đã cất tab đang mở). */
+  showTab(i) {
+    const t = this.tabs[i];
+    this.tabIdx = i;
+    this.doc = t.doc;
+    this.undoStack = t.undo;
+    this.redoStack = t.redo;
+    this.selection.clear();
+    this.highlight.clear();
+    this.relation = null;
+    this.imageSel = null;
+    this.cancelTool();
+    if (t.bbox) this.view.setBoundingBox(t.bbox);
+    else if (t.doc.view && Array.isArray(t.doc.view.bbox)) this.view.setBoundingBox(t.doc.view.bbox);
+    else this.view.setBoundingBox([-8, 6, 8, -6]);
+    this.refresh();
+    if (!t.bbox && !t.doc.view && t.doc.steps.length) this.zoomFit();
+    this.emit('load');
+    this.emit('change');
+  }
+
+  switchTab(i) {
+    if (i === this.tabIdx || !this.tabs[i]) return;
+    this.stashTab();
+    this.showTab(i);
+  }
+
+  /** Mở một hình ở tab mới (doc = null: hình trống). */
+  newTab(doc = null) {
+    this.stashTab();
+    const d = doc ? clone(doc) : emptyDoc();
+    this.takeImages(d);
+    this.tabs.push({ doc: d, undo: [], redo: [], bbox: null });
+    this.showTab(this.tabs.length - 1);
+  }
+
+  async closeTab(i) {
+    const t = i === this.tabIdx ? { doc: this.doc } : this.tabs[i];
+    const n = t.doc.steps.length + (t.doc.images?.length || 0);
+    if (n && !(await confirmDialog('Đóng hình', `Đóng hình <b>${escapeHTML(t.doc.title || 'chưa đặt tên')}</b>? Hình chưa lưu tệp sẽ mất.`, 'Đóng'))) return;
+    this.stashTab();
+    const cur = this.tabIdx;
+    this.tabs.splice(i, 1);
+    if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null });
+    const next = i < cur ? cur - 1 : i === cur ? Math.min(i, this.tabs.length - 1) : cur;
+    this.showTab(next);
+  }
+
+  /** Mở hình (tệp, ví dụ, link): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. */
+  openDoc(doc) {
+    if (!this.doc.steps.length && !(this.doc.images || []).length) this.loadDoc(doc);
+    else this.newTab(doc);
   }
 
   pushUndo(snapshot) {
@@ -95,6 +257,7 @@ export class App {
 
   afterChange() {
     for (const id of [...this.selection]) if (!stepById(this.doc, id)) this.selection.delete(id);
+    if (this.imageSel && (this.selection.size || !(this.doc.images || []).some((im) => im.id === this.imageSel))) this.imageSel = null;
     if (this.relation && !this.relation.ids.every((id) => stepById(this.doc, id))) { this.relation = null; this.highlight.clear(); }
     this.refresh();
     this.emit('change');
@@ -168,6 +331,8 @@ export class App {
       visible: this.visibleSet(),
       selected: this.mode === 'present' ? new Set() : this.selection,
       highlight: this.highlight,
+      images: this.images,
+      imageSel: this.mode === 'present' ? null : this.imageSel,
     });
     this.renderer.clearExtra();
     this.drawRelationOverlay?.();
@@ -637,10 +802,20 @@ export class App {
       if (this.mode === 'edit') this.select(h.id, e.shiftKey);
       return;
     }
+    // ảnh dán vào hình (không khoá): chọn, kéo để dời, kéo ô góc để đổi cỡ
+    const imh = this.mode === 'edit' ? this.imageAt(sx, sy) : null;
+    if (imh) {
+      e.stopPropagation();
+      e.preventDefault();
+      if (this.imageSel !== imh.id) this.selectImage(imh.id);
+      this.startImageDrag(e, imh.id, imh.handle);
+      return;
+    }
     // chỗ trống: bỏ chọn, dời hình
     e.preventDefault();
-    if (this.mode === 'edit' && this.selection.size && !e.shiftKey) {
+    if (this.mode === 'edit' && (this.selection.size || this.imageSel) && !e.shiftKey) {
       this.selection.clear();
+      this.imageSel = null;
       this.refresh();
     }
     this.startPan(e);
@@ -704,6 +879,7 @@ export class App {
   }
 
   select(id, additive = false, rerender = true) {
+    this.imageSel = null;
     if (additive) {
       if (this.selection.has(id)) this.selection.delete(id);
       else this.selection.add(id);
@@ -904,6 +1080,7 @@ export class App {
       if (v.kind === 'point') pts.push(v);
       if (v.kind === 'circle') pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
     }
+    for (const im of this.doc.images || []) pts.push({ x: im.x, y: im.y }, { x: im.x + im.w, y: im.y - im.h });
     if (!pts.length) return this.view.setBoundingBox([-8, 6, 8, -6]);
     const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
     let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
@@ -946,12 +1123,15 @@ export class App {
       if (e.key === 'Escape') {
         if (this.picks.length) this.cancelTool();
         else if (this.toolId !== 'move') this.setTool('move');
-        else { this.selection.clear(); this.setRelation(null); }
+        else { this.selection.clear(); this.imageSel = null; this.setRelation(null); }
       } else if (e.key === 'Enter' && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === '...point') {
         this.completeTool(TOOL_BY_ID[this.toolId]);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && this.selection.size) {
         e.preventDefault();
         this.deleteSteps([...this.selection]);
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && this.imageSel) {
+        e.preventDefault();
+        this.deleteImage(this.imageSel);
       }
     });
     document.addEventListener('fullscreenchange', () => {
@@ -1182,10 +1362,11 @@ export class App {
     on('btn-prev', () => this.gotoFrame(this.frameIdx - 1));
     on('btn-next', () => this.gotoFrame(this.frameIdx + 1));
     on('btn-exit-present', () => { if (this.projector) this.setProjector(false); this.setMode('edit'); });
-    on('btn-new', async () => {
-      if (this.doc.steps.length && !(await confirmDialog('Hình mới', 'Xoá hình hiện tại để bắt đầu hình mới? (Có thể hoàn tác bằng Ctrl+Z.)', 'Hình mới'))) return;
-      this.commit((doc) => { doc.steps = []; doc.title = ''; });
-      this.view.setBoundingBox([-8, 6, 8, -6]);
+    on('btn-new', () => this.newTab());
+    on('btn-unlock-images', () => {
+      if (!(this.doc.images || []).some((im) => im.locked)) return toast('Không có ảnh nào đang khoá');
+      this.commit((doc) => { for (const im of doc.images) delete im.locked; });
+      toast('Đã mở khoá các ảnh – bấm vào ảnh để dời, đổi cỡ');
     });
   }
 }

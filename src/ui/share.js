@@ -3,31 +3,48 @@
 import { encodeDoc, decodeDoc, parseDocJSON, compactDoc } from '../io/codec.js';
 import { textDialog, toast, confirmDialog } from './dialog.js';
 
-const DRAFT_KEY = 'hinh-hoc-dong:nhap';
+const DRAFT_KEY = 'hinh-hoc-dong:nhap'; // bản 1.0–1.2: một hình
+const TABS_KEY = 'hinh-hoc-dong:nhap-tab'; // bản 1.3: mọi tab {active, tabs: [doc]}
 
-/** Tài liệu kèm khung nhìn hiện tại (để mở lại đúng chỗ). */
-function docWithView(app) {
-  const bb = app.view.getBoundingBox().map((v) => Math.round(v * 1000) / 1000);
-  return { ...app.doc, view: { bbox: bb } };
+const roundBox = (bb) => bb.map((v) => Math.round(v * 1000) / 1000);
+
+/** Tài liệu kèm khung nhìn hiện tại (để mở lại đúng chỗ) và dữ liệu các ảnh dán vào (nếu có). */
+function docWithView(app, withImages = true) {
+  const doc = { ...app.doc, view: { bbox: roundBox(app.view.getBoundingBox()) } };
+  return withImages ? app.withImageData(doc) : doc;
 }
 
+let draftWarned = false;
 function saveDraft(app) {
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(docWithView(app)));
-  } catch { /* chế độ riêng tư / bị chặn lưu trữ: bỏ qua */ }
+    app.stashTab();
+    const tabs = app.tabs.map((t, i) => app.withImageData(i === app.tabIdx ? docWithView(app, false) : { ...t.doc, ...(t.bbox ? { view: { bbox: roundBox(t.bbox) } } : {}) }));
+    localStorage.setItem(TABS_KEY, JSON.stringify({ active: app.tabIdx, tabs }));
+  } catch {
+    // chế độ riêng tư / bị chặn lưu trữ / ảnh quá lớn so với dung lượng lưu nháp
+    if (!draftWarned && app.tabs.some((t) => (t.doc.images || []).length)) { draftWarned = true; toast('Không lưu nháp được (ảnh quá lớn) – hãy lưu tệp (Ctrl+S)', 5000); }
+  }
 }
 
 function loadDraft() {
   try {
-    const t = localStorage.getItem(DRAFT_KEY);
-    return t ? parseDocJSON(t) : null;
+    const t = localStorage.getItem(TABS_KEY);
+    if (t) {
+      const d = JSON.parse(t);
+      const tabs = (d.tabs || []).map((x) => { try { return parseDocJSON(JSON.stringify(x)); } catch { return null; } }).filter(Boolean);
+      if (tabs.length) return { tabs, active: Math.min(Math.max(0, d.active | 0), tabs.length - 1) };
+    }
+    const old = localStorage.getItem(DRAFT_KEY);
+    return old ? { tabs: [parseDocJSON(old)], active: 0 } : null;
   } catch {
     return null;
   }
 }
 
 export async function shareLink(app) {
-  const code = await encodeDoc(docWithView(app));
+  // ảnh dán vào không đưa vào link (link sẽ dài hàng trăm nghìn ký tự) – gửi tệp .json nếu cần cả ảnh
+  const code = await encodeDoc(docWithView(app, false));
+  if ((app.doc.images || []).length) toast('Link không chứa ảnh đã dán vào hình – muốn gửi cả ảnh thì lưu tệp (Ctrl+S)', 6000);
   const base = location.href.split('#')[0];
   const url = `${base}#h=${code}`;
   try { history.replaceState(null, '', '#h=' + code); } catch { /* file:// có thể chặn */ }
@@ -57,7 +74,7 @@ export function openFile(app) {
     try {
       const doc = parseDocJSON(await f.text());
       if (!doc.title) doc.title = f.name.replace(/\.json$/i, '');
-      app.loadDoc(doc, { keepHistory: true });
+      app.openDoc(doc);
       if (!doc.view) app.zoomFit();
       toast(`Đã mở "${f.name}"`);
     } catch (e) {
@@ -79,23 +96,24 @@ const escapeBr = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').r
 /** Nạp hình lúc mở trang: ưu tiên link (#h=...), sau đó bản nháp. */
 export async function initShare(app) {
   const m = /[#&]h=([A-Za-z0-9_-]+)/.exec(location.hash);
-  let loaded = false;
+  // khôi phục các tab của lần trước, rồi mở hình trong link (nếu có) ở tab mới
+  const d = loadDraft();
+  if (d && d.tabs.some((x) => x.steps.length || (x.images || []).length)) {
+    app.loadDoc(d.tabs[0]);
+    for (const x of d.tabs.slice(1)) app.newTab(x);
+    app.switchTab(d.active);
+    if (!m) toast('Đã khôi phục ' + (d.tabs.length > 1 ? `${d.tabs.length} hình đang mở lần trước` : 'bản nháp lần trước'));
+  }
   if (m) {
     try {
       const doc = await decodeDoc(m[1]);
-      app.loadDoc(doc);
-      if (!doc.view) app.zoomFit();
-      loaded = true;
+      // mở lại chính link vừa mở trước đó (đã có trong bản nháp): không tạo tab trùng
+      const same = app.tabs.findIndex((t, i) => JSON.stringify((i === app.tabIdx ? app.doc : t.doc).steps) === JSON.stringify(doc.steps));
+      if (same >= 0) app.switchTab(same);
+      else { app.openDoc(doc); if (!doc.view) app.zoomFit(); }
       toast('Đã mở hình từ link');
     } catch (e) {
       toast(e.message, 5000);
-    }
-  }
-  if (!loaded) {
-    const d = loadDraft();
-    if (d && d.steps.length) {
-      app.loadDoc(d);
-      toast('Đã khôi phục bản nháp lần trước');
     }
   }
   let timer = null;

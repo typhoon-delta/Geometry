@@ -48,6 +48,8 @@ export class Renderer {
     const selected = opts.selected || new Set();
     const highlight = opts.highlight || new Set();
     const theme = (this.theme = opts.theme || 'mono');
+    this.imageStore = opts.images || null;
+    this.imageSel = opts.imageSel || null;
     const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
     const layer = (s, kind) => order[s.type === 'polygon' ? 'polygon' : kind] ?? 3;
     this.items = doc.steps
@@ -110,6 +112,29 @@ export class Renderer {
     this.labelScale = view.scale;
   }
 
+  /** Ảnh dán vào hình: vẽ dưới mọi đối tượng hình học, theo toạ độ hình; ảnh đang chọn có khung và ô đổi cỡ. */
+  drawImages(ctx, view) {
+    const list = this.doc && this.doc.images;
+    if (!list || !list.length || !this.imageStore) return;
+    for (const im of list) {
+      const rec = this.imageStore.get(im.id);
+      const a = view.toScreen({ x: im.x, y: im.y });
+      const w = im.w * view.scale, h = im.h * view.scale;
+      if (rec && rec.ready) {
+        ctx.globalAlpha = im.opacity ?? 1;
+        ctx.drawImage(rec.img, a.x, a.y, w, h);
+        ctx.globalAlpha = 1;
+      }
+      if (im.id === this.imageSel) {
+        setStroke(ctx, '#2563eb', 1.5, true);
+        ctx.strokeRect(a.x, a.y, w, h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#2563eb';
+        ctx.fillRect(a.x + w - 5, a.y + h - 5, 10, 10);
+      }
+    }
+  }
+
   /** Toạ độ màn hình của các điểm đang hiện (để vẽ đường thẳng vừa đủ qua chúng), hoặc null nếu tắt chế độ này. */
   trimPoints() {
     if (!this.trimLines) return null;
@@ -157,6 +182,7 @@ export class Renderer {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (this.grid) drawGrid(ctx, view);
+    this.drawImages(ctx, view);
     const labels = [];
     const trimPts = this.trimPoints();
     this.lineRanges = new Map();

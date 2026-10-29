@@ -95,6 +95,20 @@ export function bindStepList(app) {
 export function renderProps(app) {
   const host = document.getElementById('props');
   if (!host) return;
+  // ảnh dán vào hình đang chọn (bản 1.3)
+  const im = app.imageSel && app.toolId === 'move' && app.mode !== 'present' ? (app.doc.images || []).find((x) => x.id === app.imageSel) : null;
+  if (im) {
+    host.classList.add('show');
+    host.innerHTML = `<div class="prop-title">Ảnh dán vào hình</div>
+      <label class="row">Độ đậm <input id="p-img-op" type="range" min="0.1" max="1" step="0.05" value="${im.opacity ?? 1}"></label>
+      <label class="row"><input id="p-img-lock" type="checkbox"> Khoá làm nền (không chọn, không kéo được; mở lại ở Sửa › Mở khoá các ảnh nền)</label>
+      <div class="note">Kéo ảnh để dời, kéo ô vuông ở góc dưới phải để đổi cỡ. Ảnh được lưu trong tệp .json (không có trong link chia sẻ).</div>
+      <div class="row"><button id="p-img-del" class="danger">Xoá ảnh</button></div>`;
+    host.querySelector('#p-img-op').onchange = (e) => app.setImageProp(im.id, { opacity: +e.target.value });
+    host.querySelector('#p-img-lock').onchange = (e) => { if (e.target.checked) { app.setImageProp(im.id, { locked: true }); app.selectImage(null); } };
+    host.querySelector('#p-img-del').onclick = () => app.deleteImage(im.id);
+    return;
+  }
   const ids = [...app.selection].filter((id) => stepById(app.doc, id));
   // Thẻ thuộc tính chỉ hiện với công cụ Chọn: khi đang dựng, đối tượng vừa dựng được chọn sẵn (để gõ tên)
   // nhưng thẻ không được nổi lên che hình và chặn lần bấm tiếp theo.

@@ -657,3 +657,33 @@ cảm nhận "đẹp" của hình tôi tự xem lại trên ảnh chụp từng 
 **Gợi ý tiếp theo**: bộ khám phá tìm đoạn/góc bằng nhau (cả JS và Python); công cụ "giao điểm" chỉ tạo nghiệm gần chỗ
 bấm khi chọn lần lượt hai đường; lưu "công cụ vừa dùng" và "Công cụ của tôi" kèm tệp hình; thử với giáo viên thật trên
 máy chiếu.
+
+---
+
+# Bản 1.3 – Theo đề xuất sau khi dùng bản 1.2
+
+1. **Tên ảnh qua phép biến hình = tên tạo ảnh + `'`.** Các công cụ biến hình (đối xứng tâm/trục, quay, vị tự, tịnh
+   tiến, nghịch đảo, quay/vị tự theo góc/tỉ số trên hình, đồng dạng) đặt tên ảnh của điểm A là A′, ảnh của A′ là A″
+   (tên đã có thì thêm phẩy, tối đa 3, rồi mới dùng tên tự động). Chỉ áp cho công cụ *biến hình*: các công cụ dựng
+   hình dùng phép quay/tịnh tiến bên trong (tam giác đều, hình vuông, hình bình hành…) vẫn đặt C, D như cũ. Ảnh của
+   đường thẳng/đường tròn vẫn đặt tên tự động. Cài đặt: cờ `prime` trên đặc tả bước, `primeName` trong
+   `src/core/apply.js`. Test: `tests/library.test.mjs`.
+2. **Nhiều tab hình.** Dải tab thay ô "Tên hình" trên thanh trên; mỗi tab giữ hình, lịch sử hoàn tác/làm lại và khung
+   nhìn riêng (cất/lấy khi đổi tab, không đổi cấu trúc của App). *Hình mới* mở tab mới (không còn hỏi xoá hình cũ); mở
+   tệp, ví dụ, link mở ở tab mới, trừ khi tab đang mở còn trống. Nháy đúp tab để đặt tên hình; đóng tab có hình thì hỏi
+   lại. Bản nháp lưu **mọi tab** (`hinh-hoc-dong:nhap-tab`); bản nháp một hình của bản cũ vẫn được đọc. Mở lại đúng
+   link đã mở trước đó không tạo tab trùng.
+3. **Dán ảnh.** `Ctrl+V`, kéo thả tệp ảnh, *Tệp › Chèn ảnh…*. Ảnh theo toạ độ hình (phóng/dời cùng hình), vẽ dưới mọi
+   đối tượng; kéo để dời, kéo góc để đổi cỡ, độ đậm, *Khoá làm nền*, xoá. Định dạng: trường tuỳ chọn `images` (vị trí)
+   và `imageData` (data URL) – tệp cũ không đổi, bản Python bỏ qua. Dữ liệu ảnh để **ngoài** `doc` khi đang làm việc nên
+   200 bước hoàn tác không nhân bản ảnh (test kiểm tra một bước hoàn tác < 2000 ký tự). Link chia sẻ không chứa ảnh
+   (có nhắc); TikZ ghi chú là ảnh không được xuất. Ảnh lớn hơn 1600 px được thu nhỏ khi dán (PNG giữ PNG để chữ trong ảnh
+   chụp đề còn nét).
+
+Kiểm thử: `npm test` 127 test; `npm run test:browser` đạt, thêm `tests/browser/smoke4.mjs` (đối xứng A, B qua C ra
+A′, B′, ảnh của A′ ra A″; tab: mở, đổi, hoàn tác riêng từng tab, đặt tên, mở ví dụ ở tab mới; dán ảnh qua sự kiện
+paste thật, kéo ảnh, vẽ điểm lên trên ảnh, lưu/mở tệp có ảnh, khoá làm nền, bản nháp khôi phục mọi tab và ảnh sau khi
+tải lại trang); `npm run test:perf` đạt (6,44 ms/khung ×1, p95 16,8 ms ×4 – không đổi).
+
+Hạn chế: ảnh không có trong link chia sẻ; ảnh rất lớn có thể vượt dung lượng lưu nháp của trình duyệt (khoảng 5 MB,
+có nhắc lưu tệp); chưa có phím tắt chuyển tab (Ctrl+Tab bị trình duyệt giữ).

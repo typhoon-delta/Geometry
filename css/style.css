@@ -32,8 +32,17 @@ kbd { font: 11px ui-monospace, Consolas, monospace; color: var(--muted); margin-
 #topbar .vsep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
 #topbar button.icon { width: 30px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #3f3f46; }
 #topbar button.icon.on, #topbar button.icon.active { background: var(--accent-soft); color: var(--accent); }
-#doc-title { border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 3px 6px; width: 220px; margin-left: 8px; color: #3f3f46; }
-#doc-title:hover, #doc-title:focus { border-color: var(--line); background: #fff; outline: none; }
+#tabbar { display: flex; align-items: flex-end; align-self: stretch; gap: 2px; margin-left: 10px; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+#tabbar::-webkit-scrollbar { display: none; }
+.dtab { display: flex; align-items: center; gap: 2px; height: 28px; padding: 0 4px 0 10px; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; color: #52525b; cursor: pointer; white-space: nowrap; flex: none; max-width: 200px; }
+.dtab:hover { background: #ececef; }
+.dtab.active { background: #fff; border-color: var(--line); color: var(--text); margin-bottom: -1px; height: 29px; }
+.dt-name { overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+.dt-x { padding: 0 4px; font-size: 11px; color: #a1a1aa; visibility: hidden; }
+.dtab:hover .dt-x, .dtab.active .dt-x { visibility: visible; }
+.dt-x:hover { color: var(--danger); }
+.dt-new { width: 26px; height: 26px; padding: 0; color: #52525b; flex: none; align-self: center; }
+.dt-input { width: 150px; font-size: 13px; padding: 2px 4px; border: 1px solid var(--accent); border-radius: 4px; outline: none; }
 .menus { display: flex; }
 .menu { position: relative; }
 .menu-btn { padding: 4px 9px; }
@@ -214,6 +223,5 @@ body.projector #exit-projector { display: block; }
 #toast.show { opacity: .95; transform: translateX(-50%) translateY(0); }
 
 @media (max-width: 900px) {
-  #doc-title { width: 120px; }
   #side { width: 260px; }
 }

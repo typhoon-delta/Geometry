@@ -292,32 +292,32 @@ export const LIBRARY = [
 
   // ======================= 5. PHÉP BIẾN HÌNH =======================
   T(M5, 'reflect_point', 'Đối xứng tâm', ['obj', 'point'], ['Chọn đối tượng (điểm, đường, đường tròn)', 'Chọn tâm đối xứng'],
-    run((S, p) => S.add('reflect', p)), { icon: '⊙' }),
+    run((S, p) => S.add('reflect', p, { prime: true })), { icon: '⊙' }),
   T(M5, 'reflect_line', 'Đối xứng trục', ['obj', 'line'], ['Chọn đối tượng (điểm, đường, đường tròn)', 'Chọn trục đối xứng'],
-    run((S, p) => S.add('reflect', p)), { icon: '⇋' }),
+    run((S, p) => S.add('reflect', p, { prime: true })), { icon: '⇋' }),
   T(M5, 'rotate', 'Quay', ['obj', 'point'], ['Chọn đối tượng cần quay', 'Chọn tâm quay (góc quay đặt ở thẻ tuỳ chọn)'],
-    run((S, p, ctx) => S.add('rotate', p, { params: { angle: ctx.opt('angle', 90) } })), { icon: '↻', options: [{ key: 'angle', label: 'Góc quay (độ, ngược chiều kim đồng hồ)', def: 90 }] }),
+    run((S, p, ctx) => S.add('rotate', p, { prime: true, params: { angle: ctx.opt('angle', 90) } })), { icon: '↻', options: [{ key: 'angle', label: 'Góc quay (độ, ngược chiều kim đồng hồ)', def: 90 }] }),
   T(M5, 'homothety', 'Vị tự', ['obj', 'point'], ['Chọn đối tượng', 'Chọn tâm vị tự (tỉ số đặt ở thẻ tuỳ chọn)'],
-    run((S, p, ctx) => S.add('homothety', p, { params: { k: ctx.opt('k', 2) } })), { icon: '⤢', options: [{ key: 'k', label: 'Tỉ số vị tự k', def: 2 }] }),
+    run((S, p, ctx) => S.add('homothety', p, { prime: true, params: { k: ctx.opt('k', 2) } })), { icon: '⤢', options: [{ key: 'k', label: 'Tỉ số vị tự k', def: 2 }] }),
   T(M5, 'translate', 'Tịnh tiến', ['obj', 'point', 'point'], ['Chọn đối tượng', 'Chọn điểm đầu của vectơ', 'Chọn điểm cuối của vectơ'],
-    run((S, p) => S.add('translate', p)), { icon: '⇉' }),
+    run((S, p) => S.add('translate', p, { prime: true })), { icon: '⇉' }),
   T(M5, 'invert', 'Nghịch đảo', ['obj', 'circle'], ['Chọn đối tượng cần nghịch đảo (điểm, đường thẳng, đường tròn)', 'Chọn đường tròn nghịch đảo'],
     run((S, [X, c], ctx) => {
       const x = ctx.values.get(X), k = ctx.values.get(c);
-      if (!x || x.kind === 'point') return S.add('invert', [X, c]);
+      if (!x || x.kind === 'point') return S.add('invert', [X, c], { prime: true });
       // ảnh là đường thẳng khi X đi qua tâm nghịch đảo (ở hình hiện tại), ngược lại là đường tròn
       S.add(k && G.invertToLine(x, k) ? 'invert_line' : 'invert_circle', [X, c]);
     }), { icon: '⊛' }),
   T(M5, 'rotate_by', 'Quay theo góc trên hình', ['obj', 'point', 'point', 'point', 'point'],
     ['Chọn đối tượng cần quay', 'Chọn tâm quay', 'Góc quay = góc ABC trên hình: chọn điểm A', 'Chọn đỉnh góc B', 'Chọn điểm C (quay theo chiều từ BA sang BC)'],
-    run((S, p) => S.add('rotate_by', p)), { icon: '↻∠', allowRepeat: true }),
+    run((S, p) => S.add('rotate_by', p, { prime: true })), { icon: '↻∠', allowRepeat: true }),
   T(M5, 'homothety_by', 'Vị tự theo tỉ số trên hình', ['obj', 'point', 'point', 'point', 'point', 'point'],
     ['Chọn đối tượng', 'Chọn tâm vị tự', 'Tỉ số = AB/CD trên hình: chọn A', 'Chọn B', 'Chọn C', 'Chọn D'],
-    run((S, p, ctx) => S.add('homothety_by', p, ctx.opt('k', 1) < 0 ? { params: { negative: true } } : {})),
+    run((S, p, ctx) => S.add('homothety_by', p, ctx.opt('k', 1) < 0 ? { prime: true, params: { negative: true } } : { prime: true })),
     { icon: '⤢÷', allowRepeat: true, options: [{ key: 'k', label: 'Dấu của tỉ số (1: dương, −1: âm)', def: 1 }] }),
   T(M5, 'spiral', 'Đồng dạng tâm O biến A thành B', ['obj', 'point', 'point', 'point'],
     ['Chọn đối tượng', 'Chọn tâm O', 'Chọn điểm A', 'Chọn điểm B (ảnh của A) – quay ∠AOB và vị tự tỉ số OB/OA'],
-    run((S, p) => S.add('spiral', p)), { icon: '↻⤢', allowRepeat: true }),
+    run((S, p) => S.add('spiral', p, { prime: true })), { icon: '↻⤢', allowRepeat: true }),
   T(M5, 'projection', 'Chiếu vuông góc lên đường thẳng', ['point', 'line'], ['Chọn điểm và đường thẳng (thứ tự bất kỳ)', 'Chọn nốt đối tượng còn lại'],
     run((S, p) => S.add('projection', p)), { icon: '⊾', anyOrder: true }),
 

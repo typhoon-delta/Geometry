@@ -94,8 +94,7 @@ export async function run({ page, ok, shot, state, tool, clickAt, menu, example 
   ok(saved.format === 'hinh-hoc-dong' && saved.steps.length === JSON.parse(ref).length, `lưu tệp JSON "${dl.suggestedFilename()}"`);
 
   await menu('btn-new');
-  await page.click('.modal .primary');
-  ok((await state()).n === 0, 'hình mới rỗng');
+  ok((await state()).n === 0, 'hình mới rỗng (mở ở tab mới, không cần xác nhận)');
   const [fc] = await Promise.all([page.waitForEvent('filechooser'), menu('btn-open')]);
   await fc.setFiles(path);
   await page.waitForFunction(() => __app.doc.steps.length > 0);

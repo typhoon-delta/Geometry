@@ -1108,6 +1108,12 @@
     if (!doc || typeof doc !== "object") return ["Kh\xF4ng ph\u1EA3i \u0111\u1ED1i t\u01B0\u1EE3ng JSON"];
     if (doc.format !== FORMAT) errs.push(`Thi\u1EBFu "format": "${FORMAT}"`);
     if (!Array.isArray(doc.steps)) return [...errs, 'Thi\u1EBFu danh s\xE1ch "steps"'];
+    if (doc.images !== void 0) {
+      if (!Array.isArray(doc.images)) errs.push('"images" ph\u1EA3i l\xE0 danh s\xE1ch');
+      else doc.images.forEach((im, i) => {
+        if (!im || typeof im.id !== "string" || ![im.x, im.y, im.w, im.h].every(Number.isFinite) || !(im.w > 0) || !(im.h > 0)) errs.push(`\u1EA2nh ${i + 1}: thi\u1EBFu id ho\u1EB7c v\u1ECB tr\xED/k\xEDch th\u01B0\u1EDBc`);
+      });
+    }
     const seen = /* @__PURE__ */ new Set();
     const k = /* @__PURE__ */ new Map();
     for (const [i, s] of doc.steps.entries()) {
@@ -1209,7 +1215,7 @@
       const kind = def.kind === "same" ? k.get(args[0]) : def.kind;
       const step = { id, type: sp.type, args };
       if (sp.params && Object.keys(sp.params).length) step.params = { ...sp.params };
-      if (kind !== "mark") step.name = sp.name && !used(sp.name) ? sp.name : nextName(doc, kind, sp.name);
+      if (kind !== "mark") step.name = sp.name && !used(sp.name) ? sp.name : sp.prime && kind === "point" && primeName(doc, args[0]) || nextName(doc, kind, sp.name);
       if (sp.style && Object.keys(sp.style).length) step.style = { ...sp.style };
       if (sp.hidden) step.hidden = true;
       if (i > 0 && join) step.joinPrev = true;
@@ -1218,6 +1224,13 @@
       ids.push(id);
     });
     return ids;
+  }
+  function primeName(doc, srcId) {
+    const base = doc.steps.find((s) => s.id === srcId)?.name;
+    if (!base) return null;
+    const used = new Set(doc.steps.map((s) => s.name));
+    for (let n = base + "'"; n.length <= base.length + 3; n += "'") if (!used.has(n)) return n;
+    return null;
   }
 
   // src/core/names.js
@@ -1507,6 +1520,8 @@
       const selected = opts.selected || /* @__PURE__ */ new Set();
       const highlight = opts.highlight || /* @__PURE__ */ new Set();
       const theme = this.theme = opts.theme || "mono";
+      this.imageStore = opts.images || null;
+      this.imageSel = opts.imageSel || null;
       const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
       const layer = (s, kind) => order[s.type === "polygon" ? "polygon" : kind] ?? 3;
       this.items = doc.steps.filter((s) => !s.hidden && (!visible || visible.has(s.id))).map((s) => {
@@ -1563,6 +1578,28 @@
       }
       this.labelScale = view.scale;
     }
+    /** Ảnh dán vào hình: vẽ dưới mọi đối tượng hình học, theo toạ độ hình; ảnh đang chọn có khung và ô đổi cỡ. */
+    drawImages(ctx, view) {
+      const list = this.doc && this.doc.images;
+      if (!list || !list.length || !this.imageStore) return;
+      for (const im of list) {
+        const rec = this.imageStore.get(im.id);
+        const a = view.toScreen({ x: im.x, y: im.y });
+        const w = im.w * view.scale, h = im.h * view.scale;
+        if (rec && rec.ready) {
+          ctx.globalAlpha = im.opacity ?? 1;
+          ctx.drawImage(rec.img, a.x, a.y, w, h);
+          ctx.globalAlpha = 1;
+        }
+        if (im.id === this.imageSel) {
+          setStroke(ctx, "#2563eb", 1.5, true);
+          ctx.strokeRect(a.x, a.y, w, h);
+          ctx.setLineDash([]);
+          ctx.fillStyle = "#2563eb";
+          ctx.fillRect(a.x + w - 5, a.y + h - 5, 10, 10);
+        }
+      }
+    }
     /** Toạ độ màn hình của các điểm đang hiện (để vẽ đường thẳng vừa đủ qua chúng), hoặc null nếu tắt chế độ này. */
     trimPoints() {
       if (!this.trimLines) return null;
@@ -1610,6 +1647,7 @@
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       if (this.grid) drawGrid(ctx, view);
+      this.drawImages(ctx, view);
       const labels = [];
       const trimPts = this.trimPoints();
       this.lineRanges = /* @__PURE__ */ new Map();
@@ -2658,7 +2696,7 @@
       "\u0110\u1ED1i x\u1EE9ng t\xE2m",
       ["obj", "point"],
       ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn t\xE2m \u0111\u1ED1i x\u1EE9ng"],
-      run((S, p) => S.add("reflect", p)),
+      run((S, p) => S.add("reflect", p, { prime: true })),
       { icon: "\u2299" }
     ),
     T(
@@ -2667,7 +2705,7 @@
       "\u0110\u1ED1i x\u1EE9ng tr\u1EE5c",
       ["obj", "line"],
       ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn tr\u1EE5c \u0111\u1ED1i x\u1EE9ng"],
-      run((S, p) => S.add("reflect", p)),
+      run((S, p) => S.add("reflect", p, { prime: true })),
       { icon: "\u21CB" }
     ),
     T(
@@ -2676,7 +2714,7 @@
       "Quay",
       ["obj", "point"],
       ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n quay", "Ch\u1ECDn t\xE2m quay (g\xF3c quay \u0111\u1EB7t \u1EDF th\u1EBB tu\u1EF3 ch\u1ECDn)"],
-      run((S, p, ctx) => S.add("rotate", p, { params: { angle: ctx.opt("angle", 90) } })),
+      run((S, p, ctx) => S.add("rotate", p, { prime: true, params: { angle: ctx.opt("angle", 90) } })),
       { icon: "\u21BB", options: [{ key: "angle", label: "G\xF3c quay (\u0111\u1ED9, ng\u01B0\u1EE3c chi\u1EC1u kim \u0111\u1ED3ng h\u1ED3)", def: 90 }] }
     ),
     T(
@@ -2685,7 +2723,7 @@
       "V\u1ECB t\u1EF1",
       ["obj", "point"],
       ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng", "Ch\u1ECDn t\xE2m v\u1ECB t\u1EF1 (t\u1EC9 s\u1ED1 \u0111\u1EB7t \u1EDF th\u1EBB tu\u1EF3 ch\u1ECDn)"],
-      run((S, p, ctx) => S.add("homothety", p, { params: { k: ctx.opt("k", 2) } })),
+      run((S, p, ctx) => S.add("homothety", p, { prime: true, params: { k: ctx.opt("k", 2) } })),
       { icon: "\u2922", options: [{ key: "k", label: "T\u1EC9 s\u1ED1 v\u1ECB t\u1EF1 k", def: 2 }] }
     ),
     T(
@@ -2694,7 +2732,7 @@
       "T\u1ECBnh ti\u1EBFn",
       ["obj", "point", "point"],
       ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng", "Ch\u1ECDn \u0111i\u1EC3m \u0111\u1EA7u c\u1EE7a vect\u01A1", "Ch\u1ECDn \u0111i\u1EC3m cu\u1ED1i c\u1EE7a vect\u01A1"],
-      run((S, p) => S.add("translate", p)),
+      run((S, p) => S.add("translate", p, { prime: true })),
       { icon: "\u21C9" }
     ),
     T(
@@ -2705,7 +2743,7 @@
       ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n ngh\u1ECBch \u0111\u1EA3o (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng th\u1EB3ng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n ngh\u1ECBch \u0111\u1EA3o"],
       run((S, [X, c], ctx) => {
         const x = ctx.values.get(X), k = ctx.values.get(c);
-        if (!x || x.kind === "point") return S.add("invert", [X, c]);
+        if (!x || x.kind === "point") return S.add("invert", [X, c], { prime: true });
         S.add(k && invertToLine(x, k) ? "invert_line" : "invert_circle", [X, c]);
       }),
       { icon: "\u229B" }
@@ -2716,7 +2754,7 @@
       "Quay theo g\xF3c tr\xEAn h\xECnh",
       ["obj", "point", "point", "point", "point"],
       ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n quay", "Ch\u1ECDn t\xE2m quay", "G\xF3c quay = g\xF3c ABC tr\xEAn h\xECnh: ch\u1ECDn \u0111i\u1EC3m A", "Ch\u1ECDn \u0111\u1EC9nh g\xF3c B", "Ch\u1ECDn \u0111i\u1EC3m C (quay theo chi\u1EC1u t\u1EEB BA sang BC)"],
-      run((S, p) => S.add("rotate_by", p)),
+      run((S, p) => S.add("rotate_by", p, { prime: true })),
       { icon: "\u21BB\u2220", allowRepeat: true }
     ),
     T(
@@ -2725,7 +2763,7 @@
       "V\u1ECB t\u1EF1 theo t\u1EC9 s\u1ED1 tr\xEAn h\xECnh",
       ["obj", "point", "point", "point", "point", "point"],
       ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng", "Ch\u1ECDn t\xE2m v\u1ECB t\u1EF1", "T\u1EC9 s\u1ED1 = AB/CD tr\xEAn h\xECnh: ch\u1ECDn A", "Ch\u1ECDn B", "Ch\u1ECDn C", "Ch\u1ECDn D"],
-      run((S, p, ctx) => S.add("homothety_by", p, ctx.opt("k", 1) < 0 ? { params: { negative: true } } : {})),
+      run((S, p, ctx) => S.add("homothety_by", p, ctx.opt("k", 1) < 0 ? { prime: true, params: { negative: true } } : { prime: true })),
       { icon: "\u2922\xF7", allowRepeat: true, options: [{ key: "k", label: "D\u1EA5u c\u1EE7a t\u1EC9 s\u1ED1 (1: d\u01B0\u01A1ng, \u22121: \xE2m)", def: 1 }] }
     ),
     T(
@@ -2734,7 +2772,7 @@
       "\u0110\u1ED3ng d\u1EA1ng t\xE2m O bi\u1EBFn A th\xE0nh B",
       ["obj", "point", "point", "point"],
       ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng", "Ch\u1ECDn t\xE2m O", "Ch\u1ECDn \u0111i\u1EC3m A", "Ch\u1ECDn \u0111i\u1EC3m B (\u1EA3nh c\u1EE7a A) \u2013 quay \u2220AOB v\xE0 v\u1ECB t\u1EF1 t\u1EC9 s\u1ED1 OB/OA"],
-      run((S, p) => S.add("spiral", p)),
+      run((S, p) => S.add("spiral", p, { prime: true })),
       { icon: "\u21BB\u2922", allowRepeat: true }
     ),
     T(
@@ -2878,7 +2916,7 @@
     T2("circle", "T\xE2m + \u0111i\u1EC3m", "\u0110\u01B0\u1EDDng tr\xF2n", "\u25EF", ["point", "point"], ["Ch\u1ECDn t\xE2m", "Ch\u1ECDn m\u1ED9t \u0111i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n"], one("circle"), { preview: "circle" }),
     T2("circle_3pts", "Qua 3 \u0111i\u1EC3m", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2299", ["point", "point", "point"], TRI2, withCenter("circle_3pts")),
     T2("circle_radius", "Compa (t\xE2m, b\xE1n k\xEDnh AB)", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2300", ["point", "point", "point"], ["Ch\u1ECDn t\xE2m", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t c\u1EE7a b\xE1n k\xEDnh", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"], one("circle_radius")),
-    T2("reflect", "\u0110\u1ED1i x\u1EE9ng", "Bi\u1EBFn h\xECnh", "\u21CB", ["obj", "pl"], ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n l\u1EA5y \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn t\xE2m \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m) ho\u1EB7c tr\u1EE5c \u0111\u1ED1i x\u1EE9ng (\u0111\u01B0\u1EDDng th\u1EB3ng)"], one("reflect")),
+    T2("reflect", "\u0110\u1ED1i x\u1EE9ng", "Bi\u1EBFn h\xECnh", "\u21CB", ["obj", "pl"], ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n l\u1EA5y \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn t\xE2m \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m) ho\u1EB7c tr\u1EE5c \u0111\u1ED1i x\u1EE9ng (\u0111\u01B0\u1EDDng th\u1EB3ng)"], (p) => [{ type: "reflect", args: p, prime: true }]),
     T2("projection", "H\xECnh chi\u1EBFu", "Bi\u1EBFn h\xECnh", "\u22BE", ["point", "line"], ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"], (p) => [{ type: "projection", args: p }], { anyOrder: true }),
     T2("angle_mark", "\u0110\xE1nh d\u1EA5u g\xF3c", "\u0110\xE1nh d\u1EA5u", "\u2221", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], (p, app) => [{ type: "angle_mark", args: p, style: { ...app.markStyle("angle") } }]),
     T2("segment_mark", "\u0110\xE1nh d\u1EA5u \u0111o\u1EA1n", "\u0110\xE1nh d\u1EA5u", "\u2AFD", ["point", "point"], ["Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"], (p, app) => [{ type: "segment_mark", args: p, style: { ...app.markStyle("segment") } }], { segmentShortcut: true }),
@@ -3178,6 +3216,24 @@
   function renderProps(app) {
     const host = document.getElementById("props");
     if (!host) return;
+    const im = app.imageSel && app.toolId === "move" && app.mode !== "present" ? (app.doc.images || []).find((x) => x.id === app.imageSel) : null;
+    if (im) {
+      host.classList.add("show");
+      host.innerHTML = `<div class="prop-title">\u1EA2nh d\xE1n v\xE0o h\xECnh</div>
+      <label class="row">\u0110\u1ED9 \u0111\u1EADm <input id="p-img-op" type="range" min="0.1" max="1" step="0.05" value="${im.opacity ?? 1}"></label>
+      <label class="row"><input id="p-img-lock" type="checkbox"> Kho\xE1 l\xE0m n\u1EC1n (kh\xF4ng ch\u1ECDn, kh\xF4ng k\xE9o \u0111\u01B0\u1EE3c; m\u1EDF l\u1EA1i \u1EDF S\u1EEDa \u203A M\u1EDF kho\xE1 c\xE1c \u1EA3nh n\u1EC1n)</label>
+      <div class="note">K\xE9o \u1EA3nh \u0111\u1EC3 d\u1EDDi, k\xE9o \xF4 vu\xF4ng \u1EDF g\xF3c d\u01B0\u1EDBi ph\u1EA3i \u0111\u1EC3 \u0111\u1ED5i c\u1EE1. \u1EA2nh \u0111\u01B0\u1EE3c l\u01B0u trong t\u1EC7p .json (kh\xF4ng c\xF3 trong link chia s\u1EBB).</div>
+      <div class="row"><button id="p-img-del" class="danger">Xo\xE1 \u1EA3nh</button></div>`;
+      host.querySelector("#p-img-op").onchange = (e) => app.setImageProp(im.id, { opacity: +e.target.value });
+      host.querySelector("#p-img-lock").onchange = (e) => {
+        if (e.target.checked) {
+          app.setImageProp(im.id, { locked: true });
+          app.selectImage(null);
+        }
+      };
+      host.querySelector("#p-img-del").onclick = () => app.deleteImage(im.id);
+      return;
+    }
     const ids = [...app.selection].filter((id) => stepById(app.doc, id));
     const show = ids.length > 0 && app.mode !== "present" && app.toolId === "move";
     host.classList.toggle("show", show);
@@ -3321,6 +3377,8 @@
       this.theme = loadPref("theme", "mono");
       setTheme(this.theme);
       this.listeners = { change: [] };
+      this.images = /* @__PURE__ */ new Map();
+      this.imageSel = null;
       this.typeToRename = true;
       this.fitKey = "Home";
     }
@@ -3330,6 +3388,7 @@
       this.view.setBoundingBox([-8, 6, 8, -6]);
       this.renderer = new Renderer(this.view);
       this.renderer.trimLines = loadPref("trim", "1") === "1";
+      this.initTabs();
       this.stage = document.getElementById("stage");
       this.buildToolbar();
       this.bindPointer();
@@ -3354,6 +3413,8 @@
         this.redoStack = [];
       }
       this.doc = clone(doc);
+      this.takeImages(this.doc);
+      this.imageSel = null;
       this.selection.clear();
       this.highlight.clear();
       this.relation = null;
@@ -3362,6 +3423,163 @@
       this.refresh();
       this.emit("load");
       this.emit("change");
+    }
+    // ================= ảnh dán vào hình (bản 1.3) =================
+    // doc.images = [{id, x, y, w, h, opacity?, locked?}] – (x, y) là góc trên-trái theo toạ độ hình (y hướng lên),
+    // w × h theo đơn vị hình nên ảnh phóng/dời theo hình. Dữ liệu ảnh (data URL) giữ trong this.images; khi lưu tệp /
+    // nháp thì gắn vào doc.imageData (withImageData), khi mở thì lấy ra (takeImages).
+    registerImage(id, src) {
+      if (this.images.has(id) || typeof src !== "string") return;
+      const img = new Image();
+      const rec = { src, img, ready: false };
+      img.onload = () => {
+        rec.ready = true;
+        this.view?.requestDraw();
+      };
+      img.src = src;
+      this.images.set(id, rec);
+    }
+    takeImages(doc) {
+      if (doc && doc.imageData) {
+        for (const [id, src] of Object.entries(doc.imageData)) this.registerImage(id, src);
+        delete doc.imageData;
+      }
+    }
+    withImageData(doc) {
+      if (!doc.images || !doc.images.length) return doc;
+      const data = {};
+      for (const im of doc.images) {
+        const r = this.images.get(im.id);
+        if (r) data[im.id] = r.src;
+      }
+      return { ...doc, imageData: data };
+    }
+    /** Ảnh (không khoá) tại vị trí màn hình; handle = true nếu trúng ô đổi cỡ ở góc dưới phải. Ảnh trên cùng trước. */
+    imageAt(sx, sy) {
+      const list = this.doc.images || [];
+      for (let i = list.length - 1; i >= 0; i--) {
+        const im = list[i];
+        if (im.locked) continue;
+        const a = this.toScreen({ x: im.x, y: im.y }), b = this.toScreen({ x: im.x + im.w, y: im.y - im.h });
+        if (Math.abs(sx - b.x) <= 9 && Math.abs(sy - b.y) <= 9 && this.imageSel === im.id) return { id: im.id, handle: true };
+        if (sx >= a.x && sx <= b.x && sy >= a.y && sy <= b.y) return { id: im.id, handle: false };
+      }
+      return null;
+    }
+    selectImage(id) {
+      this.imageSel = id;
+      if (id) this.selection.clear();
+      this.refresh();
+    }
+    /** Kéo ảnh (dời) hoặc kéo ô góc dưới phải (đổi cỡ, giữ tỉ lệ). */
+    startImageDrag(e, id, resize) {
+      const im = (this.doc.images || []).find((x) => x.id === id);
+      if (!im) return;
+      const start2 = JSON.stringify(this.doc);
+      const p0 = this.eventPos(e);
+      const P0 = this.toUser(p0.sx, p0.sy);
+      const o = { x: im.x, y: im.y, w: im.w, h: im.h };
+      this.drag = { kind: "image", id };
+      const move = (ev) => {
+        const { sx, sy } = this.eventPos(ev);
+        const P2 = this.toUser(sx, sy);
+        if (resize) {
+          const w = Math.max(20 / this.view.scale, o.w + (P2.x - P0.x));
+          im.w = w;
+          im.h = w * o.h / o.w;
+        } else {
+          im.x = o.x + P2.x - P0.x;
+          im.y = o.y + P2.y - P0.y;
+        }
+        this.view.requestDraw();
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move, true);
+        window.removeEventListener("pointerup", up, true);
+        window.removeEventListener("pointercancel", up, true);
+        this.drag = null;
+        if (JSON.stringify(this.doc) !== start2) {
+          this.pushUndo(start2);
+          this.afterChange();
+        }
+      };
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", up, true);
+      window.addEventListener("pointercancel", up, true);
+    }
+    setImageProp(id, patch) {
+      this.commit((doc) => {
+        const im = (doc.images || []).find((x) => x.id === id);
+        if (im) Object.assign(im, patch);
+      });
+    }
+    deleteImage(id) {
+      this.commit((doc) => {
+        doc.images = (doc.images || []).filter((x) => x.id !== id);
+        if (!doc.images.length) delete doc.images;
+      });
+      this.imageSel = null;
+      this.refresh();
+    }
+    // ================= nhiều tab hình (bản 1.3) =================
+    // Mỗi tab giữ hình, lịch sử hoàn tác/làm lại và khung nhìn riêng. Tab đang mở dùng trực tiếp this.doc,
+    // this.undoStack… (như trước); khi đổi tab thì cất vào this.tabs[i] rồi lấy tab kia ra.
+    initTabs() {
+      this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null }];
+      this.tabIdx = 0;
+    }
+    stashTab() {
+      const t = this.tabs[this.tabIdx];
+      Object.assign(t, { doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: this.view.getBoundingBox() });
+    }
+    /** Hiện tab i (đã cất tab đang mở). */
+    showTab(i) {
+      const t = this.tabs[i];
+      this.tabIdx = i;
+      this.doc = t.doc;
+      this.undoStack = t.undo;
+      this.redoStack = t.redo;
+      this.selection.clear();
+      this.highlight.clear();
+      this.relation = null;
+      this.imageSel = null;
+      this.cancelTool();
+      if (t.bbox) this.view.setBoundingBox(t.bbox);
+      else if (t.doc.view && Array.isArray(t.doc.view.bbox)) this.view.setBoundingBox(t.doc.view.bbox);
+      else this.view.setBoundingBox([-8, 6, 8, -6]);
+      this.refresh();
+      if (!t.bbox && !t.doc.view && t.doc.steps.length) this.zoomFit();
+      this.emit("load");
+      this.emit("change");
+    }
+    switchTab(i) {
+      if (i === this.tabIdx || !this.tabs[i]) return;
+      this.stashTab();
+      this.showTab(i);
+    }
+    /** Mở một hình ở tab mới (doc = null: hình trống). */
+    newTab(doc = null) {
+      this.stashTab();
+      const d = doc ? clone(doc) : emptyDoc();
+      this.takeImages(d);
+      this.tabs.push({ doc: d, undo: [], redo: [], bbox: null });
+      this.showTab(this.tabs.length - 1);
+    }
+    async closeTab(i) {
+      const t = i === this.tabIdx ? { doc: this.doc } : this.tabs[i];
+      const n = t.doc.steps.length + (t.doc.images?.length || 0);
+      if (n && !await confirmDialog("\u0110\xF3ng h\xECnh", `\u0110\xF3ng h\xECnh <b>${escapeHTML(t.doc.title || "ch\u01B0a \u0111\u1EB7t t\xEAn")}</b>? H\xECnh ch\u01B0a l\u01B0u t\u1EC7p s\u1EBD m\u1EA5t.`, "\u0110\xF3ng")) return;
+      this.stashTab();
+      const cur = this.tabIdx;
+      this.tabs.splice(i, 1);
+      if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null });
+      const next = i < cur ? cur - 1 : i === cur ? Math.min(i, this.tabs.length - 1) : cur;
+      this.showTab(next);
+    }
+    /** Mở hình (tệp, ví dụ, link): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. */
+    openDoc(doc) {
+      if (!this.doc.steps.length && !(this.doc.images || []).length) this.loadDoc(doc);
+      else this.newTab(doc);
     }
     pushUndo(snapshot) {
       this.undoStack.push(snapshot);
@@ -3377,6 +3595,7 @@
     }
     afterChange() {
       for (const id of [...this.selection]) if (!stepById(this.doc, id)) this.selection.delete(id);
+      if (this.imageSel && (this.selection.size || !(this.doc.images || []).some((im) => im.id === this.imageSel))) this.imageSel = null;
       if (this.relation && !this.relation.ids.every((id) => stepById(this.doc, id))) {
         this.relation = null;
         this.highlight.clear();
@@ -3442,7 +3661,9 @@
         theme: this.theme,
         visible: this.visibleSet(),
         selected: this.mode === "present" ? /* @__PURE__ */ new Set() : this.selection,
-        highlight: this.highlight
+        highlight: this.highlight,
+        images: this.images,
+        imageSel: this.mode === "present" ? null : this.imageSel
       });
       this.renderer.clearExtra();
       this.drawRelationOverlay?.();
@@ -3890,9 +4111,18 @@
         if (this.mode === "edit") this.select(h.id, e.shiftKey);
         return;
       }
+      const imh = this.mode === "edit" ? this.imageAt(sx, sy) : null;
+      if (imh) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (this.imageSel !== imh.id) this.selectImage(imh.id);
+        this.startImageDrag(e, imh.id, imh.handle);
+        return;
+      }
       e.preventDefault();
-      if (this.mode === "edit" && this.selection.size && !e.shiftKey) {
+      if (this.mode === "edit" && (this.selection.size || this.imageSel) && !e.shiftKey) {
         this.selection.clear();
+        this.imageSel = null;
         this.refresh();
       }
       this.startPan(e);
@@ -3954,6 +4184,7 @@
       window.addEventListener("pointercancel", up, true);
     }
     select(id, additive = false, rerender = true) {
+      this.imageSel = null;
       if (additive) {
         if (this.selection.has(id)) this.selection.delete(id);
         else this.selection.add(id);
@@ -4150,6 +4381,7 @@
         if (v.kind === "point") pts.push(v);
         if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
       }
+      for (const im of this.doc.images || []) pts.push({ x: im.x, y: im.y }, { x: im.x + im.w, y: im.y - im.h });
       if (!pts.length) return this.view.setBoundingBox([-8, 6, 8, -6]);
       const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
       let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
@@ -4207,6 +4439,7 @@
           else if (this.toolId !== "move") this.setTool("move");
           else {
             this.selection.clear();
+            this.imageSel = null;
             this.setRelation(null);
           }
         } else if (e.key === "Enter" && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === "...point") {
@@ -4214,6 +4447,9 @@
         } else if ((e.key === "Delete" || e.key === "Backspace") && this.selection.size) {
           e.preventDefault();
           this.deleteSteps([...this.selection]);
+        } else if ((e.key === "Delete" || e.key === "Backspace") && this.imageSel) {
+          e.preventDefault();
+          this.deleteImage(this.imageSel);
         }
       });
       document.addEventListener("fullscreenchange", () => {
@@ -4477,13 +4713,13 @@
         if (this.projector) this.setProjector(false);
         this.setMode("edit");
       });
-      on("btn-new", async () => {
-        if (this.doc.steps.length && !await confirmDialog("H\xECnh m\u1EDBi", "Xo\xE1 h\xECnh hi\u1EC7n t\u1EA1i \u0111\u1EC3 b\u1EAFt \u0111\u1EA7u h\xECnh m\u1EDBi? (C\xF3 th\u1EC3 ho\xE0n t\xE1c b\u1EB1ng Ctrl+Z.)", "H\xECnh m\u1EDBi")) return;
+      on("btn-new", () => this.newTab());
+      on("btn-unlock-images", () => {
+        if (!(this.doc.images || []).some((im) => im.locked)) return toast("Kh\xF4ng c\xF3 \u1EA3nh n\xE0o \u0111ang kho\xE1");
         this.commit((doc) => {
-          doc.steps = [];
-          doc.title = "";
+          for (const im of doc.images) delete im.locked;
         });
-        this.view.setBoundingBox([-8, 6, 8, -6]);
+        toast("\u0110\xE3 m\u1EDF kho\xE1 c\xE1c \u1EA3nh \u2013 b\u1EA5m v\xE0o \u1EA3nh \u0111\u1EC3 d\u1EDDi, \u0111\u1ED5i c\u1EE1");
       });
     }
   };
@@ -4750,6 +4986,8 @@
     const out = { format: doc.format, version: doc.version };
     if (doc.title) out.title = doc.title;
     if (doc.view) out.view = doc.view;
+    if (doc.images && doc.images.length) out.images = doc.images;
+    if (doc.imageData && Object.keys(doc.imageData).length) out.imageData = doc.imageData;
     out.steps = doc.steps.map((s) => {
       const t = { id: s.id, type: s.type, args: s.args };
       for (const k of ["params", "name", "style", "hidden", "joinPrev"]) {
@@ -4797,26 +5035,48 @@
 
   // src/ui/share.js
   var DRAFT_KEY = "hinh-hoc-dong:nhap";
-  function docWithView(app) {
-    const bb = app.view.getBoundingBox().map((v) => Math.round(v * 1e3) / 1e3);
-    return { ...app.doc, view: { bbox: bb } };
+  var TABS_KEY = "hinh-hoc-dong:nhap-tab";
+  var roundBox = (bb) => bb.map((v) => Math.round(v * 1e3) / 1e3);
+  function docWithView(app, withImages = true) {
+    const doc = { ...app.doc, view: { bbox: roundBox(app.view.getBoundingBox()) } };
+    return withImages ? app.withImageData(doc) : doc;
   }
+  var draftWarned = false;
   function saveDraft(app) {
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(docWithView(app)));
+      app.stashTab();
+      const tabs = app.tabs.map((t, i) => app.withImageData(i === app.tabIdx ? docWithView(app, false) : { ...t.doc, ...t.bbox ? { view: { bbox: roundBox(t.bbox) } } : {} }));
+      localStorage.setItem(TABS_KEY, JSON.stringify({ active: app.tabIdx, tabs }));
     } catch {
+      if (!draftWarned && app.tabs.some((t) => (t.doc.images || []).length)) {
+        draftWarned = true;
+        toast("Kh\xF4ng l\u01B0u nh\xE1p \u0111\u01B0\u1EE3c (\u1EA3nh qu\xE1 l\u1EDBn) \u2013 h\xE3y l\u01B0u t\u1EC7p (Ctrl+S)", 5e3);
+      }
     }
   }
   function loadDraft() {
     try {
-      const t = localStorage.getItem(DRAFT_KEY);
-      return t ? parseDocJSON(t) : null;
+      const t = localStorage.getItem(TABS_KEY);
+      if (t) {
+        const d = JSON.parse(t);
+        const tabs = (d.tabs || []).map((x) => {
+          try {
+            return parseDocJSON(JSON.stringify(x));
+          } catch {
+            return null;
+          }
+        }).filter(Boolean);
+        if (tabs.length) return { tabs, active: Math.min(Math.max(0, d.active | 0), tabs.length - 1) };
+      }
+      const old = localStorage.getItem(DRAFT_KEY);
+      return old ? { tabs: [parseDocJSON(old)], active: 0 } : null;
     } catch {
       return null;
     }
   }
   async function shareLink(app) {
-    const code = await encodeDoc(docWithView(app));
+    const code = await encodeDoc(docWithView(app, false));
+    if ((app.doc.images || []).length) toast("Link kh\xF4ng ch\u1EE9a \u1EA3nh \u0111\xE3 d\xE1n v\xE0o h\xECnh \u2013 mu\u1ED1n g\u1EEDi c\u1EA3 \u1EA3nh th\xEC l\u01B0u t\u1EC7p (Ctrl+S)", 6e3);
     const base = location.href.split("#")[0];
     const url = `${base}#h=${code}`;
     try {
@@ -4850,7 +5110,7 @@
       try {
         const doc = parseDocJSON(await f.text());
         if (!doc.title) doc.title = f.name.replace(/\.json$/i, "");
-        app.loadDoc(doc, { keepHistory: true });
+        app.openDoc(doc);
         if (!doc.view) app.zoomFit();
         toast(`\u0110\xE3 m\u1EDF "${f.name}"`);
       } catch (e) {
@@ -4866,23 +5126,25 @@
   var escapeBr = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
   async function initShare(app) {
     const m = /[#&]h=([A-Za-z0-9_-]+)/.exec(location.hash);
-    let loaded = false;
+    const d = loadDraft();
+    if (d && d.tabs.some((x) => x.steps.length || (x.images || []).length)) {
+      app.loadDoc(d.tabs[0]);
+      for (const x of d.tabs.slice(1)) app.newTab(x);
+      app.switchTab(d.active);
+      if (!m) toast("\u0110\xE3 kh\xF4i ph\u1EE5c " + (d.tabs.length > 1 ? `${d.tabs.length} h\xECnh \u0111ang m\u1EDF l\u1EA7n tr\u01B0\u1EDBc` : "b\u1EA3n nh\xE1p l\u1EA7n tr\u01B0\u1EDBc"));
+    }
     if (m) {
       try {
         const doc = await decodeDoc(m[1]);
-        app.loadDoc(doc);
-        if (!doc.view) app.zoomFit();
-        loaded = true;
+        const same = app.tabs.findIndex((t, i) => JSON.stringify((i === app.tabIdx ? app.doc : t.doc).steps) === JSON.stringify(doc.steps));
+        if (same >= 0) app.switchTab(same);
+        else {
+          app.openDoc(doc);
+          if (!doc.view) app.zoomFit();
+        }
         toast("\u0110\xE3 m\u1EDF h\xECnh t\u1EEB link");
       } catch (e) {
         toast(e.message, 5e3);
-      }
-    }
-    if (!loaded) {
-      const d = loadDraft();
-      if (d && d.steps.length) {
-        app.loadDoc(d);
-        toast("\u0110\xE3 kh\xF4i ph\u1EE5c b\u1EA3n nh\xE1p l\u1EA7n tr\u01B0\u1EDBc");
       }
     }
     let timer = null;
@@ -5089,7 +5351,7 @@
       this.tans = this.tans.map((pr) => pr.map((c) => c.t === "C" && c.i === j ? { t: "C", i } : c));
     }
     saturate() {
-      for (let round = 0; round < 20; round++) {
+      for (let round2 = 0; round2 < 20; round2++) {
         let changed = false;
         const perpOf = /* @__PURE__ */ new Map();
         for (const [x, y] of this.perps) {
@@ -5917,6 +6179,7 @@
     L.push(`% ${doc.title ? doc.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
     L.push("% C\u1EA7n trong ph\u1EA7n m\u1EDF \u0111\u1EA7u: \\usepackage{tikz}");
     L.push("% \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc h\xECnh: s\u1EEDa x=\u2026, y=\u2026 (\u0111\u01A1n v\u1ECB c\u1EE7a m\u1ED9t \xF4 to\u1EA1 \u0111\u1ED9).");
+    if (doc.images && doc.images.length) L.push(`% (${doc.images.length} \u1EA3nh d\xE1n v\xE0o h\xECnh kh\xF4ng \u0111\u01B0\u1EE3c xu\u1EA5t sang TikZ)`);
     L.push(`\\begin{tikzpicture}[x=${f3(unit2)}cm, y=${f3(unit2)}cm, line width=${f3(baseWidth * PT_PER_PX)}pt, line cap=round, line join=round]`);
     if (colorDefs.size) {
       L.push("  % M\xE0u");
@@ -11016,6 +11279,154 @@
   var DOCS = [imo2008_1_default, imo2010_2_default, imo2012_5_default, imo2013_4_default, imo2014_4_default, imo2015_4_default, imo2017_4_default, imo2018_1_default, imo2019_6_default, imo2021_4_default, imo2023_2_default, imo2024_4_default, imo2025_2_default, vmo2014_4_default, vmo2016_3_default, noi_bang_tiep_default, euler_feuerbach_default, mixtilinear_default, nghich_dao_bc_default, brocard_default, monge_default, dong_dang_xoan_default, hinh_day_default];
   var THU_VIEN = muc_luc_default.map((m, i) => ({ ...m, doc: DOCS[i] }));
 
+  // src/ui/tabbar.js
+  function setupTabBar(app) {
+    const host = document.getElementById("tabbar");
+    if (!host) return;
+    const label = (doc, i) => doc.title || `H\xECnh ${i + 1}`;
+    const render = () => {
+      if (host.querySelector("input")) return;
+      host.innerHTML = app.tabs.map((t, i) => {
+        const doc = i === app.tabIdx ? app.doc : t.doc;
+        return `<div class="dtab${i === app.tabIdx ? " active" : ""}" data-tab="${i}" title="${escapeHTML(label(doc, i))}${i === app.tabIdx ? " \u2013 nh\xE1y \u0111\xFAp \u0111\u1EC3 \u0111\u1EB7t t\xEAn" : ""}">
+        <span class="dt-name">${escapeHTML(label(doc, i))}</span><button class="dt-x" data-close="${i}" title="\u0110\xF3ng h\xECnh">\u2715</button></div>`;
+      }).join("") + '<button id="tab-new" class="dt-new" title="H\xECnh m\u1EDBi (tab m\u1EDBi)">\uFF0B</button>';
+      host.querySelector(".dtab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+    app.renderTabs = render;
+    app.on("change", render);
+    app.on("load", render);
+    host.addEventListener("click", (e) => {
+      const x = e.target.closest("[data-close]");
+      if (x) {
+        e.stopPropagation();
+        app.closeTab(+x.dataset.close);
+        return;
+      }
+      if (e.target.closest("#tab-new")) {
+        app.newTab();
+        return;
+      }
+      const t = e.target.closest("[data-tab]");
+      if (t) app.switchTab(+t.dataset.tab);
+    });
+    host.addEventListener("dblclick", (e) => {
+      const t = e.target.closest(".dtab.active");
+      if (!t) return;
+      const name = t.querySelector(".dt-name");
+      const inp = document.createElement("input");
+      inp.className = "dt-input";
+      inp.value = app.doc.title || "";
+      inp.placeholder = "T\xEAn h\xECnh\u2026";
+      name.replaceWith(inp);
+      inp.focus();
+      inp.select();
+      let done = false;
+      const finish = (save) => {
+        if (done) return;
+        done = true;
+        const v = inp.value.trim();
+        inp.remove();
+        if (save && v !== (app.doc.title || "")) app.commit((doc) => {
+          doc.title = v;
+        });
+        render();
+      };
+      inp.addEventListener("keydown", (ev) => {
+        ev.stopPropagation();
+        if (ev.key === "Enter") finish(true);
+        else if (ev.key === "Escape") finish(false);
+      });
+      inp.addEventListener("blur", () => finish(true));
+    });
+    render();
+  }
+
+  // src/ui/images.js
+  var MAX_SIDE = 1600;
+  function setupImages(app) {
+    document.addEventListener("paste", (e) => {
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || document.querySelector(".modal-back")) return;
+      const item = [...e.clipboardData?.items || []].find((it) => it.kind === "file" && it.type.startsWith("image/"));
+      if (!item) return;
+      e.preventDefault();
+      insertImageFile(app, item.getAsFile());
+    });
+    const stage = document.getElementById("stage");
+    stage.addEventListener("dragover", (e) => {
+      if ([...e.dataTransfer?.items || []].some((it) => it.kind === "file")) e.preventDefault();
+    });
+    stage.addEventListener("drop", (e) => {
+      const files = [...e.dataTransfer?.files || []].filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+      e.preventDefault();
+      const r = app.view.canvas.getBoundingClientRect();
+      files.forEach((f, i) => insertImageFile(app, f, { sx: e.clientX - r.left + 24 * i, sy: e.clientY - r.top + 24 * i }));
+    });
+    const btn = document.getElementById("btn-image");
+    if (btn) btn.onclick = () => {
+      const inp = document.createElement("input");
+      inp.type = "file";
+      inp.accept = "image/*";
+      inp.onchange = () => {
+        if (inp.files[0]) insertImageFile(app, inp.files[0]);
+      };
+      inp.click();
+    };
+  }
+  var readURL = (file) => new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+  var loadImg = (src) => new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error("Kh\xF4ng \u0111\u1ECDc \u0111\u01B0\u1EE3c \u1EA3nh"));
+    im.src = src;
+  });
+  async function insertImageFile(app, file, at = null) {
+    let src, img;
+    try {
+      src = await readURL(file);
+      img = await loadImg(src);
+    } catch {
+      toast("Kh\xF4ng \u0111\u1ECDc \u0111\u01B0\u1EE3c \u1EA3nh n\xE0y");
+      return null;
+    }
+    let w = img.naturalWidth, h = img.naturalHeight;
+    if (Math.max(w, h) > MAX_SIDE) {
+      const k = MAX_SIDE / Math.max(w, h);
+      w = Math.round(w * k);
+      h = Math.round(h * k);
+      const cv = document.createElement("canvas");
+      cv.width = w;
+      cv.height = h;
+      cv.getContext("2d").drawImage(img, 0, 0, w, h);
+      src = file.type === "image/png" ? cv.toDataURL("image/png") : cv.toDataURL("image/jpeg", 0.9);
+    }
+    return insertImageData(app, src, w, h, at);
+  }
+  function insertImageData(app, src, w, h, at = null) {
+    const v = app.view;
+    const f = Math.min(1, 0.6 * v.W / w, 0.6 * v.H / h);
+    const sw = w * f, sh = h * f;
+    const c = at || { sx: v.W / 2, sy: v.H / 2 };
+    const tl = app.toUser(c.sx - sw / 2, c.sy - sh / 2);
+    const id = "img" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    app.registerImage(id, src);
+    app.commit((doc) => {
+      (doc.images || (doc.images = [])).push({ id, x: round(tl.x), y: round(tl.y), w: round(sw / v.scale), h: round(sh / v.scale) });
+    });
+    if (app.toolId !== "move") app.setTool("move");
+    app.selectImage(id);
+    toast('\u0110\xE3 ch\xE8n \u1EA3nh \u2013 k\xE9o \u0111\u1EC3 d\u1EDDi, k\xE9o g\xF3c d\u01B0\u1EDBi ph\u1EA3i \u0111\u1EC3 \u0111\u1ED5i c\u1EE1; "Kho\xE1 l\xE0m n\u1EC1n" \u0111\u1EC3 \u0111\u1ED3 h\xECnh l\xEAn tr\xEAn', 5e3);
+    return id;
+  }
+  var round = (x) => Math.round(x * 1e4) / 1e4;
+
   // src/ui/main.js
   function start() {
     const app = new App();
@@ -11042,13 +11453,13 @@
       if (!ex) return;
       const doc = ex.build();
       doc.title = ex.title;
-      app.loadDoc(doc, { keepHistory: true });
+      app.openDoc(doc);
       app.zoomFit();
     };
     app.loadLibrary = (id) => {
       const e = THU_VIEN.find((x) => x.id === id);
       if (!e) return;
-      app.loadDoc(JSON.parse(JSON.stringify(e.doc)), { keepHistory: true });
+      app.openDoc(e.doc);
       app.zoomFit();
       toast(`${e.ten}. ${e.de}`, 9e3);
     };
@@ -11071,13 +11482,8 @@
     document.getElementById("btn-share").onclick = () => shareLink(app);
     document.getElementById("btn-save").onclick = () => saveFile(app);
     document.getElementById("btn-open").onclick = () => openFile(app);
-    const title = document.getElementById("doc-title");
-    app.on("change", () => {
-      if (document.activeElement !== title) title.value = app.doc.title || "";
-    });
-    title.onchange = () => app.commit((doc) => {
-      doc.title = title.value.trim();
-    });
+    setupTabBar(app);
+    setupImages(app);
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
@@ -11088,9 +11494,7 @@
         openFile(app);
       }
     });
-    initShare(app).then(() => {
-      title.value = app.doc.title || "";
-    });
+    initShare(app).then(() => app.renderTabs());
     window.__app = app;
     window.GeoCore = { ...core_exports, Builder, EXAMPLES, THU_VIEN, codec: codec_exports, explore, toTikZ };
     return app;
