@@ -47,3 +47,13 @@ export async function downloadFile(filename, data, mime = 'application/octet-str
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   return true;
 }
+
+/** Tải tệp .tex và các ảnh đi kèm (lần lượt, cách nhau một chút để trình duyệt không chặn nhiều tệp). */
+export async function downloadTex(base, tex, files) {
+  if (!(await downloadFile(base + '.tex', tex, 'application/x-tex'))) return;
+  for (const f of files) {
+    await new Promise((r) => setTimeout(r, 300));
+    await downloadFile(f.name, f.dataURL);
+  }
+  toast(files.length ? `Đã tải ${base}.tex và ${files.length} ảnh (để cùng thư mục rồi biên dịch bằng pdflatex)` : `Đã tải ${base}.tex (biên dịch bằng pdflatex)`, 6000);
+}

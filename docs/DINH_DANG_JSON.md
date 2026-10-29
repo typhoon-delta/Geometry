@@ -47,6 +47,18 @@ khám phá, xuất TikZ, và các công cụ dòng lệnh trong `scripts/`.
 Kiểu đối số: `point`, `line` (gồm đường thẳng, đoạn, tia), `circle`, `curve` (đường thẳng hoặc đường tròn),
 `obj` (điểm/đường thẳng/đường tròn), `pl` (điểm hoặc đường thẳng), `...point` (≥ 3 điểm).
 
+## Tệp nhiều hình (bản 1.5)
+
+*Tệp › Lưu tất cả các tab* ghi một tệp gồm nhiều hình:
+
+```json
+{"format": "hinh-hoc-dong-bo", "version": 1, "title": "Các hình ngày 2026-10-29", "active": 1,
+ "tabs": [ {…một hình như trên, có view và imageData…}, … ]}
+```
+
+`active` là chỉ số tab đang mở lúc lưu. *Mở tệp* nhận cả hai loại. Kho bài trên GitHub dùng định dạng riêng (một thư mục
+cho mỗi bài, ảnh tách tệp) – xem [`KHO_BAI.md`](KHO_BAI.md).
+
 ## Các loại bước
 
 ### Điểm

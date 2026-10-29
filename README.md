@@ -19,7 +19,11 @@ mạng: bộ vẽ canvas tự viết, toàn bộ mã nằm trong `dist/app.js`).
   công thức LaTeX hiển thị ngay (KaTeX, chạy offline), bộ soạn gõ nhanh (tự đổi `goc` → ∠, gõ tắt `;cm` + Tab…),
   lời giải chia **bước** hiện dần khi trình bày, rê chuột lên tên điểm trong công thức thì điểm sáng lên trên hình.
   Xuất **phiếu LaTeX** (đề + hình TikZ + lời giải).
-* Chia sẻ bằng link, lưu/mở tệp `.json`, tự lưu nháp (mọi tab).
+* **Kho bài tập** trên GitHub (bản 1.5): một repo riêng tư của thầy/cô; `Ctrl+S` lưu bài (tên, nguồn, chủ đề, thẻ, độ
+  khó), `Ctrl+K` tìm và mở lại ở máy nào cũng được, **buổi dạy** (mở một lần đủ các bài, xuất phiếu cho cả buổi), giữ
+  lịch sử mọi lần sửa, mất mạng thì tự lưu sau – xem [`docs/KHO_BAI.md`](docs/KHO_BAI.md).
+* Chia sẻ bằng link, lưu/mở tệp `.json` (một hình hoặc **mọi tab trong một tệp**), tự lưu nháp mọi tab kèm lịch sử để
+  khôi phục.
 * **Khám phá**: tự tìm các quan hệ ẩn (thẳng hàng, đồng viên, đồng quy, tiếp xúc…).
 * Xuất mã **TikZ** để dán vào LaTeX.
 * **Phòng thí nghiệm** (`lab/`, Python, chạy trên máy cá nhân): tự khám phá qua đêm các sự kiện hình học "lạ"
@@ -143,13 +147,38 @@ trên máy chiếu. Thoát: `Esc` hoặc nút ✕ ở góc trên.
 ### Lưu và chia sẻ
 
 * *Tệp › Chia sẻ bằng link*: toàn bộ hình được nén vào chính đường link – gửi link là người nhận mở ra đúng hình.
-* *Tệp › Lưu tệp* (`Ctrl+S`): tải về tệp `.json`. *Tệp › Mở tệp* (`Ctrl+O`): mở lại tệp đó.
-* Các hình đang mở (mọi tab, kèm ảnh) được **tự lưu nháp** trong trình duyệt và khôi phục khi mở lại trang. Ảnh rất
-  lớn có thể vượt dung lượng lưu nháp – khi đó chương trình nhắc lưu tệp.
+* *Tệp › Lưu hình này ra tệp* (`Ctrl+S` khi chưa kết nối kho): tải về tệp `.json` của tab đang mở.
+  *Tệp › Lưu tất cả các tab* (`Ctrl+Shift+S`): mọi tab vào **một** tệp (giữ thứ tự, tab đang mở, chỗ đang phóng to,
+  khung chữ, ảnh). *Tệp › Mở tệp* (`Ctrl+O`, chọn được nhiều tệp) hoặc **kéo thả** tệp `.json` vào bảng vẽ: tệp nhiều tab
+  mở ra đủ các tab; hình đang mở rồi thì không mở trùng.
+* Tab có thay đổi chưa lưu (ra tệp hoặc kho) có **chấm cam** cạnh tên. Đóng tab đã lưu thì không hỏi; lỡ đóng thì
+  *Tệp › Mở lại hình vừa đóng*.
+* Các hình đang mở (mọi tab, kèm ảnh) được **tự lưu nháp** trong trình duyệt và khôi phục khi mở lại trang (ảnh lớn
+  lưu trong IndexedDB, chứa được hàng trăm MB). Chương trình tự chụp lại các hình 5 phút một lần (12 bản gần nhất):
+  *Tệp › Khôi phục bản nháp cũ…* mở lại các hình của một mốc giờ thành tab mới.
+* **Kho bài** (repo GitHub riêng tư): xem mục *Kho bài tập* dưới đây.
 * Menu **Ví dụ**: 13 bài IMO (2008–2025), 2 bài VMO, 7 cấu hình hay gặp (bổ đề tâm nội tiếp – bàng tiếp, Feuerbach,
   mixtilinear, nghịch đảo √(bc), Brocard, Monge, đồng dạng xoắn), một hình dày với I_A, I_B, I_C; cùng các hình mẫu
   cũ. Rê chuột lên tên bài để xem đề tóm tắt. Các hình được dựng qua giao diện trong đợt dùng thử bản 1.2 và đã kiểm
   chứng kết luận bằng số; tệp JSON ở `examples/thu-vien/`.
+
+### Kho bài tập (bản 1.5)
+
+Lưu bài lên một **repo GitHub riêng tư** của thầy/cô để mở lại ở máy nào cũng được và hệ thống thành bài tập. Cài đặt
+một lần: tạo repo Private + một token chỉ có quyền với repo đó, rồi bấm **Kết nối kho bài** trên thanh trên (hướng dẫn
+từng bước hiện ngay trong hộp kết nối và ở [`docs/KHO_BAI.md`](docs/KHO_BAI.md)).
+
+* `Ctrl+S`: lưu bài vào kho. Lần đầu hỏi **tên, nguồn** (kỳ thi – năm – bài, tự điền khi tên tab dạng "VMO 2016 – Bài 4",
+  hoặc *Tự ra*), **chủ đề** (danh sách sửa được), **kỹ thuật/thẻ**, **độ khó** 1–5, ghi chú riêng; các lần sau lưu
+  thẳng. Bài nhiều ý: lưu hình thứ hai bằng *Thêm làm hình phụ của bài có sẵn*.
+* `Ctrl+K`: cửa sổ kho – ảnh thu nhỏ từng bài, ô tìm (không cần dấu, tìm cả chữ trong đề/lời giải), lọc theo chủ đề,
+  nguồn, độ khó, trạng thái (mới có đề / có hình / có lời giải), đã dạy hay chưa; bấm một bài để mở thành tab.
+* **Buổi dạy**: *Kho › Lưu các tab đang mở thành buổi dạy…* (như 6 bài trên lớp hôm đó) hoặc chọn nhiều bài trong cửa
+  sổ kho. Mở buổi là mở đủ các bài; xuất **phiếu LaTeX cho cả buổi** (chỉ đề, hoặc kèm lời giải).
+* Mỗi lần lưu là một phiên bản: nút ⋯ trên thẻ bài › *Các phiên bản cũ…*. *Kho › Nhập tệp vào kho…* đưa các tệp `.json`
+  cũ (hoặc các bài ví dụ) vào kho một lượt.
+* Mất mạng: lần lưu được giữ lại trong máy, nút kho báo *Chưa đồng bộ*, có mạng tự lưu lên. Bài trên kho bị sửa ở máy
+  khác: chương trình hỏi trước khi ghi đè.
 
 ### Khung chữ: đề bài, lời giải, ghi chú (bản 1.4)
 
@@ -241,7 +270,10 @@ LaTeX. Chỉ cần `\usepackage{tikz}`. Đổi kích thước bằng cách sửa
 | `Ctrl+H` / `Ctrl+Shift+H` | Ẩn đối tượng đang chọn / hiện lại mọi đối tượng đã ẩn |
 | `Esc` | Huỷ thao tác / bỏ chọn / thoát trình chiếu |
 | `Enter` | Kết thúc miền đa giác |
-| `Ctrl+S` / `Ctrl+O` | Lưu / mở tệp |
+| `Ctrl+S` | Lưu vào kho (đã kết nối kho) / lưu hình ra tệp (chưa kết nối) |
+| `Ctrl+Shift+S` | Lưu tất cả các tab vào một tệp |
+| `Ctrl+O` | Mở tệp (một hoặc nhiều; kéo thả tệp `.json` cũng được) |
+| `Ctrl+K` | Mở kho bài: tìm, lọc, mở bài và buổi dạy |
 | `←` `→` `PageUp` `PageDown` `Home` `End` | Chuyển khung khi trình bày |
 
 ## 3. Cấu trúc mã nguồn
@@ -256,7 +288,8 @@ src/export/tikz.js    xuất TikZ; src/export/latex.js: phiếu LaTeX (đề + T
 src/text/             KHUNG CHỮ: markup.js (chữ + công thức, chia bước, gắn tên điểm, sang LaTeX), snippets.js (gõ tắt,
                       tự đổi), editor.js (bộ soạn CodeMirror)
 css/style.css         giao diện; css/katex.css: CSS + phông KaTeX nhúng sẵn (sinh bằng scripts/katex-css.mjs)
-src/io/codec.js       mã hoá hình vào URL
+src/io/codec.js       mã hoá hình vào URL; src/io/idb.js: lưu trữ IndexedDB (bản nháp, hàng chờ kho)
+src/kho/              KHO BÀI trên GitHub: github.js (API), kho.js (định dạng, mục lục, tìm kiếm), ui.js, thumb.js
 src/ui/               GIAO DIỆN: view.js + render.js (bộ vẽ canvas), tools.js (công cụ cơ bản),
                       library.js (menu Công cụ), textboxes.js (khung chữ), app.js, panels.js…
 src/core/thu-vien.js  mục lục thư viện ví dụ (tự sinh, nhập các tệp examples/thu-vien/*.json)
@@ -269,6 +302,7 @@ tests/                test lõi, khám phá, TikZ, từng công cụ trong menu,
                       test trình duyệt và test hiệu năng (Playwright);
                       tests/browser/dung-thu/: "người dùng ảo" dựng 23 bài qua giao diện (bản 1.2)
 docs/DINH_DANG_JSON.md  đặc tả định dạng JSON, gợi ý dịch sang Newclid/AlphaGeometry
+docs/KHO_BAI.md       kho bài tập: cài đặt, cách dùng, cấu trúc repo kho
 ```
 
 Phát triển (cần Node.js ≥ 18):

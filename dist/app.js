@@ -18282,6 +18282,14 @@
     }, 1500);
     return true;
   }
+  async function downloadTex(base2, tex, files) {
+    if (!await downloadFile(base2 + ".tex", tex, "application/x-tex")) return;
+    for (const f of files) {
+      await new Promise((r) => setTimeout(r, 300));
+      await downloadFile(f.name, f.dataURL);
+    }
+    toast(files.length ? `\u0110\xE3 t\u1EA3i ${base2}.tex v\xE0 ${files.length} \u1EA3nh (\u0111\u1EC3 c\xF9ng th\u01B0 m\u1EE5c r\u1ED3i bi\xEAn d\u1ECBch b\u1EB1ng pdflatex)` : `\u0110\xE3 t\u1EA3i ${base2}.tex (bi\xEAn d\u1ECBch b\u1EB1ng pdflatex)`, 6e3);
+  }
 
   // src/ui/share.js
   var DRAFT_KEY = "hinh-hoc-dong:nhap";
@@ -20283,6 +20291,1761 @@
     validate: () => validate
   });
 
+  // src/kho/github.js
+  var KhoError = class extends Error {
+    /** code: 'offline' | 'auth' | 'notfound' | 'moved' | 'conflict' | 'empty' | 'http' */
+    constructor(code, message, extra = {}) {
+      super(message);
+      this.code = code;
+      Object.assign(this, extra);
+    }
+  };
+  function bytesToBase64(bytes) {
+    let s = "";
+    for (let i = 0; i < bytes.length; i += 32768) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+    return btoa(s);
+  }
+  function base64ToBytes(b64) {
+    const bin2 = atob(String(b64).replace(/\s+/g, ""));
+    const out = new Uint8Array(bin2.length);
+    for (let i = 0; i < bin2.length; i++) out[i] = bin2.charCodeAt(i);
+    return out;
+  }
+  var textToBytes = (t2) => new TextEncoder().encode(t2);
+  var bytesToText = (b) => new TextDecoder().decode(b);
+  async function gitBlobSha(bytes) {
+    const subtle = globalThis.crypto && globalThis.crypto.subtle;
+    if (!subtle) return null;
+    const head = textToBytes(`blob ${bytes.length}\0`);
+    const all = new Uint8Array(head.length + bytes.length);
+    all.set(head);
+    all.set(bytes, head.length);
+    const h = new Uint8Array(await subtle.digest("SHA-1", all));
+    return [...h].map((x) => x.toString(16).padStart(2, "0")).join("");
+  }
+  var encPath = (p) => p.split("/").map(encodeURIComponent).join("/");
+  var GitHubRepo = class {
+    /** repo: "chủ/tên", token: mã truy cập (fine-grained), fetchFn: để test. */
+    constructor({ repo, token, api = "https://api.github.com", fetchFn = null }) {
+      this.repo = repo;
+      this.token = token;
+      this.api = api;
+      this.fetch = fetchFn || ((...a) => globalThis.fetch(...a));
+      this.branch = null;
+    }
+    async req(method, path2, body) {
+      let res;
+      try {
+        res = await this.fetch(this.api + path2, {
+          method,
+          headers: {
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            ...this.token ? { Authorization: `Bearer ${this.token}` } : {},
+            ...body ? { "Content-Type": "application/json" } : {}
+          },
+          body: body ? JSON.stringify(body) : void 0,
+          cache: "no-store"
+        });
+      } catch {
+        throw new KhoError("offline", "Kh\xF4ng k\u1EBFt n\u1ED1i \u0111\u01B0\u1EE3c GitHub (m\u1EA5t m\u1EA1ng?)");
+      }
+      let data = null;
+      const text2 = await res.text();
+      try {
+        data = text2 ? JSON.parse(text2) : null;
+      } catch {
+        data = text2;
+      }
+      if (res.ok) return data;
+      const msg = data && data.message || `HTTP ${res.status}`;
+      if (res.status === 401) throw new KhoError("auth", "Token kh\xF4ng \u0111\xFAng ho\u1EB7c \u0111\xE3 h\u1EBFt h\u1EA1n", { status: 401 });
+      if (res.status === 403 && /rate limit/i.test(msg)) throw new KhoError("http", "GitHub t\u1EA1m gi\u1EDBi h\u1EA1n s\u1ED1 l\u1EA7n g\u1ECDi \u2013 \u0111\u1EE3i v\xE0i ph\xFAt", { status: 403 });
+      if (res.status === 403) throw new KhoError("auth", "Token kh\xF4ng c\xF3 quy\u1EC1n ghi v\xE0o repo n\xE0y (c\u1EA7n quy\u1EC1n Contents: Read and write)", { status: 403 });
+      if (res.status === 404) throw new KhoError("notfound", msg, { status: 404 });
+      if (res.status === 409 && /empty/i.test(msg)) throw new KhoError("empty", "Repo \u0111ang tr\u1ED1ng", { status: 409 });
+      if (res.status === 422 && /fast forward|not a fast-forward|Update is not a fast forward/i.test(msg)) throw new KhoError("moved", "Kho v\u1EEBa \u0111\u01B0\u1EE3c c\u1EADp nh\u1EADt t\u1EEB n\u01A1i kh\xE1c", { status: 422 });
+      throw new KhoError("http", `GitHub b\xE1o l\u1ED7i: ${msg}`, { status: res.status });
+    }
+    /** Thông tin repo: {private, default_branch, permissions}. */
+    async info() {
+      const r = await this.req("GET", `/repos/${this.repo}`);
+      this.branch = r.default_branch || "main";
+      return r;
+    }
+    /** Commit mới nhất của nhánh chính; null nếu repo còn trống. */
+    async head() {
+      if (!this.branch) await this.info();
+      try {
+        const r = await this.req("GET", `/repos/${this.repo}/git/ref/heads/${encodeURIComponent(this.branch)}`);
+        return r.object.sha;
+      } catch (e) {
+        if (e.code === "notfound" || e.code === "empty") return null;
+        throw e;
+      }
+    }
+    /** Đọc một tệp tại commit ref → {sha, bytes} hoặc null nếu không có. */
+    async readFile(path2, ref) {
+      let r;
+      try {
+        r = await this.req("GET", `/repos/${this.repo}/contents/${encPath(path2)}${ref ? `?ref=${ref}` : ""}`);
+      } catch (e) {
+        if (e.code === "notfound") return null;
+        throw e;
+      }
+      if (Array.isArray(r)) throw new KhoError("http", `${path2} l\xE0 th\u01B0 m\u1EE5c`);
+      if (r.content && r.encoding === "base64") return { sha: r.sha, bytes: base64ToBytes(r.content) };
+      return { sha: r.sha, bytes: await this.blob(r.sha) };
+    }
+    async readText(path2, ref) {
+      const f = await this.readFile(path2, ref);
+      return f ? { sha: f.sha, text: bytesToText(f.bytes) } : null;
+    }
+    async blob(sha) {
+      const r = await this.req("GET", `/repos/${this.repo}/git/blobs/${sha}`);
+      return base64ToBytes(r.content);
+    }
+    /** Liệt kê thư mục tại commit ref → [{name, path, sha, type}] ([] nếu không có). */
+    async listDir(path2, ref) {
+      try {
+        const r = await this.req("GET", `/repos/${this.repo}/contents/${encPath(path2)}${ref ? `?ref=${ref}` : ""}`);
+        return Array.isArray(r) ? r : [];
+      } catch (e) {
+        if (e.code === "notfound") return [];
+        throw e;
+      }
+    }
+    /** Tạo tệp đầu tiên cho repo còn trống (API git data không làm được việc này). */
+    async initEmpty(path2, text2, message) {
+      if (!this.branch) await this.info();
+      await this.req("PUT", `/repos/${this.repo}/contents/${encPath(path2)}`, { message, content: bytesToBase64(textToBytes(text2)), branch: this.branch });
+    }
+    /**
+     * Một commit gồm nhiều thay đổi, nối sau commit base:
+     *   changes: [{path, text} | {path, bytes} | {path, remove: true}]
+     * Trả về sha commit mới. Lỗi code 'moved' nếu nhánh đã đổi kể từ base (người gọi đọc lại rồi thử lại).
+     */
+    async commit(base2, changes, message) {
+      const baseCommit = await this.req("GET", `/repos/${this.repo}/git/commits/${base2}`);
+      const tree = [];
+      for (const c of changes) {
+        if (c.remove) tree.push({ path: c.path, mode: "100644", type: "blob", sha: null });
+        else if (c.text != null) tree.push({ path: c.path, mode: "100644", type: "blob", content: c.text });
+        else {
+          const b = await this.req("POST", `/repos/${this.repo}/git/blobs`, { content: bytesToBase64(c.bytes), encoding: "base64" });
+          tree.push({ path: c.path, mode: "100644", type: "blob", sha: b.sha });
+        }
+      }
+      const t2 = await this.req("POST", `/repos/${this.repo}/git/trees`, { base_tree: baseCommit.tree.sha, tree });
+      const cm = await this.req("POST", `/repos/${this.repo}/git/commits`, { message, tree: t2.sha, parents: [base2] });
+      await this.req("PATCH", `/repos/${this.repo}/git/refs/heads/${encodeURIComponent(this.branch)}`, { sha: cm.sha, force: false });
+      return cm.sha;
+    }
+    /** Các commit đụng tới một đường dẫn (mới nhất trước): [{sha, date, message}]. */
+    async history(path2, n = 30) {
+      if (!this.branch) await this.info();
+      const r = await this.req("GET", `/repos/${this.repo}/commits?path=${encodeURIComponent(path2)}&sha=${encodeURIComponent(this.branch)}&per_page=${n}`);
+      return (r || []).map((c) => ({ sha: c.sha, date: c.commit && c.commit.author && c.commit.author.date, message: c.commit && c.commit.message }));
+    }
+  };
+
+  // src/kho/kho.js
+  var DEFAULT_TOPICS = [
+    "Tam gi\xE1c v\xE0 c\xE1c \u0111i\u1EC3m, \u0111\u01B0\u1EDDng \u0111\u1EB7c bi\u1EC7t",
+    "G\xF3c, \u0111\u01B0\u1EDDng tr\xF2n, t\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp",
+    "Ph\u01B0\u01A1ng t\xEDch, tr\u1EE5c \u0111\u1EB3ng ph\u01B0\u01A1ng",
+    "\u0110\u01B0\u1EDDng tr\xF2n \u0111\u1EB7c bi\u1EC7t (Euler, mixtilinear, Apollonius\u2026)",
+    "\u0110\u1ED3ng quy, th\u1EB3ng h\xE0ng (Ceva, Menelaus, Pascal, Desargues\u2026)",
+    "T\u1EC9 s\u1ED1, h\xE0ng \u0111i\u1EC3m \u0111i\u1EC1u ho\xE0, c\u1EF1c \u2013 \u0111\u1ED1i c\u1EF1c",
+    "Ph\xE9p \u0111\u1ED1i x\u1EE9ng, quay, t\u1ECBnh ti\u1EBFn",
+    "V\u1ECB t\u1EF1, v\u1ECB t\u1EF1 quay, \u0111\u1ED3ng d\u1EA1ng",
+    "Ph\xE9p ngh\u1ECBch \u0111\u1EA3o",
+    "T\u1EE9 gi\xE1c to\xE0n ph\u1EA7n, \u0111i\u1EC3m Miquel, \u0111\u01B0\u1EDDng \u0111\u1ED1i trung",
+    "T\xEDnh to\xE1n: l\u01B0\u1EE3ng gi\xE1c, to\u1EA1 \u0111\u1ED9, vect\u01A1, s\u1ED1 ph\u1EE9c",
+    "B\u1EA5t \u0111\u1EB3ng th\u1EE9c, c\u1EF1c tr\u1ECB h\xECnh h\u1ECDc",
+    "Qu\u1EF9 t\xEDch, \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng c\u1ED1 \u0111\u1ECBnh",
+    "H\xECnh h\u1ECDc t\u1ED5 h\u1EE3p"
+  ];
+  var STATUS = { de: "M\u1EDBi c\xF3 \u0111\u1EC1", hinh: "C\xF3 h\xECnh", loigiai: "C\xF3 l\u1EDDi gi\u1EA3i" };
+  var INDEX = "muc-luc.json";
+  var TOPICS = "chu-de.json";
+  var baiPath = (ma) => `bai/${ma}/bai.json`;
+  var emptyIndex = () => ({ format: "kho-bai-muc-luc", version: 1, bai: {}, buoi: {} });
+  function slugify(s) {
+    return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "bai";
+  }
+  function newCode(meta2, taken) {
+    const n = meta2.nguon || {};
+    const base2 = n.ky ? slugify([n.ky, n.nam, n.so && `bai-${n.so}`].filter(Boolean).join(" ")) : slugify(meta2.ten);
+    let ma = base2, k = 2;
+    while (taken.has(ma)) ma = `${base2}-${k++}`;
+    return ma;
+  }
+  function cleanMeta(m = {}) {
+    const out = { ten: String(m.ten || "").trim() || "B\xE0i ch\u01B0a \u0111\u1EB7t t\xEAn" };
+    const n = m.nguon || {};
+    if (n.tuRa) out.nguon = { tuRa: true };
+    else if (n.ky || n.nam || n.so) out.nguon = { ...n.ky ? { ky: String(n.ky).trim() } : {}, ...n.nam ? { nam: +n.nam || String(n.nam).trim() } : {}, ...n.so ? { so: String(n.so).trim() } : {} };
+    const arr = (a) => [...new Set((a || []).map((x) => String(x).trim()).filter(Boolean))];
+    if (arr(m.chuDe).length) out.chuDe = arr(m.chuDe);
+    if (arr(m.the).length) out.the = arr(m.the);
+    if (m.doKho) out.doKho = Math.max(1, Math.min(5, m.doKho | 0));
+    if (m.ghiChu && String(m.ghiChu).trim()) out.ghiChu = String(m.ghiChu).trim();
+    return out;
+  }
+  function sourceLabel(n) {
+    if (!n) return "";
+    if (n.tuRa) return "T\u1EF1 ra";
+    return [n.ky, n.nam, n.so && `B\xE0i ${n.so}`].filter(Boolean).join(" \u2013 ");
+  }
+  var plain = (t2) => String(t2 || "").replace(/!\[\]\(img:[^)]*\)/g, " ").replace(/\\[a-zA-Z]+/g, " ").replace(/[$*{}_^\\]/g, " ").replace(/^\s*-{3,}.*$/gm, " ").replace(/\s+/g, " ").trim();
+  function statusOf(docs) {
+    const boxes = docs.flatMap((d) => d.boxes || []);
+    if (boxes.some((b) => b.role === "loigiai" && plain(b.text))) return "loigiai";
+    if (docs.some((d) => d.steps.length)) return "hinh";
+    return "de";
+  }
+  function indexEntry(meta2, docs, extra = {}) {
+    const boxes = docs.flatMap((d) => d.boxes || []);
+    const txt = (role) => boxes.filter((b) => b.role === role).map((b) => plain(b.text)).join(" ");
+    return {
+      ...cleanMeta(meta2),
+      trangThai: statusOf(docs),
+      soHinh: docs.length,
+      tom: (txt("de") + " | " + txt("loigiai")).slice(0, 600),
+      capNhat: (/* @__PURE__ */ new Date()).toISOString(),
+      ...extra
+    };
+  }
+  function imageIds(doc2) {
+    const ids = new Set((doc2.images || []).map((im) => im.id));
+    for (const b of doc2.boxes || []) for (const m of String(b.text || "").matchAll(/!\[\]\(img:([A-Za-z0-9_-]+)\)/g)) ids.add(m[1]);
+    return ids;
+  }
+  function dataURLParts(url) {
+    const m = /^data:(image\/[a-z+]+);base64,(.*)$/s.exec(url || "");
+    if (!m) return null;
+    const ext = m[1] === "image/jpeg" ? "jpg" : m[1] === "image/svg+xml" ? "svg" : m[1].split("/")[1];
+    return { mime: m[1], ext, bytes: base64ToBytes(m[2]) };
+  }
+  var MIME = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml" };
+  var Kho = class {
+    constructor(gh) {
+      this.gh = gh;
+      this.head = null;
+      this.index = emptyIndex();
+      this.topics = [...DEFAULT_TOPICS];
+      this.thumbCache = /* @__PURE__ */ new Map();
+    }
+    /** Kết nối: kiểm tra repo, tạo cấu trúc nếu repo trống, đọc mục lục + chủ đề. */
+    async open() {
+      const info = await this.gh.info();
+      this.info = info;
+      let head = await this.gh.head();
+      if (!head) {
+        await this.gh.initEmpty(INDEX, JSON.stringify(emptyIndex(), null, 1), "T\u1EA1o kho b\xE0i t\u1EADp");
+        head = await this.gh.head();
+        await this.load(head);
+        await this.saveTopics(this.topics);
+        return info;
+      }
+      await this.load(head);
+      return info;
+    }
+    async load(head) {
+      this.head = head || await this.gh.head();
+      const ix = await this.gh.readText(INDEX, this.head);
+      this.index = ix ? { ...emptyIndex(), ...JSON.parse(ix.text) } : emptyIndex();
+      const tp = await this.gh.readText(TOPICS, this.head);
+      this.topics = tp ? JSON.parse(tp.text).chuDe || [...DEFAULT_TOPICS] : [...DEFAULT_TOPICS];
+    }
+    /** Đọc lại kho (vd sau khi lưu ở máy khác). */
+    async refresh() {
+      const h = await this.gh.head();
+      if (h !== this.head) await this.load(h);
+      return this.index;
+    }
+    /**
+     * Chạy một lần ghi: build(fresh) đọc trạng thái mới nhất của kho (mục lục mới đọc lại) rồi trả về
+     * {changes, message, result}. Nhánh vừa đổi ở nơi khác (code 'moved') thì đọc lại và làm lại, tối đa 4 lần.
+     */
+    async write(build) {
+      for (let attempt = 0; ; attempt++) {
+        const head = await this.gh.head();
+        const ix = await this.gh.readText(INDEX, head);
+        const index = ix ? { ...emptyIndex(), ...JSON.parse(ix.text) } : emptyIndex();
+        const { changes, message, result } = await build({ head, index });
+        changes.push({ path: INDEX, text: JSON.stringify(index, null, 1) });
+        try {
+          const sha = await this.gh.commit(head, changes, message);
+          this.head = sha;
+          this.index = index;
+          return result;
+        } catch (e) {
+          if (e.code !== "moved" || attempt >= 3) throw e;
+        }
+      }
+    }
+    /** Thay đổi để ghi một bài (bài.json + ảnh mới + ảnh thu nhỏ); xoá ảnh không còn dùng. */
+    async baiChanges(ma, bai, imageData, thumb, prevAnh = {}) {
+      const changes = [];
+      const used = new Set(bai.hinh.flatMap((d) => [...imageIds(d)]));
+      const have = new Map(Object.entries(prevAnh).map(([id, rel2]) => [id, `bai/${ma}/${rel2}`]));
+      bai.anh = {};
+      for (const id of used) {
+        if (have.has(id)) {
+          bai.anh[id] = have.get(id).slice(`bai/${ma}/`.length);
+          continue;
+        }
+        const p = dataURLParts(imageData[id]);
+        if (!p) continue;
+        const path2 = `bai/${ma}/anh/${id}.${p.ext}`;
+        changes.push({ path: path2, bytes: p.bytes });
+        bai.anh[id] = path2.slice(`bai/${ma}/`.length);
+      }
+      for (const [id, path2] of have) if (!used.has(id)) changes.push({ path: path2, remove: true });
+      if (thumb) {
+        const p = dataURLParts(thumb);
+        if (p) changes.push({ path: `bai/${ma}/thu-nho.jpg`, bytes: p.bytes });
+      }
+      const text2 = JSON.stringify(bai, null, 1);
+      changes.push({ path: baiPath(ma), text: text2 });
+      return { changes, sha: await gitBlobSha(textToBytes(text2)) };
+    }
+    /**
+     * Lưu một hình vào kho.
+     *  - bài mới: {meta, doc, thumb} → tạo mã mới
+     *  - bài có sẵn: {ma, hinh: chỉ số hình (bỏ trống = thêm hình mới vào bài), meta?, doc, expectSha, thumb}
+     * doc có imageData (data URL các ảnh). expectSha: phiên bản bài.json lúc mở; khác phiên bản trên kho →
+     * KhoError 'conflict' (trừ khi force). Trả về {ma, hinh, sha}.
+     */
+    async saveDoc({ ma = null, hinh = null, meta: meta2 = null, doc: doc2, expectSha = null, thumb = null, force = false }) {
+      return this.write(async ({ head, index }) => {
+        let bai, code = ma, prevAnh = {};
+        if (code) {
+          const cur2 = await this.gh.readText(baiPath(code), head);
+          if (!cur2) throw new KhoError("notfound", "B\xE0i n\xE0y kh\xF4ng c\xF2n trong kho (\u0111\xE3 b\u1ECB xo\xE1?)");
+          if (expectSha && !force && cur2.sha !== expectSha) throw new KhoError("conflict", "B\xE0i \u0111\xE3 \u0111\u01B0\u1EE3c s\u1EEDa \u1EDF n\u01A1i kh\xE1c", { current: JSON.parse(cur2.text) });
+          bai = JSON.parse(cur2.text);
+          prevAnh = bai.anh || {};
+          if (meta2) bai.meta = cleanMeta(meta2);
+        } else {
+          bai = { format: "kho-bai", version: 1, meta: cleanMeta(meta2 || { ten: doc2.title }), hinh: [] };
+          code = newCode(bai.meta, new Set(Object.keys(index.bai)));
+          bai.ma = code;
+        }
+        const { imageData = {}, ...plainDoc } = doc2;
+        const at = hinh == null || hinh >= bai.hinh.length ? bai.hinh.length : hinh;
+        bai.hinh[at] = plainDoc;
+        bai.capNhat = (/* @__PURE__ */ new Date()).toISOString();
+        const { changes, sha } = await this.baiChanges(code, bai, imageData, at === 0 ? thumb : null, prevAnh);
+        index.bai[code] = indexEntry(bai.meta, bai.hinh, { thuNho: !!(thumb && at === 0) || !!(index.bai[code] && index.bai[code].thuNho) });
+        if (thumb && at === 0) this.thumbCache.set(code, thumb);
+        return { changes, message: `${ma ? "C\u1EADp nh\u1EADt" : "Th\xEAm"} b\xE0i: ${bai.meta.ten}`, result: { ma: code, hinh: at, sha } };
+      });
+    }
+    /** Nhập nhiều bài một lần (MỘT commit): items = [{meta, docs: [doc có imageData], thumb?}]. Trả về [mã]. */
+    async importMany(items) {
+      return this.write(async ({ index }) => {
+        const changes = [], codes = [];
+        const taken = new Set(Object.keys(index.bai));
+        for (const it of items) {
+          const meta2 = cleanMeta(it.meta);
+          const code = newCode(meta2, taken);
+          taken.add(code);
+          const imageData = Object.assign({}, ...it.docs.map((d) => d.imageData || {}));
+          const bai = { format: "kho-bai", version: 1, ma: code, meta: meta2, hinh: it.docs.map(({ imageData: _, ...d }) => d), capNhat: (/* @__PURE__ */ new Date()).toISOString() };
+          const r = await this.baiChanges(code, bai, imageData, it.thumb || null);
+          changes.push(...r.changes);
+          index.bai[code] = indexEntry(meta2, bai.hinh, { thuNho: !!it.thumb });
+          if (it.thumb) this.thumbCache.set(code, it.thumb);
+          codes.push(code);
+        }
+        return { changes, message: `Nh\u1EADp ${items.length} b\xE0i v\xE0o kho`, result: codes };
+      });
+    }
+    /** Sửa thông tin bài (không đụng hình). */
+    async updateMeta(ma, meta2) {
+      return this.write(async ({ head, index }) => {
+        const cur2 = await this.gh.readText(baiPath(ma), head);
+        if (!cur2) throw new KhoError("notfound", "B\xE0i n\xE0y kh\xF4ng c\xF2n trong kho");
+        const bai = JSON.parse(cur2.text);
+        bai.meta = cleanMeta(meta2);
+        const text2 = JSON.stringify(bai, null, 1);
+        index.bai[ma] = { ...index.bai[ma], ...indexEntry(bai.meta, bai.hinh, { thuNho: !!(index.bai[ma] && index.bai[ma].thuNho) }) };
+        return { changes: [{ path: baiPath(ma), text: text2 }], message: `S\u1EEDa th\xF4ng tin b\xE0i: ${bai.meta.ten}`, result: { sha: await gitBlobSha(textToBytes(text2)) } };
+      });
+    }
+    /** Mở bài (tại commit ref, mặc định mới nhất) → {ma, meta, sha, docs: [doc có imageData]}. */
+    async loadBai(ma, ref = null) {
+      const r = ref || this.head || await this.gh.head();
+      const cur2 = await this.gh.readText(baiPath(ma), r);
+      if (!cur2) throw new KhoError("notfound", "Kh\xF4ng t\xECm th\u1EA5y b\xE0i trong kho");
+      const bai = JSON.parse(cur2.text);
+      const imageData = {};
+      for (const [id, rel2] of Object.entries(bai.anh || {})) {
+        const f = await this.gh.readFile(`bai/${ma}/${rel2}`, r);
+        if (f) imageData[id] = `data:${MIME[rel2.split(".").pop()] || "image/png"};base64,${bytesToBase64(f.bytes)}`;
+      }
+      const docs = bai.hinh.map((d) => {
+        const ids = imageIds(d);
+        const own = {};
+        for (const id of ids) if (imageData[id]) own[id] = imageData[id];
+        return Object.keys(own).length ? { ...d, imageData: own } : { ...d };
+      });
+      return { ma, meta: bai.meta, sha: cur2.sha, docs };
+    }
+    /** Ảnh thu nhỏ (data URL) hoặc null. */
+    async thumb(ma) {
+      if (this.thumbCache.has(ma)) return this.thumbCache.get(ma);
+      if (!this.index.bai[ma] || !this.index.bai[ma].thuNho) return null;
+      const f = await this.gh.readFile(`bai/${ma}/thu-nho.jpg`, this.head);
+      const url = f ? `data:image/jpeg;base64,${bytesToBase64(f.bytes)}` : null;
+      this.thumbCache.set(ma, url);
+      return url;
+    }
+    /** Xoá bài (cả ảnh) và gỡ khỏi các buổi dạy. */
+    async deleteBai(ma) {
+      return this.write(async ({ head, index }) => {
+        const cur2 = await this.gh.readText(baiPath(ma), head);
+        const anh = cur2 ? JSON.parse(cur2.text).anh || {} : {};
+        const changes = [{ path: baiPath(ma), remove: true }, ...Object.values(anh).map((rel2) => ({ path: `bai/${ma}/${rel2}`, remove: true }))];
+        if (index.bai[ma] && index.bai[ma].thuNho) changes.push({ path: `bai/${ma}/thu-nho.jpg`, remove: true });
+        const ten = index.bai[ma] ? index.bai[ma].ten : ma;
+        delete index.bai[ma];
+        for (const [bm, b] of Object.entries(index.buoi)) {
+          if (!b.bai.includes(ma)) continue;
+          b.bai = b.bai.filter((x) => x !== ma);
+          changes.push({ path: `buoi/${bm}.json`, text: JSON.stringify({ format: "kho-bai-buoi", version: 1, ma: bm, ...b }, null, 1) });
+        }
+        this.thumbCache.delete(ma);
+        return { changes, message: `Xo\xE1 b\xE0i: ${ten}`, result: true };
+      });
+    }
+    /** Lưu buổi dạy {ma?, ten, ngay, lop, ghiChu, bai: [mã]} → mã buổi. */
+    async saveBuoi(buoi) {
+      return this.write(async ({ index }) => {
+        const b = { ten: String(buoi.ten || "").trim() || `Bu\u1ED5i ${buoi.ngay || ""}`.trim(), ngay: buoi.ngay || null, lop: (buoi.lop || "").trim() || null, ghiChu: (buoi.ghiChu || "").trim() || null, bai: [...buoi.bai], capNhat: (/* @__PURE__ */ new Date()).toISOString() };
+        let ma = buoi.ma;
+        if (!ma) {
+          const base2 = slugify(`${b.ngay || ""} ${b.ten}`);
+          ma = base2;
+          for (let k = 2; index.buoi[ma]; k++) ma = `${base2}-${k}`;
+        }
+        index.buoi[ma] = b;
+        return { changes: [{ path: `buoi/${ma}.json`, text: JSON.stringify({ format: "kho-bai-buoi", version: 1, ma, ...b }, null, 1) }], message: `${buoi.ma ? "S\u1EEDa" : "Th\xEAm"} bu\u1ED5i d\u1EA1y: ${b.ten}`, result: ma };
+      });
+    }
+    async deleteBuoi(ma) {
+      return this.write(async ({ index }) => {
+        const ten = index.buoi[ma] ? index.buoi[ma].ten : ma;
+        delete index.buoi[ma];
+        return { changes: [{ path: `buoi/${ma}.json`, remove: true }], message: `Xo\xE1 bu\u1ED5i d\u1EA1y: ${ten}`, result: true };
+      });
+    }
+    async saveTopics(list) {
+      return this.write(async () => {
+        this.topics = [...new Set(list.map((x) => x.trim()).filter(Boolean))];
+        return { changes: [{ path: TOPICS, text: JSON.stringify({ format: "kho-bai-chu-de", version: 1, chuDe: this.topics }, null, 1) }], message: "S\u1EEDa danh s\xE1ch ch\u1EE7 \u0111\u1EC1", result: this.topics };
+      });
+    }
+    /** Các phiên bản cũ của bài: [{sha, date, message}]. */
+    history(ma) {
+      return this.gh.history(baiPath(ma));
+    }
+    /** Các buổi có dạy bài này: [{ma, ten, ngay, lop}] (mới nhất trước). */
+    taughtIn(ma) {
+      return Object.entries(this.index.buoi).filter(([, b]) => b.bai.includes(ma)).map(([bm, b]) => ({ ma: bm, ...b })).sort((a, b) => String(b.ngay).localeCompare(String(a.ngay)));
+    }
+  };
+  var fold = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+  function filterIndex(index, q = "", f = {}, sort = "moi") {
+    const words = fold(q).split(/\s+/).filter(Boolean);
+    const taught = new Set(Object.values(index.buoi || {}).flatMap((b) => b.bai));
+    let rows = Object.entries(index.bai || {}).filter(([ma, e]) => {
+      if (words.length) {
+        const hay = fold([e.ten, sourceLabel(e.nguon), (e.chuDe || []).join(" "), (e.the || []).join(" "), e.tom, e.ghiChu, ma].join(" "));
+        if (!words.every((w) => hay.includes(w))) return false;
+      }
+      if (f.chuDe && f.chuDe.size && !(e.chuDe || []).some((c) => f.chuDe.has(c))) return false;
+      if (f.ky && f.ky.size && !f.ky.has(kyOf(e))) return false;
+      if (f.doKho && f.doKho.size && !f.doKho.has(e.doKho || 0)) return false;
+      if (f.trangThai && f.trangThai.size && !f.trangThai.has(e.trangThai)) return false;
+      if (f.daDay === true && !taught.has(ma)) return false;
+      if (f.daDay === false && taught.has(ma)) return false;
+      return true;
+    });
+    const cmp = {
+      moi: (a, b) => String(b[1].capNhat).localeCompare(String(a[1].capNhat)),
+      ten: (a, b) => a[1].ten.localeCompare(b[1].ten, "vi", { numeric: true }),
+      doKho: (a, b) => (a[1].doKho || 9) - (b[1].doKho || 9) || a[1].ten.localeCompare(b[1].ten, "vi", { numeric: true }),
+      nguon: (a, b) => sourceLabel(a[1].nguon).localeCompare(sourceLabel(b[1].nguon), "vi", { numeric: true })
+    }[sort] || (() => 0);
+    rows = rows.sort(cmp);
+    return rows;
+  }
+  function kyOf(e) {
+    return e.nguon ? e.nguon.tuRa ? "T\u1EF1 ra" : e.nguon.ky || "Ch\u01B0a ghi" : "Ch\u01B0a ghi";
+  }
+
+  // src/kho/thumb.js
+  function renderThumb(doc2, { theme: theme2 = "mono", trimLines = true, images = null, w = 360, h = 240 } = {}) {
+    if (!doc2 || !doc2.steps || !doc2.steps.length) return null;
+    const host = document.createElement("div");
+    host.style.cssText = `position:fixed;left:-20000px;top:0;width:${w}px;height:${h}px;pointer-events:none`;
+    document.body.appendChild(host);
+    try {
+      const view = new CanvasView(host);
+      const r = new Renderer(view);
+      r.trimLines = trimLines;
+      const values = evaluate(doc2);
+      const pts = [];
+      for (const s of doc2.steps) {
+        if (s.hidden) continue;
+        const v = values.get(s.id);
+        if (!v) continue;
+        if (v.kind === "point") pts.push(v);
+        if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
+      }
+      if (!pts.length) return null;
+      const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+      let [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+      const m = Math.max(x2 - x1, y2 - y1, 1) * 0.08;
+      [x1, x2, y1, y2] = [x1 - m, x2 + m, y1 - m, y2 + m];
+      const per = Math.max((x2 - x1) / w, (y2 - y1) / h);
+      const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+      view.setBoundingBox([cx - per * w / 2, cy + per * h / 2, cx + per * w / 2, cy - per * h / 2]);
+      r.setScene(doc2, values, { theme: theme2, images });
+      view.drawNow();
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(view.canvas, 0, 0, w, h);
+      return out.toDataURL("image/jpeg", 0.82);
+    } catch {
+      return null;
+    } finally {
+      host.remove();
+    }
+  }
+
+  // src/kho/ui.js
+  init_dialog();
+
+  // src/export/tikz.js
+  var NAMED_COLORS = Object.fromEntries([
+    ["#000000", "black"],
+    ["#111827", "black"],
+    ["#1f2937", "black"],
+    ...PALETTE.slice(1).map((c) => [c.hex, c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/[^A-Za-z]/g, "").toLowerCase()])
+  ]);
+  var PT_PER_PX = 0.4;
+  var f3 = (v) => {
+    const s = (Math.round(v * 1e3) / 1e3).toFixed(3).replace(/\.?0+$/, "");
+    return s === "-0" ? "0" : s;
+  };
+  var xy = (P2) => `(${f3(P2.x)}, ${f3(P2.y)})`;
+  function coordName(name2, used) {
+    let base2 = (name2 || "P").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/'/g, "p").replace(/[^A-Za-z0-9]/g, "");
+    if (!base2 || /^\d/.test(base2)) base2 = "P" + base2;
+    let n = base2, i = 2;
+    while (used.has(n)) n = base2 + "-" + i++;
+    used.add(n);
+    return n;
+  }
+  function anchorFor(off) {
+    const a = Math.atan2(off[1], off[0]) * 180 / Math.PI;
+    const dirs = ["right", "above right", "above", "above left", "left", "below left", "below", "below right"];
+    return dirs[(Math.round(a / 45) % 8 + 8) % 8];
+  }
+  function clipLine(l, box, tMin = -Infinity) {
+    let t0 = tMin, t1 = Infinity;
+    const { p, d } = l;
+    for (const [pp, dd, lo, hi] of [[p.x, d.x, box.x1, box.x2], [p.y, d.y, box.y1, box.y2]]) {
+      if (Math.abs(dd) < 1e-14) {
+        if (pp < lo || pp > hi) return null;
+        continue;
+      }
+      let a = (lo - pp) / dd, b = (hi - pp) / dd;
+      if (a > b) [a, b] = [b, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, b);
+    }
+    if (t0 >= t1) return null;
+    return [{ x: p.x + t0 * d.x, y: p.y + t0 * d.y }, { x: p.x + t1 * d.x, y: p.y + t1 * d.y }];
+  }
+  function toTikZ(doc2, opts = {}) {
+    const width = opts.width || 12;
+    const theme2 = opts.theme || "mono";
+    const vals = opts.values || evaluate(doc2);
+    const k = kinds(doc2);
+    const visible = doc2.steps.filter((s) => !s.hidden && vals.get(s.id));
+    const pts = [];
+    for (const s of visible) {
+      const v = vals.get(s.id);
+      if (v.kind === "point") pts.push(v);
+      if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
+    }
+    if (!pts.length) return "% H\xECnh tr\u1ED1ng\n";
+    let x1 = Math.min(...pts.map((p) => p.x)), x2 = Math.max(...pts.map((p) => p.x));
+    let y1 = Math.min(...pts.map((p) => p.y)), y2 = Math.max(...pts.map((p) => p.y));
+    const span = Math.max(x2 - x1, y2 - y1, 1e-6);
+    const m = span * 0.08;
+    const box = { x1: x1 - m, x2: x2 + m, y1: y1 - m, y2: y2 + m };
+    const unit2 = width / (box.x2 - box.x1);
+    const cm = (c) => c / unit2;
+    const colorDefs = /* @__PURE__ */ new Map();
+    const full = (s) => styleOf(s, k.get(s.id), theme2);
+    const hexName = (hex) => {
+      hex = hex.toLowerCase();
+      if (NAMED_COLORS[hex]) {
+        if (NAMED_COLORS[hex] !== "black") colorDefs.set(NAMED_COLORS[hex], hex);
+        return NAMED_COLORS[hex];
+      }
+      const nm = "c" + hex.replace("#", "");
+      colorDefs.set(nm, hex);
+      return nm;
+    };
+    const col = (s) => hexName(full(s).color || "#000000");
+    const baseWidth = styleOf({ type: "line" }, "line", theme2).width;
+    const opt = (...xs) => {
+      const o = xs.filter((x) => x && x !== "black");
+      return o.length ? `[${o.join(", ")}]` : "";
+    };
+    const lineOpts = (s) => {
+      const st = full(s);
+      const w = st.width && Math.abs(st.width - baseWidth) > 1e-9 ? `line width=${f3(st.width * PT_PER_PX)}pt` : "";
+      return opt(col(s), st.dash ? "dashed" : "", w);
+    };
+    const centerOf = /* @__PURE__ */ new Map();
+    for (const s of doc2.steps) if (s.type === "center" && !centerOf.has(s.args[0])) centerOf.set(s.args[0], s.id);
+    const used = /* @__PURE__ */ new Set();
+    const cname = /* @__PURE__ */ new Map();
+    for (const s of visible) if (k.get(s.id) === "point") cname.set(s.id, coordName(s.name, used));
+    for (const s of visible) if (k.get(s.id) === "mark" || ["segment", "circle"].includes(s.type)) for (const a of s.args) {
+      if (!cname.has(a) && vals.get(a)) cname.set(a, coordName(stepById(doc2, a)?.name || a, used));
+    }
+    const ref = (id) => `(${cname.get(id)})`;
+    const autoDirs = autoLabelDirs(doc2, vals);
+    const out = { coords: [], fills: [], circles: [], lines: [], marks: [], points: [], labels: [] };
+    for (const [id, n] of cname) out.coords.push(`\\coordinate (${n}) at ${xy(vals.get(id))};${stepById(doc2, id)?.hidden ? " % \u0111i\u1EC3m \u1EA9n" : ""}`);
+    for (const s of visible) {
+      const v = vals.get(s.id);
+      const st = full(s);
+      const kind = k.get(s.id);
+      if (kind === "circle") {
+        const cId = s.type === "circle" || s.type === "circle_radius" ? s.args[0] : centerOf.get(s.id);
+        const cAt = cId && cname.has(cId) ? cId : [...cname.keys()].find((id) => dist(vals.get(id), v.c) < 1e-9 * (1 + v.r));
+        const center = cAt ? ref(cAt) : xy(v.c);
+        const fill = st.fill || 0;
+        if (fill > 0) out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(fill)}] ${center} circle (${f3(v.r)});`);
+        out.circles.push(`\\draw${lineOpts(s)} ${center} circle (${f3(v.r)}); % ${s.name || ""}`);
+        if (st.showLabel && s.name) {
+          const P2 = { x: v.c.x + v.r * Math.cos(Math.PI / 4), y: v.c.y + v.r * Math.sin(Math.PI / 4) };
+          out.labels.push(`\\node[above right, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
+        }
+      } else if (kind === "line") {
+        const sub4 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
+        const desc = s.type === "line" || s.type === "segment" || s.type === "ray" ? s.args.map((a) => stepById(doc2, a)?.name).join("") : s.name;
+        if (sub4 === "segment" && s.type === "segment") out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
+        else if (sub4 === "segment") out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(add(v.p, v.d))};`);
+        else {
+          const rg = opts.trimLines ? trimmedRange(v, sub4, visible.filter((x) => k.get(x.id) === "point").map((x) => vals.get(x.id)), 1e-9 * (box.x2 - box.x1), cm(0.35), cm(1.1)) : null;
+          const seg = rg ? [add(v.p, mul(v.d, rg[0])), add(v.p, mul(v.d, rg[1]))] : clipLine(v, box, sub4 === "ray" ? 0 : -Infinity);
+          if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub4 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub4 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${desc}`);
+          if (seg && st.showLabel && s.name) {
+            const P2 = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
+            out.labels.push(`\\node[above, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
+          }
+        }
+      } else if (s.type === "polygon") {
+        const path2 = s.args.map(ref).join(" -- ") + " -- cycle";
+        out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.1)}] ${path2};`);
+        if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path2};`);
+      } else if (s.type === "angle_mark") {
+        out.marks.push(...angleMark(v, s, col(s), cm, ref));
+      } else if (s.type === "segment_mark") {
+        out.marks.push(...segMark(v, s, col(s), cm));
+      } else if (kind === "point") {
+        const r = f3((st.size || 3) * 0.5);
+        if (st.hollow) out.points.push(`\\filldraw[fill=white${col(s) === "black" ? "" : ", draw=" + col(s)}] ${ref(s.id)} circle (${r}pt);`);
+        else out.points.push(`\\fill${opt(hexName(st.fillColor || st.color))} ${ref(s.id)} circle (${r}pt);`);
+        const dir = st.labelOffset || (autoDirs.get(s.id) ? [autoDirs.get(s.id).x, autoDirs.get(s.id).y] : [1, 1]);
+        if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}, inner sep=1.5pt] at ${ref(s.id)} {${texLabel(s.name)}};`);
+      }
+    }
+    const L = [];
+    L.push(`% ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
+    L.push("% C\u1EA7n trong ph\u1EA7n m\u1EDF \u0111\u1EA7u: \\usepackage{tikz}");
+    L.push("% \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc h\xECnh: s\u1EEDa x=\u2026, y=\u2026 (\u0111\u01A1n v\u1ECB c\u1EE7a m\u1ED9t \xF4 to\u1EA1 \u0111\u1ED9).");
+    if (doc2.images && doc2.images.length) L.push(`% (${doc2.images.length} \u1EA3nh d\xE1n v\xE0o h\xECnh kh\xF4ng \u0111\u01B0\u1EE3c xu\u1EA5t sang TikZ)`);
+    L.push(`\\begin{tikzpicture}[x=${f3(unit2)}cm, y=${f3(unit2)}cm, line width=${f3(baseWidth * PT_PER_PX)}pt, line cap=round, line join=round]`);
+    if (colorDefs.size) {
+      L.push("  % M\xE0u");
+      for (const [n, hex] of colorDefs) L.push(`  \\definecolor{${n}}{HTML}{${hex.slice(1).toUpperCase()}}`);
+    }
+    const sec = (title, arr) => {
+      if (arr.length) {
+        L.push(`  % ${title}`);
+        for (const x of arr) L.push("  " + x);
+      }
+    };
+    sec("To\u1EA1 \u0111\u1ED9 c\xE1c \u0111i\u1EC3m", out.coords);
+    sec("T\xF4 n\u1EC1n", out.fills);
+    sec("\u0110\u01B0\u1EDDng tr\xF2n", out.circles);
+    sec("\u0110\u01B0\u1EDDng th\u1EB3ng, \u0111o\u1EA1n th\u1EB3ng, tia", out.lines);
+    sec("\u0110\xE1nh d\u1EA5u g\xF3c, \u0111o\u1EA1n b\u1EB1ng nhau", out.marks);
+    sec("\u0110i\u1EC3m", out.points);
+    sec("Nh\xE3n", out.labels);
+    L.push("\\end{tikzpicture}");
+    return L.join("\n") + "\n";
+  }
+  function angleMark(v, s, color, cm, ref) {
+    const { A, B, C: C2 } = v;
+    const st = s.style || {};
+    const a1 = Math.atan2(A.y - B.y, A.x - B.x);
+    let diff = Math.atan2(C2.y - B.y, C2.x - B.x) - a1;
+    while (diff <= -Math.PI) diff += 2 * Math.PI;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    const deg = (r) => f3(r * 180 / Math.PI);
+    const r0 = cm(0.45);
+    const vtx = ref(s.args[1]);
+    const o = color === "black" ? "" : `[${color}]`;
+    if (Math.abs(Math.abs(diff) - Math.PI / 2) < 1e-6 && st.right !== false) {
+      const r = r0 * 0.7;
+      return [`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) -- ++(${deg(a1 + diff)}:${f3(r)}) -- ++(${deg(a1 + Math.PI)}:${f3(r)}); % g\xF3c vu\xF4ng`];
+    }
+    const n = Math.max(1, Math.min(4, st.arcs || 1));
+    const outL = [];
+    for (let i = 0; i < n; i++) {
+      const r = r0 + i * cm(0.09);
+      outL.push(`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) arc[start angle=${deg(a1)}, end angle=${deg(a1 + diff)}, radius=${f3(r)}];`);
+    }
+    return outL;
+  }
+  function segMark(v, s, color, cm) {
+    const { A, B } = v;
+    const st = s.style || {};
+    const L = dist(A, B);
+    const u = { x: (B.x - A.x) / L, y: (B.y - A.y) / L };
+    const n = { x: -u.y, y: u.x };
+    const M = mid(A, B);
+    const kk = Math.max(1, Math.min(4, st.ticks || 1));
+    const h = cm(0.13), gap = cm(0.08);
+    const o = color === "black" ? "" : `[${color}]`;
+    const outL = [];
+    for (let i = 0; i < kk; i++) {
+      const off = (i - (kk - 1) / 2) * gap;
+      const c = { x: M.x + off * u.x, y: M.y + off * u.y };
+      outL.push(`\\draw${o} ${xy({ x: c.x - h * n.x, y: c.y - h * n.y })} -- ${xy({ x: c.x + h * n.x, y: c.y + h * n.y })};`);
+    }
+    return outL;
+  }
+
+  // src/export/latex.js
+  function imageNamer(files, imageSrc) {
+    return (id) => {
+      const src = imageSrc ? imageSrc(id) : null;
+      const ext = /^data:image\/(png|jpe?g)/.exec(src || "")?.[1]?.replace("jpeg", "jpg") || "png";
+      const name2 = `anh-${files.length + 1}.${ext}`;
+      if (src) files.push({ name: name2, dataURL: src });
+      return name2;
+    };
+  }
+  function docBody(doc2, opts, imageFile) {
+    const boxes = doc2.boxes || [];
+    const of = (role) => boxes.filter((b) => (b.role || "ghichu") === role && b.text && b.text.trim());
+    const L = [];
+    for (const b of of("de")) L.push(`\\noindent\\textbf{${esc4(b.title || "\u0110\u1EC1 b\xE0i")}.} ` + splitSteps(b.text).map((s) => toLatex(s.text, imageFile)).join("\n\n"), "");
+    if (doc2.steps.length) L.push("\\begin{center}", toTikZ(doc2, { values: opts.values, theme: opts.theme, trimLines: opts.trimLines }).trim(), "\\end{center}", "");
+    if (opts.loiGiai !== false) {
+      for (const b of of("loigiai")) {
+        const st = splitSteps(b.text).filter((s) => s.text.trim());
+        L.push(`\\noindent\\textbf{${esc4(b.title || "L\u1EDDi gi\u1EA3i")}.}`);
+        if (st.length > 1) L.push("\\begin{enumerate}", ...st.map((s) => `  \\item ${toLatex(s.text, imageFile)}`), "\\end{enumerate}");
+        else if (st.length) L.push(toLatex(st[0].text, imageFile));
+        L.push("");
+      }
+      for (const b of of("ghichu")) L.push(`\\noindent\\textbf{${esc4(b.title || "Ghi ch\xFA")}.} ` + splitSteps(b.text).map((s) => toLatex(s.text, imageFile)).join("\n\n"), "");
+    }
+    return L;
+  }
+  function toLatexHandout(doc2, opts = {}) {
+    const files = [];
+    const L = [LATEX_PREAMBLE, "", "\\begin{document}"];
+    if (doc2.title) L.push(`\\section*{${esc4(doc2.title)}}`);
+    L.push(...docBody(doc2, opts, imageNamer(files, opts.imageSrc)));
+    L.push("\\end{document}", "");
+    return { tex: L.join("\n"), files };
+  }
+  function toLatexSet(items, opts = {}) {
+    const files = [];
+    const L = [LATEX_PREAMBLE, "", "\\begin{document}"];
+    if (opts.title) L.push(`\\begin{center}{\\Large\\bfseries ${esc4(opts.title)}}${opts.subtitle ? `\\\\[2pt]${esc4(opts.subtitle)}` : ""}\\end{center}`, "");
+    items.forEach((it, i) => {
+      L.push(`\\subsection*{B\xE0i ${i + 1}. ${esc4(it.title || "")}}`);
+      for (const doc2 of it.docs) {
+        const name2 = imageNamer(files, (id) => (doc2.imageData || {})[id] || null);
+        L.push(...docBody(doc2, { ...opts, values: void 0 }, name2));
+      }
+      if (i < items.length - 1) L.push("\\bigskip", "");
+    });
+    L.push("\\end{document}", "");
+    return { tex: L.join("\n"), files };
+  }
+  var esc4 = (s) => String(s).replace(/[\\#%&_{}~^$]/g, (c) => "\\" + c);
+
+  // src/kho/ui.js
+  var CONF_KEY = "hinh-hoc-dong:kho";
+  var QUEUE_KEY = "hang-cho-kho";
+  var COMMON_KY = ["VMO", "IMO", "TST", "ISL", "APMO", "EGMO", "Olympic 30/4", "HSG t\u1EC9nh", "Chuy\xEAn KHTN", "T\u1EF1 ra"];
+  var esc5 = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  var fmtDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return isNaN(d) ? String(iso) : `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  };
+  var fmtTime = (iso) => {
+    const d = new Date(iso);
+    return isNaN(d) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} ${fmtDate(iso)}`;
+  };
+  function loadConf() {
+    try {
+      const c = JSON.parse(localStorage.getItem(CONF_KEY) || "null");
+      return c && c.repo && c.token ? c : null;
+    } catch {
+      return null;
+    }
+  }
+  function saveConf(c) {
+    try {
+      if (c) localStorage.setItem(CONF_KEY, JSON.stringify(c));
+      else localStorage.removeItem(CONF_KEY);
+    } catch {
+    }
+  }
+  function guessSource(title) {
+    const m = /^\s*(.+?)\s+((?:19|20)\d\d)\b(?:\s*[-–—:,]?\s*(?:bài|problem|p|câu)\s*([0-9]+[a-z]?))?/i.exec(String(title || ""));
+    return m ? { ky: m[1].trim(), nam: +m[2], ...m[3] ? { so: m[3] } : {} } : null;
+  }
+  function setupKho(app) {
+    const S2 = { conf: loadConf(), kho: null, connecting: null, queue: [], flushing: false, busy: 0, error: null };
+    app.kho = S2;
+    const chip = document.getElementById("kho-status");
+    let uid = 0;
+    const tabUid = (t2) => t2.uid || (t2.uid = `t${Date.now().toString(36)}${uid++}`);
+    function updateChip() {
+      if (!chip) return;
+      const n = S2.queue.length;
+      chip.className = "kho-chip";
+      let label;
+      if (!S2.conf) {
+        label = "K\u1EBFt n\u1ED1i kho b\xE0i";
+        chip.classList.add("off");
+      } else if (S2.busy) {
+        label = "\u0110ang l\u01B0u\u2026";
+        chip.classList.add("busy");
+      } else if (n) {
+        label = `Ch\u01B0a \u0111\u1ED3ng b\u1ED9 (${n})`;
+        chip.classList.add("warn");
+      } else if (S2.error) {
+        label = "Kho: l\u1ED7i k\u1EBFt n\u1ED1i";
+        chip.classList.add("warn");
+      } else if (S2.kho) label = `Kho \xB7 ${Object.keys(S2.kho.index.bai).length} b\xE0i`;
+      else label = "Kho\u2026";
+      chip.innerHTML = `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2 5.5L8 2.5l6 3v5L8 13.5l-6-3z"/><path d="M2 5.5l6 3 6-3M8 8.5v5"/></svg><span>${esc5(label)}</span>`;
+      chip.title = S2.conf ? `Kho b\xE0i: ${S2.conf.repo}${S2.error ? " \u2013 " + S2.error : ""}${n ? ` \u2013 ${n} l\u1EA7n l\u01B0u \u0111ang ch\u1EDD c\xF3 m\u1EA1ng` : ""} (Ctrl+K: m\u1EDF kho)` : "K\u1EBFt n\u1ED1i m\u1ED9t repo GitHub ri\xEAng t\u01B0 l\xE0m kho b\xE0i t\u1EADp";
+      const k1 = document.querySelector("#btn-save kbd"), k2 = document.querySelector("#btn-kho-save kbd");
+      if (k1) k1.style.display = S2.conf ? "none" : "";
+      if (k2) k2.style.display = S2.conf ? "" : "none";
+      const dc = document.getElementById("btn-kho-disconnect");
+      if (dc) dc.style.display = S2.conf ? "" : "none";
+    }
+    const busy = async (fn) => {
+      S2.busy++;
+      updateChip();
+      try {
+        return await fn();
+      } finally {
+        S2.busy--;
+        updateChip();
+      }
+    };
+    async function connect(conf = S2.conf) {
+      const gh = new GitHubRepo({ repo: conf.repo, token: conf.token });
+      const kho = new Kho(gh);
+      const info = await kho.open();
+      S2.kho = kho;
+      S2.error = null;
+      updateChip();
+      return info;
+    }
+    async function ensureKho({ silent = false } = {}) {
+      if (S2.kho) return S2.kho;
+      if (!S2.conf) {
+        if (!silent) await connectDialog();
+        return S2.kho;
+      }
+      try {
+        S2.connecting || (S2.connecting = busy(() => connect()));
+        await S2.connecting;
+        return S2.kho;
+      } catch (e) {
+        S2.error = e.message;
+        updateChip();
+        if (silent) return null;
+        if (e.code === "offline") toast("M\u1EA5t m\u1EA1ng \u2013 ch\u01B0a m\u1EDF \u0111\u01B0\u1EE3c kho", 4e3);
+        else await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c kho", esc5(e.message) + "<br>Ki\u1EC3m tra l\u1EA1i \u1EDF <i>Kho \u203A K\u1EBFt n\u1ED1i kho\u2026</i>", "OK");
+        return null;
+      } finally {
+        S2.connecting = null;
+      }
+    }
+    async function connectDialog() {
+      const res = await modal((box, close2) => {
+        box.classList.add("wide");
+        box.innerHTML = `<h3>K\u1EBFt n\u1ED1i kho b\xE0i t\u1EADp</h3>
+        <div class="modal-body kho-help">
+          Kho l\xE0 m\u1ED9t <b>repo GitHub ri\xEAng t\u01B0</b> c\u1EE7a th\u1EA7y/c\xF4: m\u1ECDi b\xE0i, bu\u1ED5i d\u1EA1y \u0111\u01B0\u1EE3c l\u01B0u \u1EDF \u0111\xF3, m\u1EDF l\u1EA1i \u1EDF m\xE1y n\xE0o c\u0169ng \u0111\u01B0\u1EE3c, GitHub gi\u1EEF l\u1ECBch s\u1EED m\u1ECDi l\u1EA7n s\u1EEDa.
+          <ol>
+            <li>T\u1EA1o repo: <a href="https://github.com/new" target="_blank" rel="noopener">github.com/new</a> \u2192 \u0111\u1EB7t t\xEAn (vd <code>kho-bai</code>) \u2192 ch\u1ECDn <b>Private</b> \u2192 <i>Create repository</i>.</li>
+            <li>T\u1EA1o token: <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Settings \u203A Developer settings \u203A Fine-grained tokens \u203A Generate new token</a>
+              \u2192 <i>Repository access</i>: <b>Only select repositories</b>, ch\u1ECDn repo kho \u2192 <i>Permissions \u203A Repository permissions \u203A Contents</i>: <b>Read and write</b> \u2192 <i>Generate token</i> \u2192 sao ch\xE9p.</li>
+            <li>D\xE1n v\xE0o \u0111\xE2y. Token ch\u1EC9 l\u01B0u trong tr\xECnh duy\u1EC7t c\u1EE7a m\xE1y n\xE0y \u2013 ch\u1EC9 n\xEAn d\xF9ng tr\xEAn m\xE1y ri\xEAng.</li>
+          </ol>
+        </div>
+        <label class="row">Repo <input type="text" class="k-repo" placeholder="t\xEAn-t\xE0i-kho\u1EA3n/kho-bai" value="${esc5(S2.conf ? S2.conf.repo : "")}" spellcheck="false"></label>
+        <label class="row">Token <input type="password" class="k-token" placeholder="github_pat_\u2026" value="${esc5(S2.conf ? S2.conf.token : "")}" spellcheck="false" autocomplete="off"></label>
+        <div class="k-msg note"></div>
+        <div class="modal-actions">${S2.conf ? '<button class="k-off danger" style="margin-right:auto">Ng\u1EAFt k\u1EBFt n\u1ED1i</button>' : ""}<button class="cancel">Hu\u1EF7</button><button class="primary">K\u1EBFt n\u1ED1i</button></div>`;
+        const msg = box.querySelector(".k-msg");
+        box.querySelector(".cancel").onclick = () => close2(null);
+        const off = box.querySelector(".k-off");
+        if (off) off.onclick = () => close2("off");
+        box.querySelector(".primary").onclick = async () => {
+          let repo = box.querySelector(".k-repo").value.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
+          const token = box.querySelector(".k-token").value.trim();
+          if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !token) {
+            msg.textContent = "C\u1EA7n nh\u1EADp repo d\u1EA1ng t\xEAn-t\xE0i-kho\u1EA3n/t\xEAn-repo v\xE0 token.";
+            return;
+          }
+          msg.textContent = "\u0110ang k\u1EBFt n\u1ED1i\u2026";
+          try {
+            const info = await connect({ repo, token });
+            if (!info.private && !await confirmDialog("Repo \u0111ang c\xF4ng khai", `Repo <b>${esc5(repo)}</b> \u0111ang \u0111\u1EC3 <b>c\xF4ng khai</b>: ai c\u0169ng xem \u0111\u01B0\u1EE3c \u0111\u1EC1 v\xE0 l\u1EDDi gi\u1EA3i trong kho (c\u1EA3 h\u1ECDc sinh). N\xEAn \u0111\u1ED5i sang Private trong Settings c\u1EE7a repo. V\u1EABn d\xF9ng repo n\xE0y?`, "V\u1EABn d\xF9ng")) {
+              S2.kho = null;
+              msg.textContent = "";
+              return;
+            }
+            if (info.permissions && info.permissions.push === false) {
+              msg.textContent = "Token ch\u1EC9 c\xF3 quy\u1EC1n \u0111\u1ECDc \u2013 c\u1EA7n quy\u1EC1n Contents: Read and write.";
+              S2.kho = null;
+              return;
+            }
+            close2({ repo, token });
+          } catch (e) {
+            S2.kho = null;
+            msg.textContent = e.code === "notfound" ? "Kh\xF4ng th\u1EA5y repo (sai t\xEAn, ho\u1EB7c token ch\u01B0a \u0111\u01B0\u1EE3c c\u1EA5p quy\u1EC1n cho repo n\xE0y)." : e.message;
+          }
+        };
+      });
+      if (res === "off") {
+        S2.conf = null;
+        S2.kho = null;
+        saveConf(null);
+        toast("\u0110\xE3 ng\u1EAFt k\u1EBFt n\u1ED1i kho (token \u0111\xE3 xo\xE1 kh\u1ECFi m\xE1y n\xE0y)");
+      } else if (res) {
+        S2.conf = res;
+        saveConf(res);
+        toast(`\u0110\xE3 k\u1EBFt n\u1ED1i kho ${res.repo} \u2013 ${Object.keys(S2.kho.index.bai).length} b\xE0i`);
+        flushQueue();
+      }
+      updateChip();
+    }
+    async function loadQueue() {
+      S2.queue = await idbGet(QUEUE_KEY) || [];
+      updateChip();
+    }
+    const saveQueue = () => idbSet(QUEUE_KEY, S2.queue);
+    async function flushQueue() {
+      if (S2.flushing || !S2.queue.length || !S2.conf) return;
+      S2.flushing = true;
+      try {
+        const kho = await ensureKho();
+        if (!kho) return;
+        while (S2.queue.length) {
+          const it = S2.queue[0];
+          try {
+            const r = await busy(() => kho.saveDoc(it.params));
+            S2.queue.shift();
+            await saveQueue();
+            afterSaved(it.tab, r, it.sig, it.params.meta);
+          } catch (e) {
+            if (e.code === "offline") break;
+            if (e.code === "conflict") {
+              S2.queue.shift();
+              await saveQueue();
+              await resolveConflict(it.params, it.tab, it.sig, e);
+              continue;
+            }
+            toast("L\u01B0u l\xEAn kho b\u1ECB l\u1ED7i: " + e.message, 6e3);
+            break;
+          }
+        }
+        if (!S2.queue.length) toast("\u0110\xE3 \u0111\u1ED3ng b\u1ED9 c\xE1c l\u1EA7n l\u01B0u \u0111ang ch\u1EDD l\xEAn kho");
+      } finally {
+        S2.flushing = false;
+        updateChip();
+      }
+    }
+    window.addEventListener("online", () => flushQueue());
+    setInterval(() => {
+      if (S2.queue.length && navigator.onLine !== false) flushQueue();
+    }, 6e4);
+    const tabByUid = (u) => app.tabs.findIndex((t2) => t2.uid === u);
+    function afterSaved(tabU, r, sig, meta2) {
+      const i = tabByUid(tabU);
+      if (i >= 0) {
+        const t2 = app.tabs[i];
+        t2.kho = { ma: r.ma, hinh: r.hinh, sha: r.sha };
+        if (sig) t2.savedSig = sig;
+        const d = i === app.tabIdx ? app.doc : t2.doc;
+        if (!d.title && meta2 && meta2.ten) {
+          if (i === app.tabIdx) app.commit((doc2) => {
+            doc2.title = meta2.ten;
+          });
+          else d.title = meta2.ten;
+          if (sig) t2.savedSig = docSig(i === app.tabIdx ? app.doc : t2.doc);
+        }
+      }
+      app.tabs.forEach((t2) => {
+        if (t2.kho && t2.kho.ma === r.ma) t2.kho.sha = r.sha;
+      });
+      app.emit("saved");
+      updateChip();
+    }
+    async function doSave(params, tabIndex) {
+      const t2 = app.tabs[tabIndex];
+      const tabU = tabUid(t2);
+      const sig = docSig(tabIndex === app.tabIdx ? app.doc : t2.doc);
+      const kho = S2.kho || await ensureKho().catch(() => null);
+      try {
+        if (!kho) throw new KhoError("offline", "ch\u01B0a k\u1EBFt n\u1ED1i");
+        const r = await busy(() => kho.saveDoc(params));
+        afterSaved(tabU, r, sig, params.meta);
+        toast(`\u0110\xE3 l\u01B0u v\xE0o kho: ${kho.index.bai[r.ma] ? kho.index.bai[r.ma].ten : r.ma}`);
+        return r;
+      } catch (e) {
+        if (e.code === "offline") {
+          S2.queue.push({ params, tab: tabU, sig, t: Date.now() });
+          await saveQueue();
+          updateChip();
+          toast("M\u1EA5t m\u1EA1ng \u2013 \u0111\xE3 gi\u1EEF l\u1EA1i trong m\xE1y, c\xF3 m\u1EA1ng s\u1EBD t\u1EF1 l\u01B0u l\xEAn kho", 5e3);
+          return null;
+        }
+        if (e.code === "conflict") return resolveConflict(params, tabU, sig, e);
+        await confirmDialog("Kh\xF4ng l\u01B0u \u0111\u01B0\u1EE3c v\xE0o kho", esc5(e.message), "OK");
+        return null;
+      }
+    }
+    async function resolveConflict(params, tabU, sig, e) {
+      const ten = e.current && e.current.meta && e.current.meta.ten || params.ma;
+      const v = await choiceDialog(
+        "B\xE0i \u0111\xE3 \u0111\u01B0\u1EE3c s\u1EEDa \u1EDF n\u01A1i kh\xE1c",
+        `B\xE0i <b>${esc5(ten)}</b> trong kho \u0111\xE3 \u0111\u01B0\u1EE3c l\u01B0u t\u1EEB n\u01A1i kh\xE1c (m\xE1y kh\xE1c ho\u1EB7c tab kh\xE1c) sau khi th\u1EA7y/c\xF4 m\u1EDF n\xF3. L\u01B0u th\u1EBF n\xE0o?`,
+        [{ label: "M\u1EDF b\u1EA3n tr\xEAn kho (tab m\u1EDBi) \u0111\u1EC3 so", value: "open" }, { label: "L\u01B0u th\xE0nh b\xE0i m\u1EDBi", value: "new" }, { label: "Hu\u1EF7", value: null }, { label: "Ghi \u0111\xE8 b\u1EB1ng h\xECnh n\xE0y", value: "force", primary: true }]
+      );
+      if (v === "force") return doSave({ ...params, force: true }, tabByUid(tabU));
+      if (v === "new") return doSave({ meta: { ...e.current && e.current.meta || {}, ten: `${ten} (b\u1EA3n s\u1EEDa ${fmtDate((/* @__PURE__ */ new Date()).toISOString())})` }, doc: params.doc, thumb: params.thumb }, tabByUid(tabU));
+      if (v === "open") await openBai(params.ma, { forceNew: true });
+      return null;
+    }
+    function currentPayload(i = app.tabIdx) {
+      const d = i === app.tabIdx ? app.doc : app.tabs[i].doc;
+      return {
+        doc: compactDoc(tabDoc(app, i)),
+        thumb: renderThumb(d, { theme: app.theme, trimLines: app.renderer.trimLines, images: app.images })
+      };
+    }
+    async function saveCurrent() {
+      if (isEmptyDoc(app.doc)) return toast("H\xECnh \u0111ang tr\u1ED1ng \u2013 ch\u01B0a c\xF3 g\xEC \u0111\u1EC3 l\u01B0u");
+      const kho = await ensureKho();
+      if (!kho && !S2.conf) return;
+      const t2 = app.tabs[app.tabIdx];
+      if (t2.kho && t2.kho.ma) return doSave({ ma: t2.kho.ma, hinh: t2.kho.hinh, ...currentPayload(), expectSha: t2.kho.sha }, app.tabIdx);
+      if (!kho) return toast("Ch\u01B0a m\u1EDF \u0111\u01B0\u1EE3c kho \u2013 b\xE0i m\u1EDBi c\u1EA7n k\u1EBFt n\u1ED1i kho. T\u1EA1m l\u01B0u ra t\u1EC7p: T\u1EC7p \u203A L\u01B0u h\xECnh n\xE0y ra t\u1EC7p", 5e3);
+      const r = await metaDialog({ title: "L\u01B0u v\xE0o kho", meta: { ten: app.doc.title || "", nguon: guessSource(app.doc.title) }, allowAttach: true, okLabel: "L\u01B0u v\xE0o kho" });
+      if (!r) return;
+      if (r.attachTo) return doSave({ ma: r.attachTo, hinh: null, ...currentPayload() }, app.tabIdx);
+      return doSave({ meta: r.meta, ...currentPayload() }, app.tabIdx);
+    }
+    function metaDialog({ title, meta: meta2 = {}, allowAttach = false, okLabel = "L\u01B0u" }) {
+      const kho = S2.kho;
+      const ix = kho.index;
+      const kys = [.../* @__PURE__ */ new Set([...Object.values(ix.bai).map((e) => e.nguon && e.nguon.ky).filter(Boolean), ...COMMON_KY.filter((k) => k !== "T\u1EF1 ra")])];
+      const tags2 = [...new Set(Object.values(ix.bai).flatMap((e) => e.the || []))].sort((a, b) => a.localeCompare(b, "vi"));
+      const n = meta2.nguon || {};
+      const chosen = new Set(meta2.chuDe || []);
+      let doKho = meta2.doKho || 0;
+      return modal((box, close2) => {
+        box.classList.add("wide", "kmeta");
+        box.innerHTML = `<h3>${esc5(title)}</h3>
+        ${allowAttach ? `<div class="seg k-mode"><button data-m="new" class="on">B\xE0i m\u1EDBi</button><button data-m="attach">Th\xEAm l\xE0m h\xECnh ph\u1EE5 c\u1EE7a b\xE0i c\xF3 s\u1EB5n</button></div>
+          <div class="k-attach" hidden><input type="text" class="k-attach-q" list="k-bai-list" placeholder="G\xF5 \u0111\u1EC3 t\xECm b\xE0i\u2026"><datalist id="k-bai-list">${Object.entries(ix.bai).map(([ma, e]) => `<option value="${esc5(e.ten)} [${esc5(ma)}]">`).join("")}</datalist>
+          <div class="note">D\xF9ng khi m\u1ED9t b\xE0i c\xF3 nhi\u1EC1u h\xECnh (m\u1ED7i \xFD m\u1ED9t h\xECnh). M\u1EDF b\xE0i l\xE0 m\u1EDF \u0111\u1EE7 c\xE1c h\xECnh th\xE0nh tab.</div></div>` : ""}
+        <div class="k-fields">
+          <label class="row">T\xEAn b\xE0i <input type="text" class="k-ten" value="${esc5(meta2.ten || "")}" placeholder="vd VMO 2016 \u2013 B\xE0i 4"></label>
+          <div class="row k-src">Ngu\u1ED3n
+            <input type="text" class="k-ky" list="k-ky-list" value="${esc5(n.ky || "")}" placeholder="K\u1EF3 thi (VMO, IMO\u2026)"><datalist id="k-ky-list">${kys.map((k) => `<option value="${esc5(k)}">`).join("")}</datalist>
+            <input type="number" class="k-nam" value="${esc5(n.nam || "")}" placeholder="N\u0103m" min="1950" max="2100">
+            <input type="text" class="k-so" value="${esc5(n.so || "")}" placeholder="B\xE0i s\u1ED1">
+            <label class="k-tura"><input type="checkbox" class="k-tuRa" ${n.tuRa ? "checked" : ""}> T\u1EF1 ra</label></div>
+          <div class="k-label">Ch\u1EE7 \u0111\u1EC1</div>
+          <div class="chips k-topics">${kho.topics.map((t2) => `<button type="button" class="chip ${chosen.has(t2) ? "on" : ""}" data-t="${esc5(t2)}">${esc5(t2)}</button>`).join("")}</div>
+          <label class="row">K\u1EF9 thu\u1EADt, th\u1EBB <input type="text" class="k-the" value="${esc5((meta2.the || []).join(", "))}" placeholder="ph\xE2n c\xE1ch b\u1EB1ng d\u1EA5u ph\u1EA9y: v\u1ECB t\u1EF1 quay, \u0111\u01B0\u1EDDng tr\xF2n Euler\u2026"></label>
+          ${tags2.length ? `<div class="chips small k-tagsugg">${tags2.slice(0, 40).map((t2) => `<button type="button" class="chip" data-g="${esc5(t2)}">+ ${esc5(t2)}</button>`).join("")}</div>` : ""}
+          <div class="row">\u0110\u1ED9 kh\xF3 <span class="k-dk">${[1, 2, 3, 4, 5].map((i) => `<button type="button" data-d="${i}" class="${i <= doKho ? "on" : ""}" title="${i}/5">\u25CF</button>`).join("")}</span><span class="note k-dk-l"></span></div>
+          <label class="row k-gc">Ghi ch\xFA ri\xEAng <textarea class="k-ghiChu" rows="2" placeholder="Ch\u1EC9 th\u1EA7y/c\xF4 th\u1EA5y: g\u1EE3i \xFD d\u1EA1y, l\u1ED7i h\u1ECDc sinh hay m\u1EAFc\u2026">${esc5(meta2.ghiChu || "")}</textarea></label>
+        </div>
+        <div class="k-msg note"></div>
+        <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary">${esc5(okLabel)}</button></div>`;
+        const q = (s) => box.querySelector(s);
+        let mode = "new";
+        if (allowAttach) {
+          box.querySelectorAll(".k-mode button").forEach((b) => {
+            b.onclick = () => {
+              mode = b.dataset.m;
+              box.querySelectorAll(".k-mode button").forEach((x) => x.classList.toggle("on", x === b));
+              q(".k-attach").hidden = mode !== "attach";
+              q(".k-fields").hidden = mode === "attach";
+            };
+          });
+        }
+        q(".k-topics").onclick = (e) => {
+          const b = e.target.closest("[data-t]");
+          if (b) b.classList.toggle("on");
+        };
+        const sugg = q(".k-tagsugg");
+        if (sugg) sugg.onclick = (e) => {
+          const b = e.target.closest("[data-g]");
+          if (!b) return;
+          const inp = q(".k-the");
+          const cur2 = inp.value.split(",").map((x) => x.trim()).filter(Boolean);
+          if (!cur2.includes(b.dataset.g)) inp.value = [...cur2, b.dataset.g].join(", ");
+        };
+        const dkLabel = ["ch\u01B0a \u0111\xE1nh gi\xE1", "d\u1EC5", "v\u1EEBa", "kh\xE1 kh\xF3", "kh\xF3", "r\u1EA5t kh\xF3"];
+        const paintDk = () => {
+          box.querySelectorAll(".k-dk button").forEach((b) => b.classList.toggle("on", +b.dataset.d <= doKho));
+          q(".k-dk-l").textContent = dkLabel[doKho];
+        };
+        q(".k-dk").onclick = (e) => {
+          const b = e.target.closest("[data-d]");
+          if (!b) return;
+          doKho = doKho === +b.dataset.d ? 0 : +b.dataset.d;
+          paintDk();
+        };
+        paintDk();
+        const tuRa = q(".k-tuRa");
+        const syncTuRa = () => [".k-ky", ".k-nam", ".k-so"].forEach((s) => {
+          q(s).disabled = tuRa.checked;
+        });
+        tuRa.onchange = syncTuRa;
+        syncTuRa();
+        q(".k-ten").oninput = () => {
+          if (q(".k-ky").value || tuRa.checked) return;
+          const g = guessSource(q(".k-ten").value);
+          if (g) {
+            q(".k-ky").value = g.ky;
+            q(".k-nam").value = g.nam;
+            q(".k-so").value = g.so || "";
+          }
+        };
+        box.querySelector(".cancel").onclick = () => close2(null);
+        box.querySelector(".primary").onclick = () => {
+          if (mode === "attach") {
+            const m = /\[([a-z0-9-]+)\]\s*$/.exec(q(".k-attach-q").value);
+            if (!m || !ix.bai[m[1]]) {
+              q(".k-msg").textContent = "Ch\u1ECDn m\u1ED9t b\xE0i trong danh s\xE1ch g\u1EE3i \xFD.";
+              return;
+            }
+            return close2({ attachTo: m[1] });
+          }
+          const ten = q(".k-ten").value.trim();
+          if (!ten) {
+            q(".k-msg").textContent = "C\u1EA7n \u0111\u1EB7t t\xEAn b\xE0i.";
+            q(".k-ten").focus();
+            return;
+          }
+          close2({
+            meta: {
+              ten,
+              nguon: tuRa.checked ? { tuRa: true } : { ky: q(".k-ky").value.trim(), nam: q(".k-nam").value.trim(), so: q(".k-so").value.trim() },
+              chuDe: [...box.querySelectorAll(".k-topics .chip.on")].map((b) => b.dataset.t),
+              the: q(".k-the").value.split(",").map((x) => x.trim()).filter(Boolean),
+              doKho,
+              ghiChu: q(".k-ghiChu").value
+            }
+          });
+        };
+      });
+    }
+    async function openBai(ma, { ref = null, forceNew = false } = {}) {
+      const kho = await ensureKho();
+      if (!kho) return false;
+      if (!ref && !forceNew) {
+        const open3 = app.tabs.findIndex((t2) => t2.kho && t2.kho.ma === ma);
+        if (open3 >= 0) {
+          app.switchTab(open3);
+          return true;
+        }
+      }
+      try {
+        const b = await busy(() => kho.loadBai(ma, ref));
+        b.docs.forEach((doc2, i) => {
+          if (!doc2.title) doc2.title = b.docs.length > 1 ? `${b.meta.ten} (${i + 1})` : b.meta.ten;
+          const link = ref || forceNew ? null : { ma, hinh: i, sha: b.sha };
+          app.openDoc(doc2, { kho: link });
+          app.tabs[app.tabIdx].savedSig = link ? docSig(app.doc) : null;
+          if (!doc2.view) app.zoomFit();
+        });
+        app.emit("saved");
+        return true;
+      } catch (e) {
+        await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c b\xE0i", esc5(e.message), "OK");
+        return false;
+      }
+    }
+    async function openBrowser(view = "bai") {
+      const kho = await ensureKho();
+      if (!kho) return;
+      const F = { chuDe: /* @__PURE__ */ new Set(), ky: /* @__PURE__ */ new Set(), doKho: /* @__PURE__ */ new Set(), trangThai: /* @__PURE__ */ new Set(), daDay: null };
+      let q = "", sort = "moi", paint = null;
+      const sel = /* @__PURE__ */ new Set();
+      busy(() => kho.refresh()).then(() => paint && paint()).catch(() => {
+      });
+      await modal((box, close2) => {
+        box.classList.add("kho-win");
+        box.innerHTML = `<div class="kw-head"><h3>Kho b\xE0i</h3><input type="search" class="kw-q" placeholder="T\xECm t\xEAn, ngu\u1ED3n, ch\u1EE7 \u0111\u1EC1, th\u1EBB, ch\u1EEF trong \u0111\u1EC1/l\u1EDDi gi\u1EA3i\u2026 (kh\xF4ng c\u1EA7n d\u1EA5u)">
+        <select class="kw-sort" title="S\u1EAFp x\u1EBFp"><option value="moi">M\u1EDBi s\u1EEDa tr\u01B0\u1EDBc</option><option value="ten">Theo t\xEAn</option><option value="nguon">Theo ngu\u1ED3n</option><option value="doKho">Theo \u0111\u1ED9 kh\xF3</option></select>
+        <button class="kw-x" title="\u0110\xF3ng (Esc)">\u2715</button></div>
+        <div class="kw-tabs"><button data-v="bai">B\xE0i t\u1EADp</button><button data-v="buoi">Bu\u1ED5i d\u1EA1y</button><span class="spacer"></span>
+          <button class="kw-import">Nh\u1EADp t\u1EC7p v\xE0o kho\u2026</button><button class="kw-topics">S\u1EEDa danh s\xE1ch ch\u1EE7 \u0111\u1EC1\u2026</button><button class="kw-conn">K\u1EBFt n\u1ED1i\u2026</button></div>
+        <div class="kw-body"><aside class="kw-filter"></aside><div class="kw-main"></div></div>
+        <div class="kw-foot"><span class="kw-count"></span><span class="spacer"></span><button class="kw-open-sel" disabled>M\u1EDF c\xE1c b\xE0i \u0111\xE3 ch\u1ECDn</button><button class="kw-buoi-sel primary" disabled>T\u1EA1o bu\u1ED5i d\u1EA1y t\u1EEB c\xE1c b\xE0i \u0111\xE3 ch\u1ECDn</button></div>`;
+        const $ = (s) => box.querySelector(s);
+        const main2 = $(".kw-main"), filt = $(".kw-filter");
+        $(".kw-x").onclick = () => close2(null);
+        $(".kw-q").oninput = (e) => {
+          q = e.target.value;
+          paint();
+        };
+        $(".kw-sort").onchange = (e) => {
+          sort = e.target.value;
+          paint();
+        };
+        $(".kw-conn").onclick = async () => {
+          close2(null);
+          await connectDialog();
+        };
+        $(".kw-import").onclick = async () => {
+          close2(null);
+          await importDialog();
+        };
+        $(".kw-topics").onclick = async () => {
+          const t2 = await textDialogEditable("Danh s\xE1ch ch\u1EE7 \u0111\u1EC1", kho.topics.join("\n"), "M\u1ED7i d\xF2ng m\u1ED9t ch\u1EE7 \u0111\u1EC1. \u0110\u1ED5i t\xEAn m\u1ED9t ch\u1EE7 \u0111\u1EC1 kh\xF4ng t\u1EF1 \u0111\u1ED5i \u1EDF c\xE1c b\xE0i \u0111\xE3 g\u1EAFn (s\u1EEDa l\u1EA1i \u1EDF <i>S\u1EEDa th\xF4ng tin</i> c\u1EE7a b\xE0i).");
+          if (t2 == null || t2 === "\0default") return;
+          await busy(() => kho.saveTopics(t2.split("\n"))).catch((e) => toast(e.message, 5e3));
+          paint();
+        };
+        box.querySelectorAll(".kw-tabs [data-v]").forEach((b) => {
+          b.onclick = () => {
+            view = b.dataset.v;
+            paint();
+          };
+        });
+        $(".kw-open-sel").onclick = async () => {
+          const list = [...sel];
+          close2(null);
+          for (const ma of list) await openBai(ma);
+        };
+        $(".kw-buoi-sel").onclick = async () => {
+          const list = [...sel];
+          close2(null);
+          await buoiDialog({ bai: list });
+        };
+        const thumbs = new IntersectionObserver((ents) => {
+          for (const en of ents) {
+            if (!en.isIntersecting) continue;
+            const el = en.target;
+            thumbs.unobserve(el);
+            kho.thumb(el.dataset.ma).then((url) => {
+              if (url) el.innerHTML = `<img src="${url}" alt="">`;
+            }).catch(() => {
+            });
+          }
+        }, { root: main2 });
+        const count = (key, fn) => {
+          const m = /* @__PURE__ */ new Map();
+          for (const e of Object.values(kho.index.bai)) for (const k of fn(e)) m.set(k, (m.get(k) || 0) + 1);
+          return m;
+        };
+        function paintFilter() {
+          const topics = count("chuDe", (e) => e.chuDe || []);
+          const kys = count("ky", (e) => [kyOf(e)]);
+          const st = count("st", (e) => [e.trangThai]);
+          const group = (title, key, items) => items.length ? `<div class="kf-g"><div class="kf-t">${title}</div>${items.map(([v, label, n]) => `<label class="kf-i"><input type="checkbox" data-k="${key}" data-v="${esc5(v)}" ${F[key].has(key === "doKho" ? +v : v) ? "checked" : ""}><span>${esc5(label)}</span><i>${n}</i></label>`).join("")}</div>` : "";
+          const allTopics = [.../* @__PURE__ */ new Set([...kho.topics, ...topics.keys()])].filter((t2) => topics.get(t2));
+          filt.innerHTML = `<button class="kf-clear" ${[...Object.values(F)].some((x) => x && x.size) || F.daDay != null ? "" : "hidden"}>B\u1ECF m\u1ECDi b\u1ED9 l\u1ECDc</button>` + group("Ch\u1EE7 \u0111\u1EC1", "chuDe", allTopics.map((t2) => [t2, t2, topics.get(t2)])) + group("Ngu\u1ED3n", "ky", [...kys].sort((a, b) => b[1] - a[1]).map(([k, n]) => [k, k, n])) + group("\u0110\u1ED9 kh\xF3", "doKho", [1, 2, 3, 4, 5, 0].map((d) => [d, d ? "\u25CF".repeat(d) : "Ch\u01B0a \u0111\xE1nh gi\xE1", Object.values(kho.index.bai).filter((e) => (e.doKho || 0) === d).length]).filter((x) => x[2])) + group("Tr\u1EA1ng th\xE1i", "trangThai", Object.entries(STATUS).map(([k, l]) => [k, l, st.get(k) || 0]).filter((x) => x[2])) + `<div class="kf-g"><div class="kf-t">\u0110\xE3 d\u1EA1y</div><label class="kf-i"><input type="radio" name="kf-day" data-day="" ${F.daDay == null ? "checked" : ""}><span>T\u1EA5t c\u1EA3</span></label><label class="kf-i"><input type="radio" name="kf-day" data-day="1" ${F.daDay === true ? "checked" : ""}><span>\u0110\xE3 d\u1EA1y</span></label><label class="kf-i"><input type="radio" name="kf-day" data-day="0" ${F.daDay === false ? "checked" : ""}><span>Ch\u01B0a d\u1EA1y</span></label></div>`;
+          filt.querySelectorAll("input[data-k]").forEach((c) => {
+            c.onchange = () => {
+              const k = c.dataset.k, v = k === "doKho" ? +c.dataset.v : c.dataset.v;
+              if (c.checked) F[k].add(v);
+              else F[k].delete(v);
+              paint();
+            };
+          });
+          filt.querySelectorAll("input[data-day]").forEach((c) => {
+            c.onchange = () => {
+              F.daDay = c.dataset.day === "" ? null : c.dataset.day === "1";
+              paint();
+            };
+          });
+          const cl = filt.querySelector(".kf-clear");
+          if (cl) cl.onclick = () => {
+            for (const k of ["chuDe", "ky", "doKho", "trangThai"]) F[k].clear();
+            F.daDay = null;
+            paint();
+          };
+        }
+        function paintBai() {
+          const rows = filterIndex(kho.index, q, F, sort);
+          const nb = Object.keys(kho.index.bai).length;
+          $(".kw-count").textContent = `${rows.length}/${nb} b\xE0i${sel.size ? ` \xB7 \u0111\xE3 ch\u1ECDn ${sel.size}` : ""}`;
+          if (!nb) {
+            main2.innerHTML = `<div class="kw-empty"><b>Kho c\xF2n tr\u1ED1ng.</b><br>M\u1EDF m\u1ED9t h\xECnh r\u1ED3i nh\u1EA5n <kbd>Ctrl+S</kbd> \u0111\u1EC3 l\u01B0u b\xE0i \u0111\u1EA7u ti\xEAn, ho\u1EB7c <button class="kw-imp2">nh\u1EADp c\xE1c t\u1EC7p .json \u0111\xE3 l\u01B0u</button>.</div>`;
+            main2.querySelector(".kw-imp2").onclick = async () => {
+              close2(null);
+              await importDialog();
+            };
+            return;
+          }
+          if (!rows.length) {
+            main2.innerHTML = '<div class="kw-empty">Kh\xF4ng c\xF3 b\xE0i n\xE0o kh\u1EDBp t\xECm ki\u1EBFm / b\u1ED9 l\u1ECDc.</div>';
+            return;
+          }
+          main2.innerHTML = `<div class="kgrid">${rows.map(([ma, e]) => {
+            const taught = kho.taughtIn(ma);
+            const openNow = app.tabs.some((t2) => t2.kho && t2.kho.ma === ma);
+            return `<div class="kcard ${sel.has(ma) ? "sel" : ""}" data-ma="${esc5(ma)}" tabindex="0">
+            <div class="kc-thumb" data-ma="${esc5(ma)}"><span>${esc5((e.ten || "?").trim()[0] || "?")}</span></div>
+            <label class="kc-sel" title="Ch\u1ECDn (\u0111\u1EC3 m\u1EDF nhi\u1EC1u b\xE0i / t\u1EA1o bu\u1ED5i d\u1EA1y)"><input type="checkbox" ${sel.has(ma) ? "checked" : ""}></label>
+            <button class="kc-more" title="Th\xEAm thao t\xE1c">\u22EF</button>
+            <div class="kc-info"><div class="kc-ten">${esc5(e.ten)}${e.soHinh > 1 ? ` <span class="kc-n">${e.soHinh} h\xECnh</span>` : ""}</div>
+              <div class="kc-src">${esc5(sourceLabel(e.nguon) || "Ch\u01B0a ghi ngu\u1ED3n")}${e.doKho ? ` \xB7 <span class="kc-dk" title="\u0110\u1ED9 kh\xF3 ${e.doKho}/5">${"\u25CF".repeat(e.doKho)}<i>${"\u25CF".repeat(5 - e.doKho)}</i></span>` : ""}</div>
+              ${(e.chuDe || []).length || (e.the || []).length ? `<div class="kc-tags">${(e.chuDe || []).map((t2) => `<span class="tag">${esc5(t2)}</span>`).join("")}${(e.the || []).map((t2) => `<span class="tag soft">${esc5(t2)}</span>`).join("")}</div>` : ""}
+              <div class="kc-st"><span class="st st-${e.trangThai}">${STATUS[e.trangThai] || ""}</span>${taught.length ? ` \xB7 \u0111\xE3 d\u1EA1y ${taught.length} l\u1EA7n (g\u1EA7n nh\u1EA5t ${fmtDate(taught[0].ngay) || taught[0].ten})` : ""}${openNow ? " \xB7 <b>\u0111ang m\u1EDF</b>" : ""}</div></div></div>`;
+          }).join("")}</div>`;
+          main2.querySelectorAll(".kc-thumb").forEach((el) => thumbs.observe(el));
+          main2.querySelectorAll(".kcard").forEach((c) => {
+            const ma = c.dataset.ma;
+            c.onclick = async (ev) => {
+              if (ev.target.closest(".kc-sel")) {
+                const cb = c.querySelector(".kc-sel input");
+                if (ev.target !== cb) return;
+                if (cb.checked) sel.add(ma);
+                else sel.delete(ma);
+                c.classList.toggle("sel", cb.checked);
+                updateFoot();
+                return;
+              }
+              if (ev.target.closest(".kc-more")) {
+                ev.stopPropagation();
+                cardMenu(c.querySelector(".kc-more"), ma);
+                return;
+              }
+              close2(null);
+              await openBai(ma);
+            };
+            c.onkeydown = (ev) => {
+              if (ev.key === "Enter") c.click();
+            };
+          });
+        }
+        function cardMenu(anchor, ma) {
+          document.querySelector(".kpop")?.remove();
+          const pop = document.createElement("div");
+          pop.className = "kpop";
+          pop.innerHTML = `<button data-a="open">M\u1EDF</button><button data-a="meta">S\u1EEDa th\xF4ng tin\u2026</button><button data-a="hist">C\xE1c phi\xEAn b\u1EA3n c\u0169\u2026</button><button data-a="buoi">Th\xEAm v\xE0o bu\u1ED5i d\u1EA1y\u2026</button><div class="menu-sep"></div><button data-a="del" class="danger-t">Xo\xE1 kh\u1ECFi kho\u2026</button>`;
+          const r = anchor.getBoundingClientRect(), br = box.getBoundingClientRect();
+          pop.style.left = `${r.right - br.left - 190}px`;
+          pop.style.top = `${r.bottom - br.top + 4}px`;
+          box.appendChild(pop);
+          const off = (ev) => {
+            if (!pop.contains(ev.target)) {
+              pop.remove();
+              document.removeEventListener("pointerdown", off, true);
+            }
+          };
+          document.addEventListener("pointerdown", off, true);
+          pop.onclick = async (ev) => {
+            const a = ev.target.closest("[data-a]");
+            if (!a) return;
+            pop.remove();
+            const act = a.dataset.a;
+            if (act === "open") {
+              close2(null);
+              await openBai(ma);
+            } else if (act === "meta") await editMeta(ma).then(paint);
+            else if (act === "hist") {
+              const ok = await historyDialog(ma);
+              if (ok) close2(null);
+            } else if (act === "buoi") await addToBuoiDialog(ma).then(paint);
+            else if (act === "del") {
+              const e = kho.index.bai[ma];
+              if (!await confirmDialog("Xo\xE1 b\xE0i kh\u1ECFi kho", `Xo\xE1 <b>${esc5(e.ten)}</b> kh\u1ECFi kho? B\xE0i c\u0169ng b\u1ECB g\u1EE1 kh\u1ECFi c\xE1c bu\u1ED5i d\u1EA1y. (V\u1EABn l\u1EA5y l\u1EA1i \u0111\u01B0\u1EE3c t\u1EEB l\u1ECBch s\u1EED repo tr\xEAn GitHub.)`, "Xo\xE1")) return;
+              await busy(() => kho.deleteBai(ma)).catch((er) => toast(er.message, 5e3));
+              app.tabs.forEach((t2) => {
+                if (t2.kho && t2.kho.ma === ma) {
+                  t2.kho = null;
+                  t2.savedSig = null;
+                }
+              });
+              sel.delete(ma);
+              app.emit("saved");
+              paint();
+            }
+          };
+        }
+        function paintBuoi() {
+          const list = Object.entries(kho.index.buoi).sort((a, b) => String(b[1].ngay || b[1].capNhat).localeCompare(String(a[1].ngay || a[1].capNhat)));
+          $(".kw-count").textContent = `${list.length} bu\u1ED5i d\u1EA1y`;
+          const words = q.trim().toLowerCase();
+          const shown = list.filter(([, b]) => !words || [b.ten, b.lop, b.ghiChu, ...b.bai.map((m) => kho.index.bai[m]?.ten)].join(" ").toLowerCase().includes(words));
+          main2.innerHTML = shown.length ? `<div class="kbuoi">${shown.map(([bm, b]) => `<div class="kb-row" data-b="${esc5(bm)}">
+            <div class="kb-info"><div class="kb-ten">${esc5(b.ten)}</div><div class="kb-sub">${[b.ngay && fmtDate(b.ngay), b.lop, `${b.bai.length} b\xE0i`].filter(Boolean).map(esc5).join(" \xB7 ")}</div>
+              <div class="kb-bai">${b.bai.map((m, i) => `<span>${i + 1}. ${esc5(kho.index.bai[m] ? kho.index.bai[m].ten : "(\u0111\xE3 xo\xE1)")}</span>`).join("")}</div>${b.ghiChu ? `<div class="note">${esc5(b.ghiChu)}</div>` : ""}</div>
+            <div class="kb-act"><button data-a="open" class="primary">M\u1EDF bu\u1ED5i</button><button data-a="edit">S\u1EEDa\u2026</button><button data-a="de">Phi\u1EBFu \u0111\u1EC1 (.tex)</button><button data-a="full">Phi\u1EBFu k\xE8m l\u1EDDi gi\u1EA3i</button><button data-a="del" class="danger-t">Xo\xE1</button></div></div>`).join("")}</div>` : `<div class="kw-empty">${list.length ? "Kh\xF4ng c\xF3 bu\u1ED5i n\xE0o kh\u1EDBp t\xECm ki\u1EBFm." : "Ch\u01B0a c\xF3 bu\u1ED5i d\u1EA1y n\xE0o. M\u1EDF c\xE1c b\xE0i \u0111\u1ECBnh d\u1EA1y r\u1ED3i ch\u1ECDn <i>Kho \u203A L\u01B0u c\xE1c tab \u0111ang m\u1EDF th\xE0nh bu\u1ED5i d\u1EA1y\u2026</i>, ho\u1EB7c ch\u1ECDn nhi\u1EC1u b\xE0i \u1EDF m\u1EE5c B\xE0i t\u1EADp r\u1ED3i b\u1EA5m <i>T\u1EA1o bu\u1ED5i d\u1EA1y</i>."}</div>`;
+          main2.querySelectorAll(".kb-row").forEach((row) => {
+            const bm = row.dataset.b;
+            row.querySelector(".kb-act").onclick = async (ev) => {
+              const a = ev.target.closest("[data-a]");
+              if (!a) return;
+              const act = a.dataset.a, b = kho.index.buoi[bm];
+              if (act === "open") {
+                close2(null);
+                for (const m of b.bai) if (kho.index.bai[m]) await openBai(m);
+                toast(`\u0110\xE3 m\u1EDF bu\u1ED5i "${b.ten}" (${b.bai.length} b\xE0i)`);
+              } else if (act === "edit") {
+                await buoiDialog({ ma: bm, ...b });
+                paint();
+              } else if (act === "de" || act === "full") await exportBuoi(bm, act === "full");
+              else if (act === "del") {
+                if (!await confirmDialog("Xo\xE1 bu\u1ED5i d\u1EA1y", `Xo\xE1 bu\u1ED5i <b>${esc5(b.ten)}</b>? C\xE1c b\xE0i v\u1EABn c\xF2n trong kho.`, "Xo\xE1")) return;
+                await busy(() => kho.deleteBuoi(bm)).catch((er) => toast(er.message, 5e3));
+                paint();
+              }
+            };
+          });
+        }
+        function updateFoot() {
+          $(".kw-open-sel").disabled = $(".kw-buoi-sel").disabled = !sel.size || view !== "bai";
+          $(".kw-foot").hidden = view !== "bai";
+          if (view === "bai") $(".kw-count").textContent = $(".kw-count").textContent.replace(/ · đã chọn \d+$/, "") + (sel.size ? ` \xB7 \u0111\xE3 ch\u1ECDn ${sel.size}` : "");
+        }
+        paint = () => {
+          box.querySelectorAll(".kw-tabs [data-v]").forEach((b) => {
+            b.classList.toggle("on", b.dataset.v === view);
+            b.textContent = b.dataset.v === "bai" ? `B\xE0i t\u1EADp (${Object.keys(kho.index.bai).length})` : `Bu\u1ED5i d\u1EA1y (${Object.keys(kho.index.buoi).length})`;
+          });
+          filt.hidden = view !== "bai";
+          $(".kw-sort").hidden = view !== "bai";
+          if (view === "bai") {
+            paintFilter();
+            paintBai();
+          } else paintBuoi();
+          updateFoot();
+        };
+        paint();
+        setTimeout(() => $(".kw-q").focus(), 0);
+      });
+      paint = null;
+    }
+    async function editMeta(ma) {
+      const kho = S2.kho;
+      const e = kho.index.bai[ma];
+      const r = await metaDialog({ title: "Th\xF4ng tin b\xE0i", meta: e, okLabel: "L\u01B0u th\xF4ng tin" });
+      if (!r) return;
+      try {
+        const res = await busy(() => kho.updateMeta(ma, r.meta));
+        app.tabs.forEach((t2) => {
+          if (t2.kho && t2.kho.ma === ma) t2.kho.sha = res.sha;
+        });
+        toast("\u0110\xE3 l\u01B0u th\xF4ng tin b\xE0i");
+      } catch (er) {
+        toast(er.message, 5e3);
+      }
+    }
+    async function historyDialog(ma) {
+      const kho = S2.kho;
+      let list;
+      try {
+        list = await busy(() => kho.history(ma));
+      } catch (e) {
+        toast(e.message, 5e3);
+        return false;
+      }
+      const pick = await modal((box, close2) => {
+        box.classList.add("wide");
+        box.innerHTML = `<h3>C\xE1c phi\xEAn b\u1EA3n: ${esc5(kho.index.bai[ma].ten)}</h3><div class="modal-body">M\u1ED7i l\u1EA7n l\u01B0u l\xE0 m\u1ED9t phi\xEAn b\u1EA3n. M\u1EDF m\u1ED9t b\u1EA3n c\u0169 th\xE0nh <b>tab m\u1EDBi</b> (b\u1EA3n sao, kh\xF4ng g\u1EAFn v\u1EDBi kho) \u0111\u1EC3 xem ho\u1EB7c ch\xE9p l\u1EA1i ph\u1EA7n c\u1EA7n.</div>
+        <div class="pick-list">${list.map((c2, i) => `<button class="pick" data-i="${i}"><b>${fmtTime(c2.date)}${i === 0 ? " \u2013 b\u1EA3n hi\u1EC7n t\u1EA1i" : ""}</b><span>${esc5(c2.message || "")}</span></button>`).join("")}</div>
+        <div class="modal-actions"><button class="cancel">\u0110\xF3ng</button></div>`;
+        box.querySelector(".cancel").onclick = () => close2(null);
+        box.querySelectorAll(".pick").forEach((b) => {
+          b.onclick = () => close2(+b.dataset.i);
+        });
+      });
+      if (pick == null) return false;
+      if (pick === 0) return openBai(ma, { forceNew: false });
+      const c = list[pick];
+      return openBai(ma, { ref: c.sha, forceNew: true }).then((ok) => {
+        if (ok) app.commit((d) => {
+          d.title = `${kho.index.bai[ma].ten} \u2013 b\u1EA3n ${fmtTime(c.date)}`;
+        });
+        return ok;
+      });
+    }
+    async function addToBuoiDialog(ma) {
+      const kho = S2.kho;
+      const list = Object.entries(kho.index.buoi);
+      const v = await choiceDialog("Th\xEAm v\xE0o bu\u1ED5i d\u1EA1y", list.length ? "Ch\u1ECDn bu\u1ED5i:" : "Ch\u01B0a c\xF3 bu\u1ED5i d\u1EA1y n\xE0o.", [...list.slice(0, 12).map(([bm, b2]) => ({ label: `${b2.ten}${b2.ngay ? " \u2013 " + fmtDate(b2.ngay) : ""}`, value: bm })), { label: "+ Bu\u1ED5i m\u1EDBi\u2026", value: "\0new", primary: true }]);
+      if (v == null) return;
+      if (v === "\0new") return buoiDialog({ bai: [ma] });
+      const b = kho.index.buoi[v];
+      if (b.bai.includes(ma)) return toast("B\xE0i \u0111\xE3 c\xF3 trong bu\u1ED5i n\xE0y");
+      await busy(() => kho.saveBuoi({ ma: v, ...b, bai: [...b.bai, ma] })).then(() => toast(`\u0110\xE3 th\xEAm v\xE0o bu\u1ED5i "${b.ten}"`)).catch((e) => toast(e.message, 5e3));
+    }
+    async function buoiDialog(buoi) {
+      const kho = await ensureKho();
+      if (!kho) return null;
+      const lops = [...new Set(Object.values(kho.index.buoi).map((b) => b.lop).filter(Boolean))];
+      let bai = [...buoi.bai || []];
+      const res = await modal((box, close2) => {
+        box.classList.add("wide");
+        box.innerHTML = `<h3>${buoi.ma ? "S\u1EEDa bu\u1ED5i d\u1EA1y" : "Bu\u1ED5i d\u1EA1y m\u1EDBi"}</h3>
+        <label class="row">T\xEAn bu\u1ED5i <input type="text" class="b-ten" value="${esc5(buoi.ten || "")}" placeholder="vd Bu\u1ED5i 5 \u2013 T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp"></label>
+        <div class="row">Ng\xE0y <input type="date" class="b-ngay" value="${esc5(buoi.ngay || today())}"> L\u1EDBp <input type="text" class="b-lop" list="b-lop-list" value="${esc5(buoi.lop || "")}" placeholder="vd 11 To\xE1n"><datalist id="b-lop-list">${lops.map((l) => `<option value="${esc5(l)}">`).join("")}</datalist></div>
+        <label class="row">Ghi ch\xFA <input type="text" class="b-gc" value="${esc5(buoi.ghiChu || "")}" placeholder="tu\u1EF3 \xFD"></label>
+        <div class="k-label">C\xE1c b\xE0i (theo th\u1EE9 t\u1EF1 d\u1EA1y)</div><div class="b-list"></div>
+        <div class="row"><input type="text" class="b-add" list="b-bai-list" placeholder="Th\xEAm b\xE0i: g\xF5 \u0111\u1EC3 t\xECm\u2026"><datalist id="b-bai-list">${Object.entries(kho.index.bai).map(([ma, e]) => `<option value="${esc5(e.ten)} [${esc5(ma)}]">`).join("")}</datalist></div>
+        <div class="k-msg note"></div>
+        <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary">L\u01B0u bu\u1ED5i d\u1EA1y</button></div>`;
+        const q = (s) => box.querySelector(s);
+        const paintList = () => {
+          q(".b-list").innerHTML = bai.length ? bai.map((m, i) => `<div class="b-item"><span>${i + 1}. ${esc5(kho.index.bai[m] ? kho.index.bai[m].ten : m)}</span><button data-u="${i}" ${i ? "" : "disabled"} title="L\xEAn">\u2191</button><button data-d="${i}" ${i < bai.length - 1 ? "" : "disabled"} title="Xu\u1ED1ng">\u2193</button><button data-x="${i}" title="B\u1ECF kh\u1ECFi bu\u1ED5i">\u2715</button></div>`).join("") : '<div class="note">Ch\u01B0a c\xF3 b\xE0i n\xE0o.</div>';
+        };
+        paintList();
+        q(".b-list").onclick = (e) => {
+          const b = e.target.closest("button");
+          if (!b) return;
+          if (b.dataset.u) {
+            const i = +b.dataset.u;
+            [bai[i - 1], bai[i]] = [bai[i], bai[i - 1]];
+          }
+          if (b.dataset.d) {
+            const i = +b.dataset.d;
+            [bai[i + 1], bai[i]] = [bai[i], bai[i + 1]];
+          }
+          if (b.dataset.x) bai.splice(+b.dataset.x, 1);
+          paintList();
+        };
+        q(".b-add").onchange = () => {
+          const m = /\[([a-z0-9-]+)\]\s*$/.exec(q(".b-add").value);
+          if (m && kho.index.bai[m[1]] && !bai.includes(m[1])) {
+            bai.push(m[1]);
+            paintList();
+          }
+          q(".b-add").value = "";
+        };
+        q(".cancel").onclick = () => close2(null);
+        q(".primary").onclick = () => {
+          if (!bai.length) {
+            q(".k-msg").textContent = "Bu\u1ED5i d\u1EA1y c\u1EA7n \xEDt nh\u1EA5t m\u1ED9t b\xE0i.";
+            return;
+          }
+          close2({ ma: buoi.ma, ten: q(".b-ten").value || `Bu\u1ED5i ${fmtDate(q(".b-ngay").value)}`, ngay: q(".b-ngay").value, lop: q(".b-lop").value, ghiChu: q(".b-gc").value, bai });
+        };
+      });
+      if (!res) return null;
+      try {
+        const bm = await busy(() => kho.saveBuoi(res));
+        toast(`\u0110\xE3 l\u01B0u bu\u1ED5i d\u1EA1y "${res.ten}"`);
+        return bm;
+      } catch (e) {
+        toast(e.message, 5e3);
+        return null;
+      }
+    }
+    async function saveTabsAsBuoi() {
+      const kho = await ensureKho();
+      if (!kho) return;
+      app.stashTab();
+      const idx = app.tabs.map((_, i) => i).filter((i) => !isEmptyDoc(i === app.tabIdx ? app.doc : app.tabs[i].doc));
+      if (!idx.length) return toast("Ch\u01B0a c\xF3 h\xECnh n\xE0o \u0111ang m\u1EDF");
+      const name2 = (i) => (i === app.tabIdx ? app.doc : app.tabs[i].doc).title || `H\xECnh ${i + 1}`;
+      const pick = await modal((box, close2) => {
+        box.classList.add("wide");
+        box.innerHTML = `<h3>L\u01B0u c\xE1c tab \u0111ang m\u1EDF th\xE0nh bu\u1ED5i d\u1EA1y</h3><div class="modal-body">M\u1ED7i tab \u0111\u01B0\u1EE3c l\u01B0u v\xE0o kho (tab ch\u01B0a c\xF3 trong kho th\xE0nh <b>b\xE0i m\u1EDBi</b> mang t\xEAn tab \u2013 s\u1EEDa th\xF4ng tin sau), r\u1ED3i gom th\xE0nh m\u1ED9t bu\u1ED5i theo th\u1EE9 t\u1EF1 tab.</div>
+        <div class="pick-list">${idx.map((i) => {
+          const t2 = app.tabs[i];
+          return `<label class="b-tab"><input type="checkbox" data-i="${i}" checked> ${esc5(name2(i))} <span class="note">${t2.kho ? t2.kho.ma && kho.index.bai[t2.kho.ma] ? "\xB7 \u0111\xE3 c\xF3 trong kho" : "" : "\xB7 b\xE0i m\u1EDBi"}</span></label>`;
+        }).join("")}</div>
+        <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary">Ti\u1EBFp t\u1EE5c</button></div>`;
+        box.querySelector(".cancel").onclick = () => close2(null);
+        box.querySelector(".primary").onclick = () => close2([...box.querySelectorAll("input[data-i]:checked")].map((c) => +c.dataset.i));
+      });
+      if (!pick || !pick.length) return;
+      const codes = [];
+      for (const i of pick) {
+        const t2 = app.tabs[i];
+        const d = i === app.tabIdx ? app.doc : t2.doc;
+        const payload = currentPayload(i);
+        let r;
+        if (t2.kho && t2.kho.ma && kho.index.bai[t2.kho.ma]) {
+          r = docSig(d) === t2.savedSig ? { ma: t2.kho.ma } : await doSave({ ma: t2.kho.ma, hinh: t2.kho.hinh, ...payload, expectSha: t2.kho.sha }, i);
+        } else {
+          r = await doSave({ meta: { ten: name2(i), nguon: guessSource(name2(i)) }, ...payload }, i);
+        }
+        if (!r) return toast("D\u1EEBng: c\xF2n tab ch\u01B0a l\u01B0u \u0111\u01B0\u1EE3c v\xE0o kho \u2013 bu\u1ED5i d\u1EA1y ch\u01B0a \u0111\u01B0\u1EE3c t\u1EA1o", 5e3);
+        if (!codes.includes(r.ma)) codes.push(r.ma);
+      }
+      await buoiDialog({ ten: "", ngay: today(), bai: codes });
+    }
+    async function exportBuoi(bm, loiGiai) {
+      const kho = S2.kho;
+      const b = kho.index.buoi[bm];
+      try {
+        const items = [];
+        for (const m of b.bai) {
+          if (!kho.index.bai[m]) continue;
+          const r = await busy(() => kho.loadBai(m));
+          items.push({ title: r.meta.ten, docs: r.docs });
+        }
+        const { tex, files } = toLatexSet(items, { title: b.ten, subtitle: [b.lop, b.ngay && fmtDate(b.ngay)].filter(Boolean).join(" \u2013 "), theme: app.theme, trimLines: app.renderer.trimLines, loiGiai });
+        await downloadTex(fileSafeName(`${b.ten}${loiGiai ? "-loi-giai" : "-de"}`), tex, files);
+      } catch (e) {
+        toast(e.message, 5e3);
+      }
+    }
+    async function importDialog() {
+      const kho = await ensureKho();
+      if (!kho) return;
+      let rows = [];
+      const res = await modal((box, close2) => {
+        box.classList.add("wide");
+        box.innerHTML = `<h3>Nh\u1EADp v\xE0o kho</h3><div class="modal-body">Ch\u1ECDn c\xE1c t\u1EC7p <code>.json</code> \u0111\xE3 l\u01B0u (m\u1ED9t h\xECnh, ho\u1EB7c t\u1EC7p "l\u01B0u t\u1EA5t c\u1EA3 c\xE1c tab"). M\u1ED7i h\xECnh th\xE0nh m\u1ED9t b\xE0i; s\u1EEDa t\xEAn ngay \u1EDF \u0111\xE2y, c\xE1c th\xF4ng tin kh\xE1c s\u1EEDa sau.</div>
+        <div class="row"><button class="i-files">Ch\u1ECDn t\u1EC7p\u2026</button><button class="i-tabs">L\u1EA5y c\xE1c tab \u0111ang m\u1EDF</button><button class="i-ex">Th\xEAm c\xE1c b\xE0i v\xED d\u1EE5 c\xF3 s\u1EB5n</button></div>
+        <div class="pick-list i-list"></div>
+        <div class="k-msg note"></div>
+        <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary" disabled>Nh\u1EADp</button></div>`;
+        const q = (s) => box.querySelector(s);
+        const paintRows = () => {
+          q(".i-list").innerHTML = rows.map((r, i) => `<label class="i-row"><input type="checkbox" data-i="${i}" ${r.on ? "checked" : ""}><input type="text" data-t="${i}" value="${esc5(r.ten)}"><span class="note">${esc5(sourceLabel(r.nguon) || "")}${r.doc.boxes && r.doc.boxes.length ? " \xB7 c\xF3 khung ch\u1EEF" : ""}</span></label>`).join("");
+          const n = rows.filter((r) => r.on).length;
+          q(".primary").disabled = !n;
+          q(".primary").textContent = n ? `Nh\u1EADp ${n} b\xE0i` : "Nh\u1EADp";
+          q(".i-list").querySelectorAll("[data-i]").forEach((c) => {
+            c.onchange = () => {
+              rows[+c.dataset.i].on = c.checked;
+              paintRows();
+            };
+          });
+          q(".i-list").querySelectorAll("[data-t]").forEach((c) => {
+            c.oninput = () => {
+              rows[+c.dataset.t].ten = c.value;
+            };
+          });
+        };
+        const add2 = (doc2, ten) => {
+          if (isEmptyDoc(doc2)) return;
+          if (rows.some((r) => JSON.stringify(r.doc.steps) === JSON.stringify(doc2.steps) && JSON.stringify(r.doc.boxes || null) === JSON.stringify(doc2.boxes || null))) return;
+          const t2 = ten || doc2.title || `B\xE0i ${rows.length + 1}`;
+          rows.push({ doc: doc2, ten: t2, nguon: guessSource(t2), on: !Object.values(kho.index.bai).some((e) => e.ten === t2) });
+        };
+        q(".i-files").onclick = () => {
+          const inp = document.createElement("input");
+          inp.type = "file";
+          inp.accept = ".json,application/json";
+          inp.multiple = true;
+          inp.onchange = async () => {
+            for (const f of inp.files) {
+              try {
+                const { docs } = parseFileText(await f.text());
+                docs.forEach((d) => add2(d, docs.length === 1 ? d.title || f.name.replace(/\.json$/i, "") : null));
+              } catch (e) {
+                q(".k-msg").textContent = `${f.name}: ${e.message}`;
+              }
+            }
+            paintRows();
+          };
+          inp.click();
+        };
+        q(".i-tabs").onclick = () => {
+          app.stashTab();
+          app.tabs.forEach((_, i) => add2(compactDoc(tabDoc(app, i))));
+          paintRows();
+        };
+        q(".i-ex").onclick = () => {
+          for (const ex of window.GeoCore && window.GeoCore.THU_VIEN || []) add2(JSON.parse(JSON.stringify(ex.doc)), ex.doc.title);
+          paintRows();
+        };
+        q(".cancel").onclick = () => close2(null);
+        q(".primary").onclick = () => close2(rows.filter((r) => r.on));
+        paintRows();
+      });
+      if (!res || !res.length) return;
+      const items = res.map((r) => ({ meta: { ten: r.ten.trim() || "B\xE0i ch\u01B0a \u0111\u1EB7t t\xEAn", nguon: r.nguon }, docs: [r.doc], thumb: renderThumb(r.doc, { theme: app.theme, trimLines: app.renderer.trimLines }) }));
+      try {
+        const codes = await busy(() => kho.importMany(items));
+        toast(`\u0110\xE3 nh\u1EADp ${codes.length} b\xE0i v\xE0o kho`, 4e3);
+      } catch (e) {
+        await confirmDialog("Kh\xF4ng nh\u1EADp \u0111\u01B0\u1EE3c", esc5(e.message), "OK");
+      }
+    }
+    const on = (id, fn) => {
+      const el = document.getElementById(id);
+      if (el) el.onclick = fn;
+    };
+    on("kho-status", () => S2.conf ? openBrowser() : connectDialog());
+    on("btn-kho-open", () => openBrowser());
+    on("btn-kho-save", () => saveCurrent());
+    on("btn-kho-meta", async () => {
+      const t2 = app.tabs[app.tabIdx];
+      if (!t2.kho || !t2.kho.ma) return toast("H\xECnh n\xE0y ch\u01B0a c\xF3 trong kho \u2013 Ctrl+S \u0111\u1EC3 l\u01B0u v\xE0o kho");
+      if (await ensureKho()) await editMeta(t2.kho.ma);
+    });
+    on("btn-kho-buoi-tabs", () => saveTabsAsBuoi());
+    on("btn-kho-buoi", () => openBrowser("buoi"));
+    on("btn-kho-import", () => importDialog());
+    on("btn-kho-connect", () => connectDialog());
+    on("btn-kho-disconnect", async () => {
+      if (!await confirmDialog("Ng\u1EAFt k\u1EBFt n\u1ED1i kho", "Xo\xE1 token kh\u1ECFi m\xE1y n\xE0y? C\xE1c b\xE0i trong kho v\u1EABn c\xF2n nguy\xEAn tr\xEAn GitHub.", "Ng\u1EAFt k\u1EBFt n\u1ED1i")) return;
+      S2.conf = null;
+      S2.kho = null;
+      saveConf(null);
+      updateChip();
+      toast("\u0110\xE3 ng\u1EAFt k\u1EBFt n\u1ED1i kho");
+    });
+    updateChip();
+    loadQueue().then(() => {
+      if (S2.conf) ensureKho({ silent: true }).then(() => flushQueue()).catch(() => {
+      });
+    });
+    return { saveCurrent, openBrowser, openBai, connectDialog, ensureKho, flushQueue, saveTabsAsBuoi, importDialog, isConnected: () => !!S2.conf, state: S2 };
+  }
+
   // src/explore/knowledge.js
   var UF = class {
     constructor() {
@@ -21054,7 +22817,7 @@
     same_line: "Tr\xF9ng nhau",
     same_circle: "Tr\xF9ng nhau"
   };
-  var esc4 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  var esc6 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   function setupExplore(app) {
     const pane = document.getElementById("tab-explore");
     let result = null;
@@ -21072,7 +22835,7 @@
         if (!result.relations.length) html += '<div class="empty">Kh\xF4ng t\xECm th\u1EA5y quan h\u1EC7 n\xE0o ngo\xE0i c\xE1c quan h\u1EC7 hi\u1EC3n nhi\xEAn.</div>';
         html += '<div class="rel-list">' + result.relations.map((r, i) => `<div class="rel ${i === active ? "active" : ""}" data-i="${i}">
           <span class="rel-score" title="\u0110i\u1EC3m x\u1EBFp h\u1EA1ng">${r.score}</span>
-          <div class="rel-body"><div class="rel-type">${TYPE_LABEL[r.type] || r.type}</div><div class="rel-text">${esc4(r.text)}</div>${r.note ? `<div class="rel-note">${esc4(r.note)}</div>` : ""}</div>
+          <div class="rel-body"><div class="rel-type">${TYPE_LABEL[r.type] || r.type}</div><div class="rel-text">${esc6(r.text)}</div>${r.note ? `<div class="rel-note">${esc6(r.note)}</div>` : ""}</div>
         </div>`).join("") + "</div>";
       }
       pane.innerHTML = html;
@@ -21156,216 +22919,6 @@
       };
       R.addExtra({ type: "point", pts: [common], style: { color: "#f59e0b", fill: "#fde68a", size: 7 } });
     }
-  }
-
-  // src/export/tikz.js
-  var NAMED_COLORS = Object.fromEntries([
-    ["#000000", "black"],
-    ["#111827", "black"],
-    ["#1f2937", "black"],
-    ...PALETTE.slice(1).map((c) => [c.hex, c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/[^A-Za-z]/g, "").toLowerCase()])
-  ]);
-  var PT_PER_PX = 0.4;
-  var f3 = (v) => {
-    const s = (Math.round(v * 1e3) / 1e3).toFixed(3).replace(/\.?0+$/, "");
-    return s === "-0" ? "0" : s;
-  };
-  var xy = (P2) => `(${f3(P2.x)}, ${f3(P2.y)})`;
-  function coordName(name2, used) {
-    let base2 = (name2 || "P").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/'/g, "p").replace(/[^A-Za-z0-9]/g, "");
-    if (!base2 || /^\d/.test(base2)) base2 = "P" + base2;
-    let n = base2, i = 2;
-    while (used.has(n)) n = base2 + "-" + i++;
-    used.add(n);
-    return n;
-  }
-  function anchorFor(off) {
-    const a = Math.atan2(off[1], off[0]) * 180 / Math.PI;
-    const dirs = ["right", "above right", "above", "above left", "left", "below left", "below", "below right"];
-    return dirs[(Math.round(a / 45) % 8 + 8) % 8];
-  }
-  function clipLine(l, box, tMin = -Infinity) {
-    let t0 = tMin, t1 = Infinity;
-    const { p, d } = l;
-    for (const [pp, dd, lo, hi] of [[p.x, d.x, box.x1, box.x2], [p.y, d.y, box.y1, box.y2]]) {
-      if (Math.abs(dd) < 1e-14) {
-        if (pp < lo || pp > hi) return null;
-        continue;
-      }
-      let a = (lo - pp) / dd, b = (hi - pp) / dd;
-      if (a > b) [a, b] = [b, a];
-      t0 = Math.max(t0, a);
-      t1 = Math.min(t1, b);
-    }
-    if (t0 >= t1) return null;
-    return [{ x: p.x + t0 * d.x, y: p.y + t0 * d.y }, { x: p.x + t1 * d.x, y: p.y + t1 * d.y }];
-  }
-  function toTikZ(doc2, opts = {}) {
-    const width = opts.width || 12;
-    const theme2 = opts.theme || "mono";
-    const vals = opts.values || evaluate(doc2);
-    const k = kinds(doc2);
-    const visible = doc2.steps.filter((s) => !s.hidden && vals.get(s.id));
-    const pts = [];
-    for (const s of visible) {
-      const v = vals.get(s.id);
-      if (v.kind === "point") pts.push(v);
-      if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
-    }
-    if (!pts.length) return "% H\xECnh tr\u1ED1ng\n";
-    let x1 = Math.min(...pts.map((p) => p.x)), x2 = Math.max(...pts.map((p) => p.x));
-    let y1 = Math.min(...pts.map((p) => p.y)), y2 = Math.max(...pts.map((p) => p.y));
-    const span = Math.max(x2 - x1, y2 - y1, 1e-6);
-    const m = span * 0.08;
-    const box = { x1: x1 - m, x2: x2 + m, y1: y1 - m, y2: y2 + m };
-    const unit2 = width / (box.x2 - box.x1);
-    const cm = (c) => c / unit2;
-    const colorDefs = /* @__PURE__ */ new Map();
-    const full = (s) => styleOf(s, k.get(s.id), theme2);
-    const hexName = (hex) => {
-      hex = hex.toLowerCase();
-      if (NAMED_COLORS[hex]) {
-        if (NAMED_COLORS[hex] !== "black") colorDefs.set(NAMED_COLORS[hex], hex);
-        return NAMED_COLORS[hex];
-      }
-      const nm = "c" + hex.replace("#", "");
-      colorDefs.set(nm, hex);
-      return nm;
-    };
-    const col = (s) => hexName(full(s).color || "#000000");
-    const baseWidth = styleOf({ type: "line" }, "line", theme2).width;
-    const opt = (...xs) => {
-      const o = xs.filter((x) => x && x !== "black");
-      return o.length ? `[${o.join(", ")}]` : "";
-    };
-    const lineOpts = (s) => {
-      const st = full(s);
-      const w = st.width && Math.abs(st.width - baseWidth) > 1e-9 ? `line width=${f3(st.width * PT_PER_PX)}pt` : "";
-      return opt(col(s), st.dash ? "dashed" : "", w);
-    };
-    const centerOf = /* @__PURE__ */ new Map();
-    for (const s of doc2.steps) if (s.type === "center" && !centerOf.has(s.args[0])) centerOf.set(s.args[0], s.id);
-    const used = /* @__PURE__ */ new Set();
-    const cname = /* @__PURE__ */ new Map();
-    for (const s of visible) if (k.get(s.id) === "point") cname.set(s.id, coordName(s.name, used));
-    for (const s of visible) if (k.get(s.id) === "mark" || ["segment", "circle"].includes(s.type)) for (const a of s.args) {
-      if (!cname.has(a) && vals.get(a)) cname.set(a, coordName(stepById(doc2, a)?.name || a, used));
-    }
-    const ref = (id) => `(${cname.get(id)})`;
-    const autoDirs = autoLabelDirs(doc2, vals);
-    const out = { coords: [], fills: [], circles: [], lines: [], marks: [], points: [], labels: [] };
-    for (const [id, n] of cname) out.coords.push(`\\coordinate (${n}) at ${xy(vals.get(id))};${stepById(doc2, id)?.hidden ? " % \u0111i\u1EC3m \u1EA9n" : ""}`);
-    for (const s of visible) {
-      const v = vals.get(s.id);
-      const st = full(s);
-      const kind = k.get(s.id);
-      if (kind === "circle") {
-        const cId = s.type === "circle" || s.type === "circle_radius" ? s.args[0] : centerOf.get(s.id);
-        const cAt = cId && cname.has(cId) ? cId : [...cname.keys()].find((id) => dist(vals.get(id), v.c) < 1e-9 * (1 + v.r));
-        const center = cAt ? ref(cAt) : xy(v.c);
-        const fill = st.fill || 0;
-        if (fill > 0) out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(fill)}] ${center} circle (${f3(v.r)});`);
-        out.circles.push(`\\draw${lineOpts(s)} ${center} circle (${f3(v.r)}); % ${s.name || ""}`);
-        if (st.showLabel && s.name) {
-          const P2 = { x: v.c.x + v.r * Math.cos(Math.PI / 4), y: v.c.y + v.r * Math.sin(Math.PI / 4) };
-          out.labels.push(`\\node[above right, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
-        }
-      } else if (kind === "line") {
-        const sub4 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
-        const desc = s.type === "line" || s.type === "segment" || s.type === "ray" ? s.args.map((a) => stepById(doc2, a)?.name).join("") : s.name;
-        if (sub4 === "segment" && s.type === "segment") out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
-        else if (sub4 === "segment") out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(add(v.p, v.d))};`);
-        else {
-          const rg = opts.trimLines ? trimmedRange(v, sub4, visible.filter((x) => k.get(x.id) === "point").map((x) => vals.get(x.id)), 1e-9 * (box.x2 - box.x1), cm(0.35), cm(1.1)) : null;
-          const seg = rg ? [add(v.p, mul(v.d, rg[0])), add(v.p, mul(v.d, rg[1]))] : clipLine(v, box, sub4 === "ray" ? 0 : -Infinity);
-          if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub4 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub4 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${desc}`);
-          if (seg && st.showLabel && s.name) {
-            const P2 = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
-            out.labels.push(`\\node[above, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
-          }
-        }
-      } else if (s.type === "polygon") {
-        const path2 = s.args.map(ref).join(" -- ") + " -- cycle";
-        out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.1)}] ${path2};`);
-        if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path2};`);
-      } else if (s.type === "angle_mark") {
-        out.marks.push(...angleMark(v, s, col(s), cm, ref));
-      } else if (s.type === "segment_mark") {
-        out.marks.push(...segMark(v, s, col(s), cm));
-      } else if (kind === "point") {
-        const r = f3((st.size || 3) * 0.5);
-        if (st.hollow) out.points.push(`\\filldraw[fill=white${col(s) === "black" ? "" : ", draw=" + col(s)}] ${ref(s.id)} circle (${r}pt);`);
-        else out.points.push(`\\fill${opt(hexName(st.fillColor || st.color))} ${ref(s.id)} circle (${r}pt);`);
-        const dir = st.labelOffset || (autoDirs.get(s.id) ? [autoDirs.get(s.id).x, autoDirs.get(s.id).y] : [1, 1]);
-        if (st.showLabel !== false && s.name) out.labels.push(`\\node[${anchorFor(dir)}, inner sep=1.5pt] at ${ref(s.id)} {${texLabel(s.name)}};`);
-      }
-    }
-    const L = [];
-    L.push(`% ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
-    L.push("% C\u1EA7n trong ph\u1EA7n m\u1EDF \u0111\u1EA7u: \\usepackage{tikz}");
-    L.push("% \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc h\xECnh: s\u1EEDa x=\u2026, y=\u2026 (\u0111\u01A1n v\u1ECB c\u1EE7a m\u1ED9t \xF4 to\u1EA1 \u0111\u1ED9).");
-    if (doc2.images && doc2.images.length) L.push(`% (${doc2.images.length} \u1EA3nh d\xE1n v\xE0o h\xECnh kh\xF4ng \u0111\u01B0\u1EE3c xu\u1EA5t sang TikZ)`);
-    L.push(`\\begin{tikzpicture}[x=${f3(unit2)}cm, y=${f3(unit2)}cm, line width=${f3(baseWidth * PT_PER_PX)}pt, line cap=round, line join=round]`);
-    if (colorDefs.size) {
-      L.push("  % M\xE0u");
-      for (const [n, hex] of colorDefs) L.push(`  \\definecolor{${n}}{HTML}{${hex.slice(1).toUpperCase()}}`);
-    }
-    const sec = (title, arr) => {
-      if (arr.length) {
-        L.push(`  % ${title}`);
-        for (const x of arr) L.push("  " + x);
-      }
-    };
-    sec("To\u1EA1 \u0111\u1ED9 c\xE1c \u0111i\u1EC3m", out.coords);
-    sec("T\xF4 n\u1EC1n", out.fills);
-    sec("\u0110\u01B0\u1EDDng tr\xF2n", out.circles);
-    sec("\u0110\u01B0\u1EDDng th\u1EB3ng, \u0111o\u1EA1n th\u1EB3ng, tia", out.lines);
-    sec("\u0110\xE1nh d\u1EA5u g\xF3c, \u0111o\u1EA1n b\u1EB1ng nhau", out.marks);
-    sec("\u0110i\u1EC3m", out.points);
-    sec("Nh\xE3n", out.labels);
-    L.push("\\end{tikzpicture}");
-    return L.join("\n") + "\n";
-  }
-  function angleMark(v, s, color, cm, ref) {
-    const { A, B, C: C2 } = v;
-    const st = s.style || {};
-    const a1 = Math.atan2(A.y - B.y, A.x - B.x);
-    let diff = Math.atan2(C2.y - B.y, C2.x - B.x) - a1;
-    while (diff <= -Math.PI) diff += 2 * Math.PI;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    const deg = (r) => f3(r * 180 / Math.PI);
-    const r0 = cm(0.45);
-    const vtx = ref(s.args[1]);
-    const o = color === "black" ? "" : `[${color}]`;
-    if (Math.abs(Math.abs(diff) - Math.PI / 2) < 1e-6 && st.right !== false) {
-      const r = r0 * 0.7;
-      return [`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) -- ++(${deg(a1 + diff)}:${f3(r)}) -- ++(${deg(a1 + Math.PI)}:${f3(r)}); % g\xF3c vu\xF4ng`];
-    }
-    const n = Math.max(1, Math.min(4, st.arcs || 1));
-    const outL = [];
-    for (let i = 0; i < n; i++) {
-      const r = r0 + i * cm(0.09);
-      outL.push(`\\draw${o} ${vtx} ++(${deg(a1)}:${f3(r)}) arc[start angle=${deg(a1)}, end angle=${deg(a1 + diff)}, radius=${f3(r)}];`);
-    }
-    return outL;
-  }
-  function segMark(v, s, color, cm) {
-    const { A, B } = v;
-    const st = s.style || {};
-    const L = dist(A, B);
-    const u = { x: (B.x - A.x) / L, y: (B.y - A.y) / L };
-    const n = { x: -u.y, y: u.x };
-    const M = mid(A, B);
-    const kk = Math.max(1, Math.min(4, st.ticks || 1));
-    const h = cm(0.13), gap = cm(0.08);
-    const o = color === "black" ? "" : `[${color}]`;
-    const outL = [];
-    for (let i = 0; i < kk; i++) {
-      const off = (i - (kk - 1) / 2) * gap;
-      const c = { x: M.x + off * u.x, y: M.y + off * u.y };
-      outL.push(`\\draw${o} ${xy({ x: c.x - h * n.x, y: c.y - h * n.y })} -- ${xy({ x: c.x + h * n.x, y: c.y + h * n.y })};`);
-    }
-    return outL;
   }
 
   // src/ui/main.js
@@ -46328,14 +47881,14 @@
     return [
       "# T\u1EF1 \u0111\u1ED5i trong c\xF4ng th\u1EE9c (g\xF5 xong l\xE0 \u0111\u1ED5i)",
       "[t\u1EF1 \u0111\u1ED5i]",
-      ...r.auto.map(([a, b]) => `${a} => ${esc5(b)}`),
+      ...r.auto.map(([a, b]) => `${a} => ${esc7(b)}`),
       "",
       "# G\xF5 t\u1EAFt: g\xF5 r\u1ED3i nh\u1EA5n Tab",
       "[g\xF5 t\u1EAFt]",
-      ...r.short.map(([a, b]) => `${a} => ${esc5(b)}`)
+      ...r.short.map(([a, b]) => `${a} => ${esc7(b)}`)
     ].join("\n");
   }
-  var esc5 = (s) => s.replace(/\n/g, "\\n");
+  var esc7 = (s) => s.replace(/\n/g, "\\n");
   function parseRules(text2) {
     const r = { auto: [], short: [] };
     let cur2 = null;
@@ -46999,36 +48552,6 @@
   }
   var round2 = (x) => Math.round(x * 1e4) / 1e4;
 
-  // src/export/latex.js
-  function toLatexHandout(doc2, opts = {}) {
-    const files = [];
-    const imageFile = (id) => {
-      const src = opts.imageSrc ? opts.imageSrc(id) : null;
-      const ext = /^data:image\/(png|jpe?g)/.exec(src || "")?.[1]?.replace("jpeg", "jpg") || "png";
-      const name2 = `anh-${files.length + 1}.${ext}`;
-      if (src) files.push({ name: name2, dataURL: src });
-      return name2;
-    };
-    const boxes = doc2.boxes || [];
-    const of = (role) => boxes.filter((b) => (b.role || "ghichu") === role && b.text && b.text.trim());
-    const L = [LATEX_PREAMBLE, "", "\\begin{document}"];
-    if (doc2.title) L.push(`\\section*{${esc6(doc2.title)}}`);
-    for (const b of of("de")) L.push(`\\noindent\\textbf{${esc6(b.title || "\u0110\u1EC1 b\xE0i")}.} ` + splitSteps(b.text).map((s) => toLatex(s.text, imageFile)).join("\n\n"), "");
-    const tikz = toTikZ(doc2, { values: opts.values, theme: opts.theme, trimLines: opts.trimLines });
-    if (doc2.steps.length) L.push("\\begin{center}", tikz.trim(), "\\end{center}", "");
-    for (const b of of("loigiai")) {
-      const st = splitSteps(b.text).filter((s) => s.text.trim());
-      L.push(`\\noindent\\textbf{${esc6(b.title || "L\u1EDDi gi\u1EA3i")}.}`);
-      if (st.length > 1) L.push("\\begin{enumerate}", ...st.map((s) => `  \\item ${toLatex(s.text, imageFile)}`), "\\end{enumerate}");
-      else if (st.length) L.push(toLatex(st[0].text, imageFile));
-      L.push("");
-    }
-    for (const b of of("ghichu")) L.push(`\\noindent\\textbf{${esc6(b.title || "Ghi ch\xFA")}.} ` + splitSteps(b.text).map((s) => toLatex(s.text, imageFile)).join("\n\n"), "");
-    L.push("\\end{document}", "");
-    return { tex: L.join("\n"), files };
-  }
-  var esc6 = (s) => String(s).replace(/[\\#%&_{}~^$]/g, (c) => "\\" + c);
-
   // src/ui/main.js
   function start() {
     const app = new App();
@@ -47040,16 +48563,16 @@
     }));
     document.getElementById("exit-projector").onclick = () => app.setProjector(false);
     const exMenu = document.getElementById("example-menu");
-    const esc7 = (t2) => String(t2).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const esc8 = (t2) => String(t2).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
     const groups = [];
     for (const e of THU_VIEN) {
       let g = groups.find((x) => x.name === e.nhom);
       if (!g) groups.push(g = { name: e.nhom, items: [] });
-      g.items.push(`<button data-lib="${e.id}" title="${esc7(e.de)}">${esc7(e.ten)}</button>`);
+      g.items.push(`<button data-lib="${e.id}" title="${esc8(e.de)}">${esc8(e.ten)}</button>`);
     }
-    groups.push({ name: "H\xECnh m\u1EABu", items: Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${esc7(e.title)}</button>`) });
+    groups.push({ name: "H\xECnh m\u1EABu", items: Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${esc8(e.title)}</button>`) });
     const GROUP_LABEL = { "C\u1EA5u h\xECnh": "C\u1EA5u h\xECnh hay g\u1EB7p" };
-    exMenu.innerHTML = groups.map((g) => `<div class="ex-col"><div class="menu-label">${esc7(GROUP_LABEL[g.name] || g.name)}</div>${g.items.join("")}</div>`).join("");
+    exMenu.innerHTML = groups.map((g) => `<div class="ex-col"><div class="menu-label">${esc8(GROUP_LABEL[g.name] || g.name)}</div>${g.items.join("")}</div>`).join("");
     app.loadExample = (key) => {
       const ex = EXAMPLES[key];
       if (!ex) return;
@@ -47090,6 +48613,7 @@
     setupTabBar(app);
     setupImages(app);
     const tb = setupTextBoxes(app);
+    const kho = setupKho(app);
     const onClick = (id, fn) => {
       const el = document.getElementById(id);
       if (el) el.onclick = fn;
@@ -47107,7 +48631,12 @@
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (e.shiftKey) saveAllFiles(app);
+        else if (kho.isConnected()) kho.saveCurrent();
         else saveFile(app);
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "k" && !document.querySelector(".modal-back")) {
+        e.preventDefault();
+        kho.openBrowser();
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
         e.preventDefault();
@@ -47125,14 +48654,6 @@
     const doc2 = vis ? { ...app.doc, steps: app.doc.steps.map((s) => vis.has(s.id) ? s : { ...s, hidden: true }) } : app.doc;
     const { tex, files } = toLatexHandout(doc2, { values: app.values, theme: app.theme, trimLines: app.renderer.trimLines, imageSrc: (id) => app.images.get(id)?.src });
     await downloadTex(fileSafeName(app.doc.title || "phieu"), tex, files);
-  }
-  async function downloadTex(base2, tex, files) {
-    if (!await downloadFile(base2 + ".tex", tex, "application/x-tex")) return;
-    for (const f of files) {
-      await new Promise((r) => setTimeout(r, 300));
-      await downloadFile(f.name, f.dataURL);
-    }
-    toast(files.length ? `\u0110\xE3 t\u1EA3i ${base2}.tex v\xE0 ${files.length} \u1EA3nh (\u0111\u1EC3 c\xF9ng th\u01B0 m\u1EE5c r\u1ED3i bi\xEAn d\u1ECBch b\u1EB1ng pdflatex)` : `\u0110\xE3 t\u1EA3i ${base2}.tex (bi\xEAn d\u1ECBch b\u1EB1ng pdflatex)`, 6e3);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();
