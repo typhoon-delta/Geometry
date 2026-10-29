@@ -1,0 +1,300 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Tam giác với ba tâm bàng tiếp (hình dày)",
+ "view": {
+  "bbox": [
+   -13.115,
+   7.517,
+   13.996,
+   -8.798
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.3,
+    "y": 2.4
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -1.8,
+    "y": -0.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 2,
+    "y": -0.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1",
+   "joinPrev": true
+  },
+  {
+   "id": "s8",
+   "type": "center",
+   "args": [
+    "s7"
+   ],
+   "name": "O",
+   "joinPrev": true
+  },
+  {
+   "id": "s9",
+   "type": "incircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω2",
+   "joinPrev": true
+  },
+  {
+   "id": "s10",
+   "type": "center",
+   "args": [
+    "s9"
+   ],
+   "name": "I",
+   "joinPrev": true
+  },
+  {
+   "id": "s11",
+   "type": "excircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω3",
+   "joinPrev": true
+  },
+  {
+   "id": "s12",
+   "type": "center",
+   "args": [
+    "s11"
+   ],
+   "name": "I_A",
+   "joinPrev": true
+  },
+  {
+   "id": "s13",
+   "type": "excircle",
+   "args": [
+    "s2",
+    "s3",
+    "s1"
+   ],
+   "name": "ω4",
+   "joinPrev": true
+  },
+  {
+   "id": "s14",
+   "type": "center",
+   "args": [
+    "s13"
+   ],
+   "name": "I_B",
+   "joinPrev": true
+  },
+  {
+   "id": "s15",
+   "type": "excircle",
+   "args": [
+    "s3",
+    "s1",
+    "s2"
+   ],
+   "name": "ω5",
+   "joinPrev": true
+  },
+  {
+   "id": "s16",
+   "type": "center",
+   "args": [
+    "s15"
+   ],
+   "name": "I_C",
+   "joinPrev": true
+  },
+  {
+   "id": "s17",
+   "type": "segment",
+   "args": [
+    "s14",
+    "s16"
+   ],
+   "name": "d4"
+  },
+  {
+   "id": "s18",
+   "type": "segment",
+   "args": [
+    "s16",
+    "s12"
+   ],
+   "name": "d5"
+  },
+  {
+   "id": "s19",
+   "type": "segment",
+   "args": [
+    "s12",
+    "s14"
+   ],
+   "name": "d6"
+  },
+  {
+   "id": "s20",
+   "type": "midpoint",
+   "args": [
+    "s10",
+    "s12"
+   ],
+   "name": "M_A"
+  },
+  {
+   "id": "s21",
+   "type": "midpoint",
+   "args": [
+    "s10",
+    "s14"
+   ],
+   "name": "M_B"
+  },
+  {
+   "id": "s22",
+   "type": "midpoint",
+   "args": [
+    "s10",
+    "s16"
+   ],
+   "name": "M_C"
+  },
+  {
+   "id": "s23",
+   "type": "projection",
+   "args": [
+    "s12",
+    "s5"
+   ],
+   "name": "T_A"
+  },
+  {
+   "id": "s24",
+   "type": "projection",
+   "args": [
+    "s14",
+    "s6"
+   ],
+   "name": "T_B"
+  },
+  {
+   "id": "s25",
+   "type": "projection",
+   "args": [
+    "s16",
+    "s4"
+   ],
+   "name": "T_C"
+  },
+  {
+   "id": "s26",
+   "type": "reflect",
+   "args": [
+    "s1",
+    "s8"
+   ],
+   "name": "A'"
+  },
+  {
+   "id": "s27",
+   "type": "reflect",
+   "args": [
+    "s2",
+    "s8"
+   ],
+   "name": "B'"
+  },
+  {
+   "id": "s28",
+   "type": "reflect",
+   "args": [
+    "s3",
+    "s8"
+   ],
+   "name": "C'"
+  },
+  {
+   "id": "s29",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s26"
+   ],
+   "name": "d7"
+  },
+  {
+   "id": "s30",
+   "type": "segment",
+   "args": [
+    "s10",
+    "s12"
+   ],
+   "name": "d8"
+  }
+ ]
+}

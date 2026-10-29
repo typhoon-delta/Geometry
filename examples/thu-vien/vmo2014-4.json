@@ -1,0 +1,281 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "VMO 2014 – Bài 4",
+ "view": {
+  "bbox": [
+   -12.75,
+   5.387,
+   13.35,
+   -10.319
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -1.2,
+    "y": 3.8
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.6,
+    "y": -1.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 4.2,
+    "y": -1.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s8",
+   "type": "center",
+   "args": [
+    "s7"
+   ],
+   "name": "O",
+   "joinPrev": true
+  },
+  {
+   "id": "s9",
+   "type": "arc_midpoint",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "params": {
+    "contains": false
+   },
+   "name": "I"
+  },
+  {
+   "id": "s10",
+   "type": "circle",
+   "args": [
+    "s9",
+    "s3"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s11",
+   "type": "intersection_other",
+   "args": [
+    "s10",
+    "s6",
+    "s3"
+   ],
+   "name": "K"
+  },
+  {
+   "id": "s12",
+   "type": "line",
+   "args": [
+    "s2",
+    "s11"
+   ],
+   "name": "d4"
+  },
+  {
+   "id": "s13",
+   "type": "intersection_other",
+   "args": [
+    "s12",
+    "s7",
+    "s2"
+   ],
+   "name": "D"
+  },
+  {
+   "id": "s14",
+   "type": "line",
+   "args": [
+    "s1",
+    "s9"
+   ],
+   "name": "d5"
+  },
+  {
+   "id": "s15",
+   "type": "intersection",
+   "args": [
+    "s14",
+    "s12"
+   ],
+   "name": "E"
+  },
+  {
+   "id": "s16",
+   "type": "line",
+   "args": [
+    "s13",
+    "s9"
+   ],
+   "name": "d6"
+  },
+  {
+   "id": "s17",
+   "type": "intersection",
+   "args": [
+    "s16",
+    "s6"
+   ],
+   "name": "F"
+  },
+  {
+   "id": "s18",
+   "type": "segment",
+   "args": [
+    "s15",
+    "s17"
+   ],
+   "name": "d7"
+  },
+  {
+   "id": "s19",
+   "type": "line",
+   "args": [
+    "s1",
+    "s13"
+   ],
+   "name": "d8"
+  },
+  {
+   "id": "s20",
+   "type": "parallel",
+   "args": [
+    "s3",
+    "s19"
+   ],
+   "name": "d9"
+  },
+  {
+   "id": "s21",
+   "type": "intersection",
+   "args": [
+    "s20",
+    "s16"
+   ],
+   "name": "M"
+  },
+  {
+   "id": "s22",
+   "type": "line",
+   "args": [
+    "s11",
+    "s21"
+   ],
+   "name": "d10"
+  },
+  {
+   "id": "s23",
+   "type": "intersection",
+   "args": [
+    "s22",
+    "s5"
+   ],
+   "name": "N"
+  },
+  {
+   "id": "s24",
+   "type": "circle_3pts",
+   "args": [
+    "s2",
+    "s11",
+    "s23"
+   ],
+   "name": "ω3"
+  },
+  {
+   "id": "s25",
+   "type": "center",
+   "args": [
+    "s24"
+   ],
+   "name": "O1",
+   "joinPrev": true
+  },
+  {
+   "id": "s26",
+   "type": "intersection_other",
+   "args": [
+    "s24",
+    "s7",
+    "s2"
+   ],
+   "name": "P"
+  },
+  {
+   "id": "s27",
+   "type": "midpoint",
+   "args": [
+    "s1",
+    "s13"
+   ],
+   "name": "J"
+  },
+  {
+   "id": "s28",
+   "type": "line",
+   "args": [
+    "s26",
+    "s11"
+   ],
+   "name": "d11"
+  }
+ ]
+}

@@ -1,0 +1,140 @@
+[
+ {
+  "id": "imo2008-1",
+  "nhom": "IMO",
+  "ten": "IMO 2008 – Bài 1",
+  "de": "Tam giác nhọn ABC, trực tâm H. Đường tròn tâm là trung điểm BC đi qua H cắt đường thẳng BC tại A₁, A₂; tương tự B₁, B₂ (với CA) và C₁, C₂ (với AB). Chứng minh sáu điểm A₁, A₂, B₁, B₂, C₁, C₂ cùng thuộc một đường tròn."
+ },
+ {
+  "id": "imo2010-2",
+  "nhom": "IMO",
+  "ten": "IMO 2010 – Bài 2",
+  "de": "I là tâm nội tiếp tam giác ABC, Γ là đường tròn ngoại tiếp. AI cắt Γ lần nữa tại D. E thuộc cung BDC, F thuộc cạnh BC sao cho ∠BAF = ∠CAE. G là trung điểm IF. Chứng minh DG và EI cắt nhau trên Γ."
+ },
+ {
+  "id": "imo2012-5",
+  "nhom": "IMO",
+  "ten": "IMO 2012 – Bài 5",
+  "de": "Tam giác ABC vuông tại C, D là chân đường cao từ C. X nằm trong đoạn CD. K thuộc đoạn AX với BK = BC; L thuộc đoạn BX với AL = AC. M là giao điểm của AL và BK. Chứng minh MK = ML."
+ },
+ {
+  "id": "imo2013-4",
+  "nhom": "IMO",
+  "ten": "IMO 2013 – Bài 4",
+  "de": "Tam giác nhọn ABC, trực tâm H, W thuộc cạnh BC. M, N là chân đường cao từ B, C. ω₁ là đường tròn (BWN), X ∈ ω₁ với WX là đường kính; ω₂ là đường tròn (CWM), Y ∈ ω₂ với WY là đường kính. Chứng minh X, Y, H thẳng hàng."
+ },
+ {
+  "id": "imo2014-4",
+  "nhom": "IMO",
+  "ten": "IMO 2014 – Bài 4",
+  "de": "P, Q thuộc cạnh BC của tam giác nhọn ABC sao cho ∠PAB = ∠BCA và ∠CAQ = ∠ABC. M, N thuộc AP, AQ sao cho P là trung điểm AM, Q là trung điểm AN. Chứng minh BM và CN cắt nhau trên đường tròn ngoại tiếp ABC."
+ },
+ {
+  "id": "imo2015-4",
+  "nhom": "IMO",
+  "ten": "IMO 2015 – Bài 4",
+  "de": "Tam giác ABC nội tiếp Ω tâm O. Đường tròn Γ tâm A cắt BC tại D, E (B, D, E, C theo thứ tự) và cắt Ω tại F, G (A, F, B, C, G theo thứ tự). Đường tròn (BDF) cắt AB lần nữa tại K, (CGE) cắt CA lần nữa tại L. FK và GL cắt nhau tại X. Chứng minh X thuộc AO."
+ },
+ {
+  "id": "imo2017-4",
+  "nhom": "IMO",
+  "ten": "IMO 2017 – Bài 4",
+  "de": "R, S thuộc đường tròn Ω, RS không là đường kính; ℓ là tiếp tuyến của Ω tại R. T sao cho S là trung điểm RT. J thuộc cung nhỏ RS sao cho đường tròn Γ ngoại tiếp JST cắt ℓ tại hai điểm; A là giao điểm gần R hơn. AJ cắt Ω lần nữa tại K. Chứng minh KT tiếp xúc Γ."
+ },
+ {
+  "id": "imo2018-1",
+  "nhom": "IMO",
+  "ten": "IMO 2018 – Bài 1",
+  "de": "Γ là đường tròn ngoại tiếp tam giác nhọn ABC. D, E thuộc các đoạn AB, AC với AD = AE. Trung trực của BD và CE cắt các cung nhỏ AB, AC của Γ tại F, G. Chứng minh DE ∥ FG (hoặc trùng)."
+ },
+ {
+  "id": "imo2019-6",
+  "nhom": "IMO",
+  "ten": "IMO 2019 – Bài 6",
+  "de": "I là tâm nội tiếp tam giác nhọn ABC (AB ≠ AC), ω tiếp xúc BC, CA, AB tại D, E, F. Đường thẳng qua D vuông góc EF cắt ω lần nữa tại R. AR cắt ω lần nữa tại P. Đường tròn (PCE) và (PBF) cắt nhau lần nữa tại Q. Chứng minh DI và PQ cắt nhau trên đường thẳng qua A vuông góc AI."
+ },
+ {
+  "id": "imo2021-4",
+  "nhom": "IMO",
+  "ten": "IMO 2021 – Bài 4",
+  "de": "Đường tròn Γ tâm I tiếp xúc bốn cạnh của tứ giác lồi ABCD. Ω là đường tròn (AIC). Tia đối của AB… cắt Ω tại X (BA kéo dài qua A), Z (BC kéo dài qua C); AD, CD kéo dài qua D cắt Ω tại Y, T. Chứng minh AD + DT + TX + XA = CD + DY + YZ + ZC."
+ },
+ {
+  "id": "imo2023-2",
+  "nhom": "IMO",
+  "ten": "IMO 2023 – Bài 2",
+  "de": "Tam giác nhọn ABC, AB < AC, Ω ngoại tiếp. S là điểm chính giữa cung CB chứa A. Đường vuông góc từ A xuống BC cắt BS tại D, cắt Ω lần nữa tại E. Đường qua D song song BC cắt BE tại L. ω = (BDL) cắt Ω lần nữa tại P. Chứng minh tiếp tuyến của ω tại P cắt BS trên phân giác trong góc BAC."
+ },
+ {
+  "id": "imo2024-4",
+  "nhom": "IMO",
+  "ten": "IMO 2024 – Bài 4",
+  "de": "Tam giác ABC với AB < AC < BC, tâm nội tiếp I, đường tròn nội tiếp ω. X ≠ C thuộc BC sao cho đường qua X song song AC tiếp xúc ω; Y ≠ B thuộc BC sao cho đường qua Y song song AB tiếp xúc ω. AI cắt (ABC) lần nữa tại P. K, L là trung điểm AC, AB. Chứng minh ∠KIL + ∠YPX = 180°."
+ },
+ {
+  "id": "imo2025-2",
+  "nhom": "IMO",
+  "ten": "IMO 2025 – Bài 2",
+  "de": "Ω tâm M và Γ tâm N (bán kính Ω nhỏ hơn) cắt nhau tại A, B. MN cắt Ω tại C, cắt Γ tại D (C, M, N, D theo thứ tự). P là tâm ngoại tiếp ACD. AP cắt Ω lần nữa tại E, cắt Γ lần nữa tại F. H là trực tâm PMN. Chứng minh đường qua H song song AP tiếp xúc đường tròn (BEF)."
+ },
+ {
+  "id": "vmo2014-4",
+  "nhom": "VMO",
+  "ten": "VMO 2014 – Bài 4",
+  "de": "Tam giác nhọn ABC (AB < AC) nội tiếp (O); I là điểm chính giữa cung BC không chứa A. K ≠ C thuộc AC với IK = IC. BK cắt (O) tại D (D ≠ B), cắt AI tại E. DI cắt AC tại F. a) EF = BC/2. b) M thuộc DI với CM ∥ AD; KM cắt BC tại N; (BKN) cắt (O) tại P ≠ B. Chứng minh PK đi qua trung điểm AD."
+ },
+ {
+  "id": "vmo2016-3",
+  "nhom": "VMO",
+  "ten": "VMO 2016 – Bài 3",
+  "de": "B, C cố định, A thay đổi (tam giác ABC nhọn). D là trung điểm BC; E, F là hình chiếu của D trên AB, AC. O là tâm ngoại tiếp; EF cắt AO, BC tại M, N. a) Đường tròn (AMN) luôn đi qua một điểm cố định. b) Tiếp tuyến tại E, F của (AEF) cắt nhau tại T; T thuộc một đường thẳng cố định."
+ },
+ {
+  "id": "noi-bang-tiep",
+  "nhom": "Cấu hình",
+  "ten": "Bổ đề tâm nội tiếp – bàng tiếp",
+  "de": "S là điểm chính giữa cung BC không chứa A của (ABC). Chứng minh B, C, I, I_A cùng nằm trên đường tròn tâm S (S là trung điểm II_A)."
+ },
+ {
+  "id": "euler-feuerbach",
+  "nhom": "Cấu hình",
+  "ten": "Đường tròn Euler – định lý Feuerbach",
+  "de": "Đường tròn Euler của tam giác ABC tiếp xúc với đường tròn nội tiếp và ba đường tròn bàng tiếp."
+ },
+ {
+  "id": "mixtilinear",
+  "nhom": "Cấu hình",
+  "ten": "Đường tròn mixtilinear",
+  "de": "Đường tròn mixtilinear nội ứng với A tiếp xúc AB, AC tại K, L và tiếp xúc trong (O) tại T. Chứng minh I là trung điểm KL và T, I và điểm chính giữa cung BAC thẳng hàng."
+ },
+ {
+  "id": "nghich-dao-bc",
+  "nhom": "Cấu hình",
+  "ten": "Nghịch đảo √(bc)",
+  "de": "Phép nghịch đảo tâm A bán kính √(AB·AC) hợp với phép đối xứng qua phân giác góc A đổi chỗ B và C, biến (ABC) thành đường thẳng BC và biến đường tròn mixtilinear nội thành đường tròn bàng tiếp góc A."
+ },
+ {
+  "id": "brocard",
+  "nhom": "Cấu hình",
+  "ten": "Tứ giác nội tiếp – định lý Brocard",
+  "de": "Tứ giác ABCD nội tiếp (O). P = AC ∩ BD, Q = AB ∩ CD, R = AD ∩ BC. Chứng minh O là trực tâm tam giác PQR."
+ },
+ {
+  "id": "monge",
+  "nhom": "Cấu hình",
+  "ten": "Tiếp tuyến chung – định lý Monge",
+  "de": "Ba đường tròn có bán kính khác nhau. Hai tiếp tuyến chung ngoài của mỗi cặp cắt nhau tại tâm vị tự ngoài; ba tâm vị tự ngoài thẳng hàng."
+ },
+ {
+  "id": "dong-dang-xoan",
+  "nhom": "Cấu hình",
+  "ten": "Tâm đồng dạng xoắn (quay + vị tự)",
+  "de": "X = AB ∩ CD; (XAC) và (XBD) cắt nhau lần nữa tại S. Phép quay tâm S góc ∠ASC rồi vị tự tâm S tỉ số SC/SA biến A thành C và B thành D."
+ },
+ {
+  "id": "hinh-day",
+  "nhom": "Hình dày",
+  "ten": "Tam giác với ba tâm bàng tiếp (hình dày)",
+  "de": "Tam giác ABC, tâm nội tiếp I, ba tâm bàng tiếp I_A, I_B, I_C, đường tròn ngoại tiếp và ba đường tròn bàng tiếp. (O) là đường tròn Euler của tam giác I_AI_BI_C, I là trực tâm của nó, trung điểm M_A của II_A nằm trên (O). Kèm nhãn có chỉ số dưới và dấu phẩy."
+ }
+]

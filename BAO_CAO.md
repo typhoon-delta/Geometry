@@ -493,3 +493,167 @@ python -m unittest discover -s lab/tests -t .
    hồi vào tệp (trình duyệt không được ghi tệp trực tiếp).
 9. **Lưu tiến độ ở ranh giới vòng + mỗi phút** (tệp JSON ghi tạm rồi đổi tên): một vòng chỉ 2–3 phút nên mất điện
    chỉ mất tối đa một vòng; lần chạy dở được nhận ra và chạy tiếp tự động.
+
+---
+
+# Bản 1.2 – Tự dùng thử như giáo viên Olympic, rồi sửa
+
+Kết quả chi tiết từng bài (ảnh, đề tóm tắt, số thao tác, vấn đề gặp và đã sửa chưa): **`reports/dung-thu.html`**.
+
+## 1. Cách dùng thử
+
+**23 bài**, đa dạng cấu hình: 13 bài IMO (2008/1, 2010/2, 2012/5, 2013/4, 2014/4, 2015/4, 2017/4, 2018/1, 2019/6,
+2021/4, 2023/2, 2024/4, 2025/2), 2 bài VMO (2014/4, 2016/3), 7 cấu hình hay gặp (bổ đề tâm nội tiếp – bàng tiếp;
+đường tròn Euler – Feuerbach; mixtilinear; nghịch đảo √(bc); tứ giác nội tiếp – Brocard; tiếp tuyến chung – Monge;
+tâm đồng dạng xoắn) và một hình dày (tam giác, I, I_A, I_B, I_C, ba đường tròn bàng tiếp, (O), trung điểm M_A…, tiếp
+điểm T_A…, điểm đối tâm A′, B′, C′ – nhãn có chỉ số dưới và dấu phẩy).
+
+**Dựng hoàn toàn qua giao diện** (`tests/browser/dung-thu/`): một "người dùng ảo" điều khiển Chromium headless bằng
+Playwright – bấm biểu tượng nhóm trên thanh công cụ dọc, mở menu con, bấm công cụ; bấm lên bảng vẽ vào điểm (theo vị trí
+đang hiện), lên một đường (tìm chỗ trống trên đường như mắt người nhìn), vào chỗ hai đường cắt nhau; đặt tên bằng nháy
+đúp + gõ (bản 1.1) hoặc gõ ngay (bản 1.2). Không ghi JSON trực tiếp. Khi giao diện cản trở, người dùng ảo xử lý như người
+thật và **ghi lại vấn đề**: thẻ nổi che chỗ cần bấm → bỏ chọn cho thẻ ẩn; tên đã bị chiếm → đổi tên điểm kia trước; chỗ
+cắt ngoài màn hình → "Thu phóng vừa hình"; bấm vào chỗ cắt tạo nhầm giao điểm → hoàn tác, chọn lần lượt hai đường…
+
+Mỗi bài ghi: **số thao tác** (chọn một công cụ / một lần bấm lên hình / đặt một tên / một lệnh menu hay phím) và số lần
+bấm chuột; **vấn đề gặp**; **nhãn đè** (đo trên khung chữ thật sau khi thu phóng vừa hình: nhãn–nhãn, nhãn–điểm,
+nhãn–đường); **kéo thử** 36 bước quanh một vòng (điểm "nhảy" – một bước dịch > 60 px và gấp 6 lần hai bước kề –,
+đối tượng biến mất, thời gian JS mỗi khung); **kiểm chứng** kết luận của đề bằng số trên hình vừa dựng và trên 30 cấu
+hình xê dịch (6% kích thước hình, bỏ cấu hình trái giả thiết của đề), đúng nếu sai số tương đối ≤ 10⁻⁷; **bộ khám phá**
+có tự tìm ra kết luận không.
+
+Cùng kịch bản được chạy trên **bản 1.1** (worktree ở commit mốc 1 – `ket-qua-truoc.json`) và **bản 1.2**
+(`ket-qua-sau.json`), nên số liệu so sánh được trực tiếp.
+
+**Kiểm chứng không phát hiện công cụ nào dựng sai.** Bốn lần kết luận "sai" khi viết kịch bản đều do *tôi* chọn cấu
+hình đặc biệt, kiểm chứng số đã bắt được: IMO 2025 với MN đúng bằng bán kính Γ (khi đó P nằm trên Γ, F ≡ P); IMO 2021 với
+tứ giác có ∠A = ∠C (giao AB ∩ CD nằm trên (AIC) nên X ≡ T) và cách đặt tên đỉnh làm X không nằm trên phần kéo dài *qua A*
+như đề; hai đường AB, CD gần song song ở bài đồng dạng xoắn. Công cụ đều cho đúng hình đã dựng.
+
+## 2. Kết quả
+
+| Bài | Thao tác | Lần bấm | Nhãn đè | Kiểm chứng (sai số lớn nhất) | Khám phá tìm ra kết luận |
+|---|---|---|---|---|---|
+| IMO 2008 – Bài 1 | 64 → 46 | 97 → 46 | 8 → 0 | đúng (3·10⁻¹⁵) | #4 → #4 |
+| IMO 2010 – Bài 2 | 44 → 40 | 65 → 50 | 1 → 0 | đúng (3·10⁻¹⁵) | #1 → #1 |
+| IMO 2012 – Bài 5 | 55 → 40 | 87 → 46 | 1 → 2 | đúng (4·10⁻¹⁵) | – → – |
+| IMO 2013 – Bài 4 | 57 → 43 | 92 → 48 | 3 → 1 | đúng (3·10⁻¹⁶) | #2 → #2 |
+| IMO 2014 – Bài 4 | 51 → 41 | 82 → 46 | 3 → 2 | đúng (3·10⁻¹⁵) | #1 → #1 |
+| IMO 2015 – Bài 4 | 61 → 43 | 91 → 51 | 7 → 2 | đúng (4·10⁻¹⁴) | #1 → #1 |
+| IMO 2017 – Bài 4 | 54 → 38 | 86 → 46 | 4 → 2 | đúng (6·10⁻¹⁶) | #1 → #1 |
+| IMO 2018 – Bài 1 | 35 → 33 | 51 → 42 | 1 → 0 | đúng (2·10⁻¹⁶) | – → #1 |
+| IMO 2019 – Bài 6 | 65 → 59 | 94 → 69 | 4 → 1 | đúng (4·10⁻⁸) | #5 → #5 |
+| IMO 2021 – Bài 4 | 72 → 54 | 112 → 53 | 2 → 0 | đúng (9·10⁻¹⁶) | – → – |
+| IMO 2023 – Bài 2 | 56 → 48 | 84 → 58 | 3 → 2 | đúng (2·10⁻¹⁴) | – → – |
+| IMO 2024 – Bài 4 | 59 → 49 | 90 → 56 | 1 → 0 | đúng (3·10⁻¹⁶) | – → – |
+| IMO 2025 – Bài 2 | 52 → 50 | 77 → 63 | 3 → 0 | đúng (1·10⁻¹³) | #5 → #6 |
+| VMO 2014 – Bài 4 | 76 → 67 | 112 → 74 | 17 → 2 | đúng (3·10⁻¹⁵) | – → – |
+| VMO 2016 – Bài 3 | 55 → 49 | 83 → 59 | 7 → 3 | đúng (7·10⁻¹⁶) | #2 → #2 |
+| Bổ đề tâm nội tiếp – bàng tiếp | 30 → 28 | 46 → 40 | 0 → 0 | đúng (1·10⁻¹⁵) | #1 → #1 |
+| Đường tròn Euler – định lý Feuerbach | 30 → 28 | 46 → 37 | 1 → 0 | đúng (5·10⁻¹⁶) | #1 → #1 |
+| Đường tròn mixtilinear | 50 → 40 | 78 → 50 | 0 → 0 | đúng (4·10⁻⁸) | – → – |
+| Nghịch đảo √(bc) | 97 → 47 | 155 → 63 | 27 → 1 | đúng (6·10⁻¹⁵) | – → – |
+| Tứ giác nội tiếp – định lý Brocard | 47 → 35 | 71 → 36 | 2 → 2 | đúng (2·10⁻¹⁴) | #1 → #1 |
+| Tiếp tuyến chung – định lý Monge | 54 → 47 | 90 → 56 | 3 → 0 | đúng (2·10⁻¹⁶) | #6 → #6 |
+| Tâm đồng dạng xoắn (quay + vị tự) | 39 → 50 | 56 → 56 | 1 → 0 | đúng (1·10⁻¹⁵) | – → – |
+| Tam giác với ba tâm bàng tiếp (hình dày) | 74 → 56 | 115 → 55 | 8 → 0 | đúng (6·10⁻¹⁶) | #1 → #1 |
+| **Tổng** | **1277 → 1031** | **1960 → 1200** | **107 → 20** | 23/23 | 14 → 15 |
+
+Thao tác theo loại (tổng 23 bài): chọn công cụ 527 → 306, bấm lên hình 590 → 587, đặt tên 127 → 108 (mỗi lần đặt tên
+ở bản 1.1 kéo theo 2–3 lần đổi công cụ), lệnh khác 33 → 30. Lần bấm chuột giảm 39% – phần lớn nhờ gõ tên ngay và dải
+công cụ vừa dùng. Kéo thử: không bài nào có điểm nhảy nghiệm hay đối tượng biến mất (sau khi dựng IMO 2015 chắc hơn, xem
+vấn đề 15), JS mỗi khung ≤ 0,53 ms. Ghi chú: bài đồng dạng xoắn nhiều thao tác hơn vì bản 1.2 dựng thêm được D′ (bản 1.1
+không có công cụ); IMO 2012 nhãn đè 1 → 2 (nhãn C, K ở chỗ quá nhiều đường đi qua, vẫn không đè điểm/nhãn). 20 chỗ "đè"
+còn lại đều là nhãn chạm một đường ở điểm có 4–6 đường đi qua; không còn nhãn đè nhãn hay nhãn đè điểm.
+
+## 3. Các vấn đề, xếp theo mức ảnh hưởng tới việc dạy – và đã sửa chưa
+
+| # | Mức | Vấn đề | Đã sửa chưa |
+|---|---|---|---|
+| 1 | Cao | **Nghịch đảo chỉ áp cho điểm.** Bài √(bc) phải lấy 3 điểm, nghịch đảo từng điểm rồi dựng đường tròn qua 3 ảnh (97 thao tác); ảnh của (O) qua tâm nghịch đảo là đường thẳng nên "đường tròn qua 3 điểm" không xác định. | **Đã sửa.** Công cụ Nghịch đảo nhận điểm/đường thẳng/đường tròn, tự chọn ảnh là đường thẳng hay đường tròn (loại bước `invert_line`, `invert_circle`). 47 thao tác. |
+| 2 | Cao | **Góc quay, tỉ số vị tự phải gõ số.** Phép quay ∠ASC + vị tự SC/SA của tâm đồng dạng xoắn không dựng được (kéo là sai). | **Đã sửa.** *Quay theo góc trên hình* (∠ABC), *Vị tự theo tỉ số trên hình* (AB/CD, có dấu), *Đồng dạng tâm O biến A thành B*; cho chọn lại cùng một điểm (S vừa là tâm vừa là đỉnh góc). |
+| 3 | Cao | **Tâm đường tròn tự đặt tên chiếm chữ cái của đề** (D, K, L, A, E…): IMO 2015 không đặt được K, L; IMO 2017 mất A; "tứ giác nội tiếp" đặt đỉnh thứ tư là E. | **Đã sửa.** Tâm tự đặt tên O, O₁, O₂… |
+| 4 | Cao | **Thẻ thuộc tính che hình, chặn lần bấm**: đối tượng vừa dựng được chọn nên thẻ hiện ở góc phải, che đúng chỗ cần bấm tiếp; bấm điểm gần góc phải thì thẻ hiện đè lên chính điểm, nháy đúp không đổi tên được. | **Đã sửa.** Thẻ chỉ hiện với công cụ Chọn, tự dời xuống khi che đối tượng đang chọn. |
+| 5 | Cao | **Nhãn đè**: nhãn rộng (M_c, I_A) đè chính điểm của nó (khoảng cách tính tới *tâm* nhãn); nhãn ở giao nhiều đường đè lên đường; hai điểm gần nhau chồng nhãn (M_C và C′). | **Đã sửa.** Đặt nhãn theo khung chữ thật (mục 4). 107 → 20 chỗ. |
+| 6 | Cao | **Đặt tên tốn 3–5 thao tác** (về Chọn, nháy đúp, gõ, chọn lại công cụ). | **Đã sửa.** Điểm vừa dựng được chọn sẵn, gõ chữ là đặt tên tại chỗ; F2/nháy đúp để sửa. |
+| 7 | Vừa | **Đổi sang tên đã có bị từ chối** (tam giác vuông cần vuông tại C: 3 lần đổi tên qua tên tạm). | **Đã sửa.** Đổi chỗ hai tên. |
+| 8 | Vừa | **Chọn công cụ trong menu Công cụ cần 3 lần bấm**; ~40% thao tác là chọn công cụ. | **Đã sửa.** Dải "công cụ vừa dùng" (1 lần bấm). |
+| 9 | Vừa | **Đường thẳng kéo tới mép màn hình** làm rối hình (VMO 2014, nghịch đảo). | **Đã sửa.** "Đường thẳng vừa đủ" kiểu sách (mặc định, tắt được); phần kéo dài hiện mờ khi đang dựng. |
+| 10 | Vừa | **Bộ khám phá bỏ sót kết luận**: mẫu xê dịch phá giả thiết (E ra ngoài đoạn AC, tam giác hết nhọn) – IMO 2018; hình có tiếp điểm thì mọi mẫu bị loại "gần tiếp xúc" (mixtilinear: 0 mẫu). | **Đã sửa.** Lấy mẫu giữ cấu hình gốc (mục 4); bản Python sửa giống hệt. |
+| 11 | Vừa | **Hai điểm trùng nhau: luôn chọn điểm dựng trước** (ảnh nghịch đảo của B trùng C′). | **Đã sửa.** Đối tượng dựng sau (nằm trên) được chọn. |
+| 12 | Vừa | **Bấm vào chỗ ba đường cùng đi qua: chọn cặp bất kỳ** – hình lưu lại có thể "chứa sẵn" kết luận (IMO 2010). | **Đã sửa.** Lấy cặp đường dựng sau cùng. |
+| 13 | Vừa | **Điểm vừa dựng ngoài khung nhìn** (M, N ở IMO 2014; S₁₂ ở Monge): phải tìm menu Thu phóng. | **Đỡ hơn.** Phím `Home` + thông báo; không tự đổi khung nhìn (để khỏi mất chỗ khi đang giảng). |
+| 14 | Thấp | **Giao điểm ở rất xa**: chọn lần lượt hai đường, công cụ tạo cả hai giao điểm (đôi khi phải xoá một). | Chưa sửa (ít gặp, vẫn làm được). |
+| 15 | Thấp | Kéo A ở IMO 2015 làm mất 11 đối tượng (Γ vẽ bằng điểm bán kính tự do). | Không phải lỗi công cụ; thư viện dựng chắc hơn (D trên BC, đường tròn tâm A qua D). |
+| 16 | Thấp | Bộ khám phá chưa tìm đoạn bằng nhau, góc bằng nhau, tổng độ dài (IMO 2012, 2021, 2023, 2024, VMO 2014a). | Chưa làm (xem mục 7). Vẫn kiểm chứng được bằng số. |
+
+Không phát hiện vấn đề kéo thả (không nhảy nghiệm, không giật) ở cả 23 bài.
+
+## 4. Tính năng lớn đã thêm – và vì sao thật sự cần
+
+1. **Nghịch đảo đường thẳng/đường tròn** (hạn chế đã biết của bản 1.1; dùng thử cho thấy bài nghịch đảo tốn gấp đôi thao
+   tác và không dựng được ảnh qua tâm). Loại đối tượng của ảnh (đường thẳng/đường tròn) phải cố định theo cách dựng để
+   tệp JSON mô tả được, nên tách hai loại bước; công cụ tự chọn theo hình lúc dựng. Đường tròn "qua tâm" xét với dung sai
+   tương đối 10⁻⁷ (cấu hình sai loại → không xác định, không vẽ nhầm).
+2. **Góc/tỉ số lấy trên hình** và **phép đồng dạng tâm O biến A thành B** (hạn chế đã biết; bài đồng dạng xoắn không dựng
+   được). Thêm loại bước `rotate_by`, `homothety_by`, `spiral`; công cụ khai báo `allowRepeat` để chọn lặp một điểm.
+3. **Đặt nhãn theo khung chữ trên màn hình** (`placeLabels` trong `src/core/labels.js`): thuật toán cũ chỉ chọn *hướng* và
+   đặt *tâm* nhãn cách điểm 11 px, không biết kích thước chữ – nguồn gốc của 107 chỗ đè. Mỗi điểm thử 24 hướng × 2 khoảng
+   cách; khung chữ đặt kiểu "neo" TikZ (cạnh/góc gần điểm nhất cách điểm 2 px); chi phí = 8 × số đường cắt qua khung +
+   12 × số điểm bị che + 14 (+ diện tích) × số nhãn đã đặt bị đè + 6 nếu ra ngoài khung + ưu tiên nhẹ hướng ra xa tâm
+   hình; đặt tham lam, điểm "khó" (nhiều đường qua, sát điểm khác) đặt trước. Chỉ chạy khi hình thay đổi hoặc phóng to/thu
+   nhỏ (gom 120 ms), không chạy khi kéo. Nhãn người dùng đã kéo được giữ và được tránh.
+4. **Đường thẳng vừa đủ** (`trimmedRange` trong `geom.js`, dùng chung cho màn hình và TikZ): dùng thử cho thấy hình nhiều
+   đường thẳng rất rối. Khi đang dựng, phần kéo dài hiện mờ (vẫn bấm được chỗ cắt) – nếu không, VMO 2014 tốn thêm 6 thao
+   tác vì chỗ cắt bị ẩn.
+5. **Thư viện ví dụ** (yêu cầu): menu **Ví dụ** theo nhóm; dữ liệu là các tệp `examples/thu-vien/*.json` (chính là hình
+   người dùng ảo dựng qua giao diện, chỉ lưu khi kết luận kiểm chứng đúng), module `src/core/thu-vien.js` nhập các tệp này
+   để esbuild đóng gói vào `dist/app.js` – mở `index.html` từ ổ đĩa không mạng vẫn dùng được (dist tăng 240 → 357 KB).
+6. **Bộ khám phá giữ cấu hình của đề khi lấy mẫu**: tam giác vẽ trên hình giữ chiều và góc nhọn/tù rõ ràng; giao điểm với
+   một đoạn thẳng phải còn trong đoạn; giao điểm của hai đường tiếp xúc ngay ở hình gốc không bị loại "gần tiếp xúc". Bản
+   Python `lab/scan/explorer.py` sửa giống hệt – test đối chiếu JS/Python vẫn khớp hoàn toàn.
+
+Không làm: tìm đoạn/góc bằng nhau trong bộ khám phá (vấn đề 16) – tính năng lớn, phải sửa đồng thời bản Python để giữ
+"kết quả giống hệt"; kết luận dạng này vẫn kiểm chứng được bằng số.
+
+## 5. Hiệu năng (test `npm run test:perf`, hình dày, cùng một máy)
+
+| | bản 1.1 | bản 1.2 |
+|---|---|---|
+| Luồng chính / khung, CPU ×1 | 6,29 ms | 6,49 ms |
+| Luồng chính / khung, CPU ×4 | 28,8 ms | 30,4 ms |
+| JS / khung, CPU ×4 | 3,41 ms | 3,66 ms |
+| Một lần vẽ (JS), CPU ×4 | 0,73 ms | 0,96 ms |
+| p95 khoảng cách hai khung, ×4 | 16,7 ms | 16,8 ms (đủ 60 khung/giây) |
+
+Máy phát triển lần này chậm hơn máy đo bản 1.1 (bảng ở mục A bản 1.1), nên so sánh trên cùng máy. Phần tăng ~0,2 ms mỗi
+lần vẽ là tính "đường thẳng vừa đủ" (đường × điểm mỗi khung); đặt nhãn không chạy khi kéo. Mọi ngưỡng tự kiểm vẫn đạt.
+Lần đo cuối (bản 1.2 hoàn chỉnh, kèm thư viện ví dụ): 5,91 ms (×1), 29,8 ms (×4), p95 16,8 ms – các lần đo dao động
+khoảng ±0,5 ms trên máy này.
+
+## 6. Định dạng JSON
+
+Không đổi trường hay loại bước cũ; chỉ **thêm** năm loại bước (`invert_line`, `invert_circle`, `rotate_by`,
+`homothety_by`, `spiral` – đã ghi trong `docs/DINH_DANG_JSON.md`) và lõi Python `lab/core` tính được cả năm (dữ liệu
+đối chiếu `lab/tests/fixtures/js_doi_chieu.json` sinh lại, thêm các trường hợp ảnh là đường thẳng/đường tròn). Tệp và
+link cũ mở bình thường. Tâm đường tròn tên O₁… chỉ là tên mặc định khi dựng mới.
+
+## 7. Kiểm thử và hạn chế còn lại
+
+* `npm test`: 126 test đạt (thêm: mỗi công cụ mới kiểm theo định nghĩa ở 5 cấu hình – ảnh nghịch đảo của mọi điểm nằm
+  trên ảnh của đường; góc quay bằng ∠BCQ khi kéo; tỉ số; phép đồng dạng biến A thành B –, đã thử làm sai cố ý 2 công thức
+  và test phát hiện; mọi hình trong thư viện hợp lệ, mọi đối tượng xác định, xuất TikZ được).
+* `npm run test:browser`: đạt, thêm `tests/browser/smoke3.mjs` (menu Ví dụ, gõ để đặt tên, đổi chỗ tên, thẻ thuộc tính,
+  nghịch đảo đường tròn, quay theo góc chọn lặp điểm, công cụ vừa dùng, đường vừa đủ).
+* `npm run test:perf`: đạt. Python: `python -m unittest discover -s lab/tests -t .` – 23 test đạt (1 bỏ qua vì máy này
+  chưa cài Newclid).
+* Dùng thử: `node tests/browser/dung-thu/chay.mjs [--luu]` (~8 phút), `node tests/browser/dung-thu/bao-cao.mjs`.
+
+Hạn chế còn lại: vấn đề 13, 14, 16 ở trên; giao điểm của hai đường tròn tiếp xúc (điểm Feuerbach, tiếp điểm mixtilinear)
+bấm được nhưng sai số ~10⁻⁸ (căn bậc hai của sai số làm tròn) – đủ cho hiển thị và kiểm chứng 10⁻⁷; nhãn ở điểm có 4–6
+đường đi qua vẫn có thể chạm một đường; "người dùng ảo" chỉ đo được những gì đo bằng máy (số thao tác, nhãn đè, sai số) –
+cảm nhận "đẹp" của hình tôi tự xem lại trên ảnh chụp từng bài.
+
+**Gợi ý tiếp theo**: bộ khám phá tìm đoạn/góc bằng nhau (cả JS và Python); công cụ "giao điểm" chỉ tạo nghiệm gần chỗ
+bấm khi chọn lần lượt hai đường; lưu "công cụ vừa dùng" và "Công cụ của tôi" kèm tệp hình; thử với giáo viên thật trên
+máy chiếu.

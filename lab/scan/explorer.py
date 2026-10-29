@@ -64,7 +64,7 @@ TRIANGLE_TYPES = {"circumcenter", "orthocenter", "incenter", "centroid", "nine_p
                   "angle_bisector", "excenter", "excircle", "lemoine", "kosnita", "symmedian_foot", "mixtilinear"}
 
 
-def find_triangles(doc, kind_of, strict=False):
+def find_triangles(doc, kind_of, strict=False, drawn=False):
     tri = {}
 
     def add_tri(ids):
@@ -74,7 +74,7 @@ def find_triangles(doc, kind_of, strict=False):
         tri.setdefault(key, list(ids))
 
     for s in doc["steps"]:
-        if s["type"] in TRIANGLE_TYPES and len(s["args"]) == 3 and not (strict and s["type"] in ("circle_3pts", "angle_bisector")):
+        if not drawn and s["type"] in TRIANGLE_TYPES and len(s["args"]) == 3 and not (strict and s["type"] in ("circle_3pts", "angle_bisector")):
             add_tri(s["args"])
     adj = {}
 
@@ -146,19 +146,78 @@ def degenerate(doc, vals, ctx):
         A, B, C = (vals[a] for a in t)
         if min(_ang(A, B, C), _ang(B, C, A), _ang(C, A, B)) < sin_min:
             return "tam giác dẹt"
+    # bản 1.2: giao điểm với một đoạn thẳng nằm trong đoạn ở hình gốc thì phải còn nằm trong đoạn – như bản JS
+    for pid, sid in ctx.get("onSegments") or []:
+        if not _inside_segment(vals[pid], vals[sid]):
+            return "ra ngoài đoạn thẳng"
+    # bản 1.2: giữ "dạng" các tam giác như hình gốc (chiều; góc nhọn/tù rõ ràng) – như bản JS
+    base_shape = ctx.get("baseShape")
+    if base_shape:
+        for i, t in enumerate(ctx["shapeTriangles"]):
+            sh = tri_shape([vals[a] for a in t])
+            if any(x != 0 and x != sh[j] for j, x in enumerate(base_shape[i])):
+                return "đổi dạng tam giác"
     for s in doc["steps"]:
         v = vals.get(s["id"])
         if v is not None and not isinstance(v, dict) and v.kind == "circle" and v.r > opts["maxRadius"] * scale:
             return "đường tròn quá lớn"
         if s["type"] in ("intersection", "intersection_other"):
             r = G.intersect(vals.get(s["args"][0]), vals.get(s["args"][1]))
-            if len(r) == 2 and G.dist(r[0], r[1]) < sep * 2:
+            if len(r) == 2 and G.dist(r[0], r[1]) < sep * 2 and s["id"] not in (ctx.get("tangentAtBase") or ()):
                 return "gần tiếp xúc"
             if len(r) == 1 and kind_of.get(s["args"][0]) == "line" and kind_of.get(s["args"][1]) == "line":
                 l1, l2 = vals[s["args"][0]], vals[s["args"][1]]
                 if abs(G.cross(G.unit(l1.d), G.unit(l2.d))) < sin_min:
                     return "hai đường gần song song"
     return None
+
+
+def _sign(x):
+    return (x > 0) - (x < 0)
+
+
+def _inside_segment(P, l):
+    t = G.line_param(P, l)
+    return -1e-9 < t < 1 + 1e-9
+
+
+def points_on_segments(doc, base):
+    out = []
+    type_of = {s["id"]: s["type"] for s in doc["steps"]}
+    for s in doc["steps"]:
+        if s["type"] not in ("intersection", "intersection_other"):
+            continue
+        P = base.get(s["id"])
+        if P is None:
+            continue
+        for a in s["args"][:2]:
+            if type_of.get(a) == "segment" and base.get(a) is not None and _inside_segment(P, base[a]):
+                out.append([s["id"], a])
+    return out
+
+
+def _tangent_at_base(doc, base, scale0):
+    out = set()
+    for s in doc["steps"]:
+        if s["type"] in ("intersection", "intersection_other"):
+            r = G.intersect(base.get(s["args"][0]), base.get(s["args"][1]))
+            if len(r) == 2 and G.dist(r[0], r[1]) < 1e-6 * scale0:
+                out.add(s["id"])
+    return out
+
+
+def tri_shape(pts):
+    """Dạng tam giác: [chiều, góc A, góc B, góc C] với ±1 (nhọn/tù), 0 nếu gần vuông – như triShape của bản JS."""
+    A, B, C = pts
+    area = G.cross(G.sub(B, A), G.sub(C, A))
+
+    def cos_at(P, Q, R):
+        return G.dot(G.sub(Q, P), G.sub(R, P)) / (G.dist(P, Q) * G.dist(P, R) + 1e-300)
+
+    def sg(c):
+        return 0 if abs(c) < 0.05 else _sign(c)
+
+    return [_sign(area), sg(cos_at(A, B, C)), sg(cos_at(B, C, A)), sg(cos_at(C, A, B))]
 
 
 # ---------- các phép thử quan hệ (dung sai tương đối theo kích thước hình) ----------
@@ -243,13 +302,18 @@ def explore(doc, **options):
 
     rand = rng(opts["seed"])
     triangles = find_triangles(doc, kind_of)
+    shape_tris = find_triangles(doc, kind_of, drawn=True)
     base_dist = [[G.dist(base[a], base[b]) for b in point_ids] for a in point_ids]
     ctx = {"pointIds": point_ids, "curveIds": curve_ids, "sameClassPairs": same_pairs, "opts": opts,
-           "kindOf": kind_of, "triangles": triangles, "baseDist": base_dist}
+           "kindOf": kind_of, "triangles": triangles, "baseDist": base_dist,
+           "onSegments": points_on_segments(doc, base),
+           "shapeTriangles": shape_tris,
+           "tangentAtBase": _tangent_at_base(doc, base, scale0),
+           "baseShape": [tri_shape([base[a] for a in t]) if all(base.get(a) is not None for a in t) else [0, 0, 0, 0] for t in shape_tris]}
     samples = [(base, scale0)]
     attempts = 0
     rejected = {}
-    base_degenerate = degenerate(doc, base, {**ctx, "baseDist": None})
+    base_degenerate = degenerate(doc, base, {**ctx, "baseDist": None, "baseShape": None, "onSegments": None})
     while len(samples) < opts["samples"] + 1 and attempts < opts["maxAttempts"]:
         attempts += 1
         ov = random_overrides(doc, base, scale0, rand, opts["perturb"])

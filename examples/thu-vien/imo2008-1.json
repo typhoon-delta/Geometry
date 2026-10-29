@@ -1,0 +1,223 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "IMO 2008 – Bài 1",
+ "view": {
+  "bbox": [
+   -7.963,
+   4.407,
+   8.13,
+   -5.277
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.8,
+    "y": 3.6
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.6,
+    "y": -2
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 3.8,
+    "y": -2
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "orthocenter",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "H"
+  },
+  {
+   "id": "s8",
+   "type": "midpoint",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "M_a"
+  },
+  {
+   "id": "s9",
+   "type": "circle",
+   "args": [
+    "s8",
+    "s7"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s10",
+   "type": "intersection",
+   "args": [
+    "s9",
+    "s5"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "A_1"
+  },
+  {
+   "id": "s11",
+   "type": "intersection_other",
+   "args": [
+    "s9",
+    "s5",
+    "s10"
+   ],
+   "name": "A_2"
+  },
+  {
+   "id": "s12",
+   "type": "midpoint",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "M_b"
+  },
+  {
+   "id": "s13",
+   "type": "circle",
+   "args": [
+    "s12",
+    "s7"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s14",
+   "type": "intersection",
+   "args": [
+    "s13",
+    "s6"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "B_1"
+  },
+  {
+   "id": "s15",
+   "type": "intersection_other",
+   "args": [
+    "s13",
+    "s6",
+    "s14"
+   ],
+   "name": "B_2"
+  },
+  {
+   "id": "s16",
+   "type": "midpoint",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "M_c"
+  },
+  {
+   "id": "s17",
+   "type": "circle",
+   "args": [
+    "s16",
+    "s7"
+   ],
+   "name": "ω3"
+  },
+  {
+   "id": "s18",
+   "type": "intersection",
+   "args": [
+    "s17",
+    "s4"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "C_1"
+  },
+  {
+   "id": "s19",
+   "type": "intersection_other",
+   "args": [
+    "s17",
+    "s4",
+    "s18"
+   ],
+   "name": "C_2"
+  },
+  {
+   "id": "s20",
+   "type": "circle_3pts",
+   "args": [
+    "s10",
+    "s11",
+    "s14"
+   ],
+   "name": "ω4"
+  },
+  {
+   "id": "s21",
+   "type": "center",
+   "args": [
+    "s20"
+   ],
+   "name": "O",
+   "joinPrev": true
+  }
+ ]
+}

@@ -1,0 +1,143 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "IMO 2017 – Bài 4",
+ "view": {
+  "bbox": [
+   -17.9,
+   7.762,
+   41.519,
+   -27.995
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 0,
+    "y": 0.6
+   },
+   "name": "O"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 0,
+    "y": -3.4
+   },
+   "name": "R"
+  },
+  {
+   "id": "s3",
+   "type": "circle",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s4",
+   "type": "point_on",
+   "args": [
+    "s3"
+   ],
+   "params": {
+    "t": -0.3490659190754673
+   },
+   "name": "S"
+  },
+  {
+   "id": "s5",
+   "type": "tangent_at",
+   "args": [
+    "s3",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s6",
+   "type": "reflect",
+   "args": [
+    "s2",
+    "s4"
+   ],
+   "name": "T"
+  },
+  {
+   "id": "s7",
+   "type": "point_on",
+   "args": [
+    "s3"
+   ],
+   "params": {
+    "t": -1.0471975535926368
+   },
+   "name": "J"
+  },
+  {
+   "id": "s8",
+   "type": "circle_3pts",
+   "args": [
+    "s7",
+    "s4",
+    "s6"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s9",
+   "type": "center",
+   "args": [
+    "s8"
+   ],
+   "name": "O1",
+   "joinPrev": true
+  },
+  {
+   "id": "s10",
+   "type": "intersection",
+   "args": [
+    "s8",
+    "s5"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "A"
+  },
+  {
+   "id": "s11",
+   "type": "line",
+   "args": [
+    "s10",
+    "s7"
+   ],
+   "name": "d2"
+  },
+  {
+   "id": "s12",
+   "type": "intersection_other",
+   "args": [
+    "s11",
+    "s3",
+    "s7"
+   ],
+   "name": "K"
+  },
+  {
+   "id": "s13",
+   "type": "line",
+   "args": [
+    "s12",
+    "s6"
+   ],
+   "name": "d3"
+  }
+ ]
+}

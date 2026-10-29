@@ -63,10 +63,10 @@ class Specs {
     return this.add('segment', [a, b], style ? { style } : {});
   }
 
-  /** Đường tròn kèm tâm (tâm dùng lại điểm có sẵn nếu trùng). */
+  /** Đường tròn kèm tâm (tâm dùng lại điểm có sẵn nếu trùng; tên mặc định O, O₁, O₂…). */
   circleWithCenter(type, args, centerName, opts = {}) {
     const c = this.add(type, args, opts);
-    this.point('center', [c], centerName ? { name: centerName } : {});
+    this.point('center', [c], { name: centerName || 'O' });
     return c;
   }
 }
@@ -301,8 +301,23 @@ export const LIBRARY = [
     run((S, p, ctx) => S.add('homothety', p, { params: { k: ctx.opt('k', 2) } })), { icon: '⤢', options: [{ key: 'k', label: 'Tỉ số vị tự k', def: 2 }] }),
   T(M5, 'translate', 'Tịnh tiến', ['obj', 'point', 'point'], ['Chọn đối tượng', 'Chọn điểm đầu của vectơ', 'Chọn điểm cuối của vectơ'],
     run((S, p) => S.add('translate', p)), { icon: '⇉' }),
-  T(M5, 'invert', 'Nghịch đảo', ['point', 'circle'], ['Chọn điểm cần nghịch đảo', 'Chọn đường tròn nghịch đảo'],
-    run((S, p) => S.add('invert', p)), { icon: '⊛' }),
+  T(M5, 'invert', 'Nghịch đảo', ['obj', 'circle'], ['Chọn đối tượng cần nghịch đảo (điểm, đường thẳng, đường tròn)', 'Chọn đường tròn nghịch đảo'],
+    run((S, [X, c], ctx) => {
+      const x = ctx.values.get(X), k = ctx.values.get(c);
+      if (!x || x.kind === 'point') return S.add('invert', [X, c]);
+      // ảnh là đường thẳng khi X đi qua tâm nghịch đảo (ở hình hiện tại), ngược lại là đường tròn
+      S.add(k && G.invertToLine(x, k) ? 'invert_line' : 'invert_circle', [X, c]);
+    }), { icon: '⊛' }),
+  T(M5, 'rotate_by', 'Quay theo góc trên hình', ['obj', 'point', 'point', 'point', 'point'],
+    ['Chọn đối tượng cần quay', 'Chọn tâm quay', 'Góc quay = góc ABC trên hình: chọn điểm A', 'Chọn đỉnh góc B', 'Chọn điểm C (quay theo chiều từ BA sang BC)'],
+    run((S, p) => S.add('rotate_by', p)), { icon: '↻∠', allowRepeat: true }),
+  T(M5, 'homothety_by', 'Vị tự theo tỉ số trên hình', ['obj', 'point', 'point', 'point', 'point', 'point'],
+    ['Chọn đối tượng', 'Chọn tâm vị tự', 'Tỉ số = AB/CD trên hình: chọn A', 'Chọn B', 'Chọn C', 'Chọn D'],
+    run((S, p, ctx) => S.add('homothety_by', p, ctx.opt('k', 1) < 0 ? { params: { negative: true } } : {})),
+    { icon: '⤢÷', allowRepeat: true, options: [{ key: 'k', label: 'Dấu của tỉ số (1: dương, −1: âm)', def: 1 }] }),
+  T(M5, 'spiral', 'Đồng dạng tâm O biến A thành B', ['obj', 'point', 'point', 'point'],
+    ['Chọn đối tượng', 'Chọn tâm O', 'Chọn điểm A', 'Chọn điểm B (ảnh của A) – quay ∠AOB và vị tự tỉ số OB/OA'],
+    run((S, p) => S.add('spiral', p)), { icon: '↻⤢', allowRepeat: true }),
   T(M5, 'projection', 'Chiếu vuông góc lên đường thẳng', ['point', 'line'], ['Chọn điểm và đường thẳng (thứ tự bất kỳ)', 'Chọn nốt đối tượng còn lại'],
     run((S, p) => S.add('projection', p)), { icon: '⊾', anyOrder: true }),
 

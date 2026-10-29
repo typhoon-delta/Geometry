@@ -72,6 +72,21 @@ def _center_facts(s, kinds, doc):
     return [{"on": [s["id"], {"PB": [A, B]}]}, {"on": [s["id"], {"PB": [B, C]}]}, {"on": [s["id"], {"PB": [C, A]}]}]
 
 
+def _rotate_by(a, p):
+    X, O, A, B, C = a
+    ang = G.directed_angle(A, B, C)
+    return None if ang is None else G.map_object(X, lambda P: G.rotate_point(P, O, ang))
+
+
+def _homothety_by(a, p):
+    X, O, A, B, C, D = a
+    cd = G.dist(C, D)
+    if cd < G.EPS:
+        return None
+    k = (-1 if p.get("negative") else 1) * G.dist(A, B) / cd
+    return G.map_object(X, lambda P: G.homothety_point(P, O, k))
+
+
 def _reflect_facts(s, kinds, doc=None):
     if kinds[0] != "point":
         return []
@@ -267,6 +282,21 @@ STEP_TYPES: dict[str, StepType] = {
         "Phép tịnh tiến", {},
     ),
     "invert": StepType("point", ["point", "circle"], lambda a, p: G.invert_point(a[0], a[1]), "Phép nghịch đảo", {}),
+    "invert_line": StepType("line", ["curve", "circle"], lambda a, p: G.invert_to_line(a[0], a[1]), "Nghịch đảo (ảnh là đường thẳng)", {}),
+    "invert_circle": StepType("circle", ["curve", "circle"], lambda a, p: G.invert_to_circle(a[0], a[1]), "Nghịch đảo (ảnh là đường tròn)", {}),
+    "rotate_by": StepType(
+        "same", ["obj", "point", "point", "point", "point"], _rotate_by, "Phép quay theo góc trên hình", {},
+    ),
+    "homothety_by": StepType(
+        "same", ["obj", "point", "point", "point", "point", "point"], _homothety_by, "Phép vị tự theo tỉ số trên hình",
+        {"negative": False},
+        lambda s, k, d=None: [{"col": [s["args"][1], s["args"][0], s["id"]]}] if k[0] == "point" else [],
+    ),
+    "spiral": StepType(
+        "same", ["obj", "point", "point", "point"],
+        lambda a, p: None if G.dist(a[2], a[1]) < G.EPS else G.map_object(a[0], lambda P: G.spiral_point(P, a[1], a[2], a[3])),
+        "Phép đồng dạng tâm O biến A thành B", {},
+    ),
     "tangent_at": StepType(
         "line", ["circle", "point"], lambda a, p: G.tangent_at(a[0], a[1]), "Tiếp tuyến tại một điểm", {},
         lambda s, k=None, d=None: [{"on": [s["args"][1], s["id"]]}, {"tan": [s["id"], s["args"][0]]}],

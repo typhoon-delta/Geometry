@@ -50,7 +50,7 @@ const TRIANGLE_TYPES = new Set(['circumcenter', 'orthocenter', 'incenter', 'cent
  * Các tam giác trong hình: bộ 3 điểm dùng trong bước kiểu tam giác, hoặc 3 điểm đôi một nối bằng
  * đoạn/đường thẳng/tia. Dùng để loại cấu hình có tam giác dẹt và để nhận diện O, H, I, đường tròn Euler...
  */
-export function findTriangles(doc, kindOf, { strict = false } = {}) {
+export function findTriangles(doc, kindOf, { strict = false, drawn = false } = {}) {
   const tri = new Map();
   const addTri = (ids) => {
     if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === 'point')) return;
@@ -59,8 +59,9 @@ export function findTriangles(doc, kindOf, { strict = false } = {}) {
   };
   // strict: chỉ tam giác "thật" (dựng bằng công cụ tam giác hoặc vẽ cạnh), không tính bộ 3 điểm của
   // "đường tròn qua 3 điểm" hay góc của phân giác
+  // drawn: chỉ tam giác có đủ ba cạnh vẽ trên hình
   for (const s of doc.steps)
-    if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === 'circle_3pts' || s.type === 'angle_bisector'))) addTri(s.args);
+    if (!drawn && TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === 'circle_3pts' || s.type === 'angle_bisector'))) addTri(s.args);
   const adj = new Map();
   const link = (a, b) => {
     if (!adj.has(a)) adj.set(a, new Set());
@@ -97,7 +98,7 @@ function randomOverrides(doc, base, scale, rand, perturb) {
 
 /** Cấu hình có gần suy biến không? */
 function degenerate(doc, vals, ctx) {
-  const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist } = ctx;
+  const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments, tangentAtBase } = ctx;
   const scale = figureScale(vals, pointIds);
   for (const id of [...pointIds, ...curveIds]) if (!vals.get(id)) return 'không xác định';
   // điểm gần trùng nhau
@@ -119,12 +120,22 @@ function degenerate(doc, vals, ctx) {
     const [A, B, C] = t.map((a) => vals.get(a));
     if (Math.min(ang(A, B, C), ang(B, C, A), ang(C, A, B)) < sinMin) return 'tam giác dẹt';
   }
+  // bản 1.2: giao điểm với một ĐOẠN THẲNG nằm trong đoạn ở hình gốc thì phải còn nằm trong đoạn (vd "D, E thuộc
+  // các cạnh"); điểm chạy ra ngoài đoạn là đã sang một cấu hình khác của đề
+  if (onSegments) for (const [pid, sid] of onSegments) if (!insideSegment(vals.get(pid), vals.get(sid))) return 'ra ngoài đoạn thẳng';
+  // bản 1.2: giữ "dạng" của các tam giác như hình gốc (chiều; góc nhọn/tù rõ ràng) – đề Olympic thường có điều kiện
+  // kiểu "tam giác nhọn", và các nghiệm giao điểm/cung được chọn theo hình gốc
+  if (baseShape) for (let i = 0; i < shapeTriangles.length; i++) {
+    const sh = triShape(shapeTriangles[i].map((a) => vals.get(a)));
+    if (baseShape[i].some((x, j) => x !== 0 && x !== sh[j])) return 'đổi dạng tam giác';
+  }
   for (const s of doc.steps) {
     const v = vals.get(s.id);
     if (v && v.kind === 'circle' && v.r > opts.maxRadius * scale) return 'đường tròn quá lớn';
     if (s.type === 'intersection' || s.type === 'intersection_other') {
       const r = G.intersect(vals.get(s.args[0]), vals.get(s.args[1]));
-      if (r.length === 2 && G.dist(r[0], r[1]) < sep * 2) return 'gần tiếp xúc';
+      // tiếp điểm theo cách dựng (hai đường tiếp xúc ngay ở hình gốc, vd đường tròn mixtilinear và (O)) không tính
+      if (r.length === 2 && G.dist(r[0], r[1]) < sep * 2 && !(tangentAtBase && tangentAtBase.has(s.id))) return 'gần tiếp xúc';
       if (r.length === 1 && kindOf.get(s.args[0]) === 'line' && kindOf.get(s.args[1]) === 'line') {
         const l1 = vals.get(s.args[0]), l2 = vals.get(s.args[1]);
         if (Math.abs(G.cross(G.unit(l1.d), G.unit(l2.d))) < sinMin) return 'hai đường gần song song';
@@ -132,6 +143,29 @@ function degenerate(doc, vals, ctx) {
     }
   }
   return null;
+}
+
+const insideSegment = (P, l) => { const t = G.lineParam(P, l); return t > -1e-9 && t < 1 + 1e-9; };
+
+/** Giao điểm (step) dựng trên một đoạn thẳng mà ở hình gốc nằm trong đoạn đó: [[id điểm, id đoạn]]. */
+function pointsOnSegments(doc, base) {
+  const out = [];
+  const typeOf = new Map(doc.steps.map((s) => [s.id, s.type]));
+  for (const s of doc.steps) {
+    if (s.type !== 'intersection' && s.type !== 'intersection_other') continue;
+    const P = base.get(s.id);
+    if (!P) continue;
+    for (const a of s.args.slice(0, 2)) if (typeOf.get(a) === 'segment' && base.get(a) && insideSegment(P, base.get(a))) out.push([s.id, a]);
+  }
+  return out;
+}
+
+/** Dạng tam giác: [chiều, góc A, góc B, góc C] với +1/−1 (góc: nhọn/tù), 0 nếu gần ranh giới (góc gần vuông). */
+function triShape([A, B, C]) {
+  const area = G.cross(G.sub(B, A), G.sub(C, A));
+  const cosAt = (P, Q, R) => G.dot(G.sub(Q, P), G.sub(R, P)) / (G.dist(P, Q) * G.dist(P, R) + 1e-300);
+  const sg = (c) => (Math.abs(c) < 0.05 ? 0 : Math.sign(c));
+  return [Math.sign(area), sg(cosAt(A, B, C)), sg(cosAt(B, C, A)), sg(cosAt(C, A, B))];
 }
 
 // ---------- các phép thử quan hệ (dung sai tương đối theo kích thước hình) ----------
@@ -182,11 +216,18 @@ export function explore(doc, options = {}) {
   const rand = rng(opts.seed);
   const triangles = findTriangles(doc, kindOf);
   const baseDist = pointIds.map((a) => pointIds.map((b) => G.dist(base.get(a), base.get(b))));
-  const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist };
+  const shapeTriangles = findTriangles(doc, kindOf, { drawn: true });
+  const baseShape = shapeTriangles.map((t) => (t.every((a) => base.get(a)) ? triShape(t.map((a) => base.get(a))) : [0, 0, 0, 0]));
+  // giao điểm của hai đường tiếp xúc ngay ở hình gốc (hai nghiệm trùng tới sai số làm tròn)
+  const tangentAtBase = new Set(doc.steps.filter((s) => (s.type === 'intersection' || s.type === 'intersection_other') && (() => {
+    const r = G.intersect(base.get(s.args[0]), base.get(s.args[1]));
+    return r.length === 2 && G.dist(r[0], r[1]) < 1e-6 * scale0;
+  })()).map((s) => s.id));
+  const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments: pointsOnSegments(doc, base), tangentAtBase };
   const samples = [{ vals: base, scale: scale0 }];
   let attempts = 0;
   const rejected = {};
-  const baseDegenerate = degenerate(doc, base, { ...ctx, baseDist: null });
+  const baseDegenerate = degenerate(doc, base, { ...ctx, baseDist: null, baseShape: null, onSegments: null });
   while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
     attempts++;
     const ov = randomOverrides(doc, base, scale0, rand, opts.perturb);

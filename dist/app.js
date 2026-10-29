@@ -20,6 +20,7 @@
     circumcenter: () => circumcenter,
     commonTangent: () => commonTangent,
     cross: () => cross,
+    directedAngle: () => directedAngle,
     dist: () => dist,
     distPointLine: () => distPointLine,
     distToObject: () => distToObject,
@@ -36,6 +37,8 @@
     intersectLC: () => intersectLC,
     intersectLL: () => intersectLL,
     invertPoint: () => invertPoint,
+    invertToCircle: () => invertToCircle,
+    invertToLine: () => invertToLine,
     isogonalConjugate: () => isogonalConjugate,
     isogonalLine: () => isogonalLine,
     kosnita: () => kosnita,
@@ -61,12 +64,14 @@
     reflectPointOverLine: () => reflectPointOverLine,
     reflectPointOverPoint: () => reflectPointOverPoint,
     rotatePoint: () => rotatePoint,
+    spiralPoint: () => spiralPoint,
     sub: () => sub,
     symmedianFoot: () => symmedianFoot,
     tangentAt: () => tangentAt,
     tangentPoints: () => tangentPoints,
     translatePoint: () => translatePoint,
     triangleOK: () => triangleOK,
+    trimmedRange: () => trimmedRange,
     unit: () => unit
   });
   var EPS = 1e-12;
@@ -273,6 +278,38 @@
     const k = c.r * c.r / d2;
     return pt(c.c.x + k * dx, c.c.y + k * dy);
   }
+  var passesThrough = (X, O) => (X.kind === "line" ? distPointLine(O, X) : Math.abs(dist(O, X.c) - X.r)) <= 1e-7 * (X.kind === "line" ? Math.max(norm(X.d), dist(O, X.p)) : X.r);
+  function invertToLine(X, c) {
+    if (!X || !c) return null;
+    const O = c.c;
+    if (!passesThrough(X, O)) return null;
+    if (X.kind === "line") return line(X.p, X.d);
+    const P2 = invertPoint(pt(2 * X.c.x - O.x, 2 * X.c.y - O.y), c);
+    return P2 ? line(P2, perp(sub(X.c, O))) : null;
+  }
+  function invertToCircle(X, c) {
+    if (!X || !c) return null;
+    const O = c.c, k2 = c.r * c.r;
+    if (passesThrough(X, O)) return null;
+    if (X.kind === "line") {
+      const F = invertPoint(project(O, X), c);
+      return F ? circle(mid(O, F), dist(O, F) / 2) : null;
+    }
+    const v = sub(X.c, O), s = k2 / (dot(v, v) - X.r * X.r);
+    return circle(pt(O.x + s * v.x, O.y + s * v.y), Math.abs(s) * X.r);
+  }
+  function directedAngle(A, B, C) {
+    const u = sub(A, B), v = sub(C, B);
+    if (norm(u) < EPS || norm(v) < EPS) return null;
+    return Math.atan2(cross(u, v), dot(u, v)) * 180 / Math.PI;
+  }
+  function spiralPoint(P2, O, A, B) {
+    const a = sub(A, O), b = sub(B, O), a2 = dot(a, a);
+    if (a2 < EPS * EPS) return null;
+    const re = dot(a, b) / a2, im = cross(a, b) / a2;
+    const x = P2.x - O.x, y = P2.y - O.y;
+    return pt(O.x + re * x - im * y, O.y + im * x + re * y);
+  }
   function mapObject(X, f) {
     if (!X) return null;
     if (X.kind === "point") return f(X);
@@ -396,6 +433,27 @@
     const t = -2 * (dot(u, AO) + (external ? -1 : 1) * circ.r * s) / c2;
     if (!(t > 0)) return null;
     return circle(pt(A.x + t * u.x, A.y + t * u.y), t * s);
+  }
+  function trimmedRange(l, sub3, pts, tol, minExt, maxExt) {
+    const dd = Math.hypot(l.d.x, l.d.y);
+    if (!(dd > 0)) return null;
+    let t0 = Infinity, t1 = -Infinity, n = 0;
+    for (const P2 of pts) {
+      const ex = P2.x - l.p.x, ey = P2.y - l.p.y;
+      if (Math.abs(l.d.x * ey - l.d.y * ex) / dd > tol) continue;
+      const t = (ex * l.d.x + ey * l.d.y) / (dd * dd);
+      if (sub3 === "ray" && t < -1e-9) continue;
+      if (t < t0) t0 = t;
+      if (t > t1) t1 = t;
+      n++;
+    }
+    if (sub3 === "ray") {
+      t0 = 0;
+      if (n < 1) return null;
+    } else if (n < 2) return null;
+    const len = (t1 - t0) * dd;
+    const ext = Math.min(maxExt, Math.max(minExt, 0.15 * len)) / dd;
+    return [sub3 === "ray" ? 0 : t0 - ext, t1 + ext];
   }
 
   // src/core/steps.js
@@ -715,6 +773,51 @@
       args: ["point", "circle"],
       label: "Ph\xE9p ngh\u1ECBch \u0111\u1EA3o",
       compute: ([P2, c]) => invertPoint(P2, c)
+    },
+    invert_line: {
+      // Ảnh của đường thẳng/đường tròn đi qua tâm nghịch đảo (bản 1.2).
+      kind: "line",
+      args: ["curve", "circle"],
+      label: "Ngh\u1ECBch \u0111\u1EA3o (\u1EA3nh l\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng)",
+      compute: ([X, c]) => invertToLine(X, c)
+    },
+    invert_circle: {
+      // Ảnh của đường thẳng/đường tròn không qua tâm nghịch đảo (bản 1.2).
+      kind: "circle",
+      args: ["curve", "circle"],
+      label: "Ngh\u1ECBch \u0111\u1EA3o (\u1EA3nh l\xE0 \u0111\u01B0\u1EDDng tr\xF2n)",
+      compute: ([X, c]) => invertToCircle(X, c)
+    },
+    rotate_by: {
+      // Quay X quanh O một góc bằng góc có hướng ∠ABC LẤY TRÊN HÌNH (args: X, O, A, B, C) – kéo hình góc đổi theo.
+      kind: "same",
+      args: ["obj", "point", "point", "point", "point"],
+      label: "Ph\xE9p quay theo g\xF3c tr\xEAn h\xECnh",
+      compute: ([X, O, A, B, C]) => {
+        const a = directedAngle(A, B, C);
+        return a == null ? null : mapObject(X, (P2) => rotatePoint(P2, O, a));
+      }
+    },
+    homothety_by: {
+      // Vị tự X tâm O, tỉ số AB/CD LẤY TRÊN HÌNH (args: X, O, A, B, C, D); params.negative: tỉ số âm.
+      kind: "same",
+      args: ["obj", "point", "point", "point", "point", "point"],
+      params: { negative: false },
+      label: "Ph\xE9p v\u1ECB t\u1EF1 theo t\u1EC9 s\u1ED1 tr\xEAn h\xECnh",
+      compute: ([X, O, A, B, C, D], p) => {
+        const cd = dist(C, D);
+        if (cd < EPS) return null;
+        const k = (p.negative ? -1 : 1) * dist(A, B) / cd;
+        return mapObject(X, (P2) => homothetyPoint(P2, O, k));
+      },
+      facts: (s, kinds2) => kinds2[0] === "point" ? [{ col: [s.args[1], s.args[0], s.id] }] : []
+    },
+    spiral: {
+      // Phép đồng dạng (quay + vị tự) tâm O biến A thành B, áp cho X (args: X, O, A, B).
+      kind: "same",
+      args: ["obj", "point", "point", "point"],
+      label: "Ph\xE9p \u0111\u1ED3ng d\u1EA1ng t\xE2m O bi\u1EBFn A th\xE0nh B",
+      compute: ([X, O, A, B]) => dist(A, O) < EPS ? null : mapObject(X, (P2) => spiralPoint(P2, O, A, B))
     },
     tangent_at: {
       kind: "line",
@@ -1217,6 +1320,93 @@
     let d = Math.abs(a - b) % (2 * Math.PI);
     return d > Math.PI ? 2 * Math.PI - d : d;
   }
+  var N_CAND = 24;
+  function placeLabels(pts, curves, fixed = [], opts = {}) {
+    const W = opts.W ?? Infinity, H = opts.H ?? Infinity, gap = opts.gap ?? 3;
+    const center = opts.center || centroidOf(pts);
+    const placed = fixed.map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
+    const crowd = pts.map((p) => {
+      let c = 0;
+      for (const cv of curves) if (distToCurve(cv, p.x, p.y) < 2) c += 1;
+      for (const q of pts) if (q !== p && Math.hypot(q.x - p.x, q.y - p.y) < 3 * (p.w + p.h)) c += 0.7;
+      return c;
+    });
+    const order = pts.map((_, i) => i).sort((a, b) => crowd[b] - crowd[a]);
+    const out = /* @__PURE__ */ new Map();
+    for (const i of order) {
+      const p = pts[i];
+      const away = Math.atan2(p.y - center.y, p.x - center.x);
+      const hasAway = Math.hypot(p.x - center.x, p.y - center.y) > 4;
+      let best = null;
+      for (const ring of [0, 1]) {
+        const g = p.r + gap + ring * 7;
+        for (let k = 0; k < N_CAND; k++) {
+          const th = 2 * Math.PI * k / N_CAND;
+          const c = Math.cos(th), s = Math.sin(th);
+          const ax = clamp(1.6 * c), ay = clamp(1.6 * s);
+          const cx = p.x + g * c + p.w / 2 * ax, cy = p.y + g * s + p.h / 2 * ay;
+          const box = { x: cx - p.w / 2, y: cy - p.h / 2, w: p.w, h: p.h };
+          let cost = ring * 1.2;
+          const inner = shrink(box, 1);
+          for (const cv of curves) if (curveHitsBox(cv, inner)) cost += 8;
+          for (const q of pts) if (q !== p && q.x > box.x - q.r - 1 && q.x < box.x + box.w + q.r + 1 && q.y > box.y - q.r - 1 && q.y < box.y + box.h + q.r + 1) cost += 12;
+          for (const b of placed) {
+            const a = overlapArea(box, b);
+            if (a > 0) cost += 14 + 20 * a / (box.w * box.h);
+          }
+          if (box.x < 2 || box.y < 2 || box.x + box.w > W - 2 || box.y + box.h > H - 2) cost += 6;
+          if (hasAway) cost += 0.6 * (1 - Math.cos(th - away)) / 2;
+          cost += 0.08 * (1 - Math.cos(th + Math.PI / 4)) / 2;
+          if (!best || cost < best.cost - 1e-9) best = { cost, box, dx: cx - p.x, dy: cy - p.y };
+        }
+        if (best && best.cost < 1.5) break;
+      }
+      placed.push(best.box);
+      out.set(p.id, { dx: best.dx, dy: best.dy });
+    }
+    return out;
+  }
+  var clamp = (v) => Math.max(-1, Math.min(1, v));
+  var shrink = (b, m) => ({ x: b.x + m, y: b.y + m, w: b.w - 2 * m, h: b.h - 2 * m });
+  function centroidOf(pts) {
+    let x = 0, y = 0;
+    for (const p of pts) {
+      x += p.x;
+      y += p.y;
+    }
+    return pts.length ? { x: x / pts.length, y: y / pts.length } : { x: 0, y: 0 };
+  }
+  function overlapArea(a, b) {
+    const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    return ix > 0 && iy > 0 ? ix * iy : 0;
+  }
+  function distToCurve(cv, x, y) {
+    if (cv.kind === "circle") return Math.abs(Math.hypot(x - cv.cx, y - cv.cy) - cv.r);
+    const dx = cv.x2 - cv.x1, dy = cv.y2 - cv.y1, L2 = dx * dx + dy * dy;
+    const t = L2 > 0 ? Math.max(0, Math.min(1, ((x - cv.x1) * dx + (y - cv.y1) * dy) / L2)) : 0;
+    return Math.hypot(x - cv.x1 - t * dx, y - cv.y1 - t * dy);
+  }
+  function curveHitsBox(cv, b) {
+    if (cv.kind === "circle") {
+      const nx = Math.max(b.x, Math.min(cv.cx, b.x + b.w)), ny = Math.max(b.y, Math.min(cv.cy, b.y + b.h));
+      const dmin = Math.hypot(nx - cv.cx, ny - cv.cy);
+      const dmax = Math.max(Math.hypot(b.x - cv.cx, b.y - cv.cy), Math.hypot(b.x + b.w - cv.cx, b.y - cv.cy), Math.hypot(b.x - cv.cx, b.y + b.h - cv.cy), Math.hypot(b.x + b.w - cv.cx, b.y + b.h - cv.cy));
+      return dmin < cv.r && cv.r < dmax;
+    }
+    let t0 = 0, t1 = 1;
+    const dx = cv.x2 - cv.x1, dy = cv.y2 - cv.y1;
+    for (const [p, d, lo, hi] of [[cv.x1, dx, b.x, b.x + b.w], [cv.y1, dy, b.y, b.y + b.h]]) {
+      if (Math.abs(d) < 1e-12) {
+        if (p < lo || p > hi) return false;
+        continue;
+      }
+      let a = (lo - p) / d, c = (hi - p) / d;
+      if (a > c) [a, c] = [c, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, c);
+    }
+    return t0 < t1;
+  }
 
   // src/core/styles.js
   var THEMES = {
@@ -1282,9 +1472,10 @@
   var isDraggableType = (type) => type === "free_point" || type === "point_on";
 
   // src/ui/render.js
-  var LABEL = { mono: { dist: 11, font: 15 }, textbook: { dist: 13, font: 16 } };
+  var LABEL = { mono: { font: 15 }, textbook: { font: 16 } };
   var HALO = "rgba(96,165,250,0.45)";
   var RELATION = "#f59e0b";
+  var GHOST = "#e4e4e7";
   var LABEL_FONT = "'Times New Roman', 'Nimbus Roman', 'Liberation Serif', 'TeX Gyre Termes', Times, serif";
   var Renderer = class {
     constructor(view) {
@@ -1294,10 +1485,14 @@
       this.extra = [];
       this.scale = 1;
       this.grid = false;
+      this.trimLines = true;
+      this.ghostLines = false;
+      this.lineRanges = /* @__PURE__ */ new Map();
       this.labelOffsets = /* @__PURE__ */ new Map();
       this.labelBoxes = /* @__PURE__ */ new Map();
       this.drawnIds = /* @__PURE__ */ new Set();
       view.painter = (ctx, v) => this.draw(ctx, v);
+      view.onViewChange(() => this.onViewChange());
     }
     /**
      * Thiết lập cảnh (sau mỗi thay đổi tài liệu, chọn, chế độ…).
@@ -1312,21 +1507,80 @@
       const selected = opts.selected || /* @__PURE__ */ new Set();
       const highlight = opts.highlight || /* @__PURE__ */ new Set();
       const theme = this.theme = opts.theme || "mono";
-      const L = LABEL[theme] || LABEL.mono;
       const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
       const layer = (s, kind) => order[s.type === "polygon" ? "polygon" : kind] ?? 3;
       this.items = doc.steps.filter((s) => !s.hidden && (!visible || visible.has(s.id))).map((s) => {
         const kind = k.get(s.id);
         return { s, kind, st: styleOf(s, kind, theme), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
       }).sort((a, b) => a.layer - b.layer);
-      const dirs = autoLabelDirs(doc, values, (s) => !s.hidden && (!visible || visible.has(s.id)));
-      this.labelOffsets = /* @__PURE__ */ new Map();
-      for (const it of this.items) {
-        if (it.kind !== "point") continue;
-        const d = dirs.get(it.s.id) || { x: 0.7, y: 0.7 };
-        this.labelOffsets.set(it.s.id, it.st.labelOffset || [Math.round(d.x * L.dist), Math.round(d.y * L.dist)]);
-      }
+      this.computeLabels();
       this.view.requestDraw();
+    }
+    /**
+     * Đặt nhãn điểm theo khung chữ thật trên màn hình (placeLabels): tránh đường cắt qua nhãn, nhãn đè điểm
+     * (kể cả chính điểm của nó với nhãn rộng như I_A), nhãn đè nhau. Nhãn người dùng đã kéo giữ nguyên.
+     * Kết quả là độ dời [dx, dy] (px, y hướng lên, chưa nhân hệ số trình chiếu) như labelOffset.
+     */
+    computeLabels() {
+      const view = this.view, sc = this.scale, V = this.values;
+      const fontPx = (LABEL[this.theme] || LABEL.mono).font * sc;
+      const ctx = view.ctx;
+      const curves = [], pts = [], fixed = [];
+      this.labelOffsets = /* @__PURE__ */ new Map();
+      const trimPts = this.trimPoints();
+      for (const it of this.items) {
+        const v = V.get(it.s.id);
+        if (!v) continue;
+        if (it.kind === "line") {
+          const seg = lineSeg(view, v, it.s.type === "segment" ? "segment" : it.s.type === "ray" ? "ray" : v.sub, trimPts);
+          if (seg) curves.push({ kind: "seg", x1: seg[0].x, y1: seg[0].y, x2: seg[1].x, y2: seg[1].y });
+        } else if (it.kind === "circle") {
+          const c = view.toScreen(v.c);
+          curves.push({ kind: "circle", cx: c.x, cy: c.y, r: v.r * view.scale });
+        }
+      }
+      for (const it of this.items) {
+        if (it.kind !== "point" || !it.st.showLabel || !it.s.name) continue;
+        const v = V.get(it.s.id);
+        if (!v) continue;
+        const p = view.toScreen(v);
+        const m = measureLabel(ctx, it.s.name, fontPx);
+        const h = (0.45 + (m.sub ? 0.68 : 0.42)) * fontPx, w = m.w + 1;
+        const delta = (m.sub ? 0.115 : -0.015) * fontPx;
+        if (it.st.labelOffset) {
+          const o = it.st.labelOffset;
+          this.labelOffsets.set(it.s.id, o);
+          const cy = p.y - o[1] * sc;
+          fixed.push({ x: p.x + o[0] * sc - w / 2, y: cy + delta - h / 2, w, h });
+          continue;
+        }
+        pts.push({ id: it.s.id, x: p.x, y: p.y, w, h, r: (it.st.size || 3) * sc, delta });
+      }
+      const res = placeLabels(pts, curves, fixed, { W: view.W, H: view.H, gap: 2 * sc });
+      for (const p of pts) {
+        const d = res.get(p.id);
+        this.labelOffsets.set(p.id, [round1(d.dx / sc), round1(-(d.dy - p.delta) / sc)]);
+      }
+      this.labelScale = view.scale;
+    }
+    /** Toạ độ màn hình của các điểm đang hiện (để vẽ đường thẳng vừa đủ qua chúng), hoặc null nếu tắt chế độ này. */
+    trimPoints() {
+      if (!this.trimLines) return null;
+      const out = [];
+      for (const it of this.items) if (it.kind === "point") {
+        const v = this.values.get(it.s.id);
+        if (v) out.push(this.view.toScreen(v));
+      }
+      return out;
+    }
+    /** Phóng to/thu nhỏ làm khoảng cách giữa các đường đổi → đặt lại nhãn (gom lại, không làm mỗi khung). */
+    onViewChange() {
+      if (!this.labelScale || Math.abs(this.view.scale / this.labelScale - 1) < 0.04) return;
+      clearTimeout(this.relabelTimer);
+      this.relabelTimer = setTimeout(() => {
+        this.computeLabels();
+        this.view.requestDraw();
+      }, 120);
     }
     /** Toạ độ đã đổi (đang kéo): chỉ cần vẽ lại. */
     update(values) {
@@ -1357,6 +1611,8 @@
       ctx.lineJoin = "round";
       if (this.grid) drawGrid(ctx, view);
       const labels = [];
+      const trimPts = this.trimPoints();
+      this.lineRanges = /* @__PURE__ */ new Map();
       for (const it of this.items) {
         const v = V.get(it.s.id);
         if (!v) continue;
@@ -1366,9 +1622,11 @@
         const width = (st.width || 1) * sc * (hl ? 1.8 : 1);
         if (kind === "line") {
           const sub3 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
-          if (sel) strokeLine(ctx, view, v, sub3, HALO, width + 7 * sc, false);
-          strokeLine(ctx, view, v, sub3, color, width, st.dash);
-          if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: lineLabelPos(view, v, sub3), color, off: [0, 10] });
+          const seg = lineSeg(view, v, sub3, trimPts, this.lineRanges, s.id);
+          if (this.ghostLines && this.lineRanges.has(s.id)) strokeSeg(ctx, screenLine(view, v, sub3), GHOST, 1 * sc, false);
+          if (sel) strokeSeg(ctx, seg, HALO, width + 7 * sc, false);
+          strokeSeg(ctx, seg, color, width, st.dash);
+          if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: segLabelPos(seg, sub3), color, off: [0, 10] });
         } else if (kind === "circle") {
           const c = view.toScreen(v.c), r = v.r * view.scale;
           if (st.fill) fillCircle(ctx, c, r, st.fillColor || st.color, st.fill);
@@ -1415,6 +1673,7 @@
       }
     }
   };
+  var round1 = (v) => Math.round(v * 10) / 10;
   function setStroke(ctx, color, width, dash) {
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
@@ -1443,6 +1702,33 @@
     if (!r) return null;
     return [{ x: p.x + r[0] * d.x, y: p.y + r[0] * d.y }, { x: p.x + r[1] * d.x, y: p.y + r[1] * d.y }];
   }
+  function lineSeg(view, v, sub3, trimPts, ranges = null, id = null) {
+    if (trimPts && sub3 !== "segment") {
+      const p = view.toScreen(v.p), q = view.toScreen({ x: v.p.x + v.d.x, y: v.p.y + v.d.y });
+      const d = { x: q.x - p.x, y: q.y - p.y };
+      const rg = trimmedRange({ p, d }, sub3, trimPts, 0.75, 22, 70);
+      if (rg) {
+        if (ranges) ranges.set(id, rg);
+        const m = 20;
+        const r = clip(p, d, -m, -m, view.W + m, view.H + m, rg[0], rg[1]);
+        return r ? [{ x: p.x + r[0] * d.x, y: p.y + r[0] * d.y }, { x: p.x + r[1] * d.x, y: p.y + r[1] * d.y }] : null;
+      }
+    }
+    return screenLine(view, v, sub3);
+  }
+  function strokeSeg(ctx, seg, color, width, dash) {
+    if (!seg) return;
+    setStroke(ctx, color, width, dash);
+    ctx.beginPath();
+    ctx.moveTo(seg[0].x, seg[0].y);
+    ctx.lineTo(seg[1].x, seg[1].y);
+    ctx.stroke();
+  }
+  function segLabelPos(seg, sub3) {
+    if (!seg) return { x: -1e4, y: -1e4 };
+    const t = sub3 === "segment" ? 0.5 : 0.85;
+    return { x: seg[0].x + t * (seg[1].x - seg[0].x), y: seg[0].y + t * (seg[1].y - seg[0].y) };
+  }
   function strokeLine(ctx, view, v, sub3, color, width, dash) {
     const seg = screenLine(view, v, sub3);
     if (!seg) return;
@@ -1451,12 +1737,6 @@
     ctx.moveTo(seg[0].x, seg[0].y);
     ctx.lineTo(seg[1].x, seg[1].y);
     ctx.stroke();
-  }
-  function lineLabelPos(view, v, sub3) {
-    const seg = screenLine(view, v, sub3);
-    if (!seg) return { x: -1e4, y: -1e4 };
-    const t = sub3 === "segment" ? 0.5 : 0.85;
-    return { x: seg[0].x + t * (seg[1].x - seg[0].x), y: seg[0].y + t * (seg[1].y - seg[0].y) };
   }
   function strokeCircle(ctx, c, r, color, width, dash) {
     if (!(r > 0) || r > 1e7) return;
@@ -1791,10 +2071,10 @@
     seg(a, b, style) {
       return this.add("segment", [a, b], style ? { style } : {});
     }
-    /** Đường tròn kèm tâm (tâm dùng lại điểm có sẵn nếu trùng). */
+    /** Đường tròn kèm tâm (tâm dùng lại điểm có sẵn nếu trùng; tên mặc định O, O₁, O₂…). */
     circleWithCenter(type, args, centerName, opts = {}) {
       const c = this.add(type, args, opts);
-      this.point("center", [c], centerName ? { name: centerName } : {});
+      this.point("center", [c], { name: centerName || "O" });
       return c;
     }
   };
@@ -2421,10 +2701,41 @@
       M5,
       "invert",
       "Ngh\u1ECBch \u0111\u1EA3o",
-      ["point", "circle"],
-      ["Ch\u1ECDn \u0111i\u1EC3m c\u1EA7n ngh\u1ECBch \u0111\u1EA3o", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n ngh\u1ECBch \u0111\u1EA3o"],
-      run((S, p) => S.add("invert", p)),
+      ["obj", "circle"],
+      ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n ngh\u1ECBch \u0111\u1EA3o (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng th\u1EB3ng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n ngh\u1ECBch \u0111\u1EA3o"],
+      run((S, [X, c], ctx) => {
+        const x = ctx.values.get(X), k = ctx.values.get(c);
+        if (!x || x.kind === "point") return S.add("invert", [X, c]);
+        S.add(k && invertToLine(x, k) ? "invert_line" : "invert_circle", [X, c]);
+      }),
       { icon: "\u229B" }
+    ),
+    T(
+      M5,
+      "rotate_by",
+      "Quay theo g\xF3c tr\xEAn h\xECnh",
+      ["obj", "point", "point", "point", "point"],
+      ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n quay", "Ch\u1ECDn t\xE2m quay", "G\xF3c quay = g\xF3c ABC tr\xEAn h\xECnh: ch\u1ECDn \u0111i\u1EC3m A", "Ch\u1ECDn \u0111\u1EC9nh g\xF3c B", "Ch\u1ECDn \u0111i\u1EC3m C (quay theo chi\u1EC1u t\u1EEB BA sang BC)"],
+      run((S, p) => S.add("rotate_by", p)),
+      { icon: "\u21BB\u2220", allowRepeat: true }
+    ),
+    T(
+      M5,
+      "homothety_by",
+      "V\u1ECB t\u1EF1 theo t\u1EC9 s\u1ED1 tr\xEAn h\xECnh",
+      ["obj", "point", "point", "point", "point", "point"],
+      ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng", "Ch\u1ECDn t\xE2m v\u1ECB t\u1EF1", "T\u1EC9 s\u1ED1 = AB/CD tr\xEAn h\xECnh: ch\u1ECDn A", "Ch\u1ECDn B", "Ch\u1ECDn C", "Ch\u1ECDn D"],
+      run((S, p, ctx) => S.add("homothety_by", p, ctx.opt("k", 1) < 0 ? { params: { negative: true } } : {})),
+      { icon: "\u2922\xF7", allowRepeat: true, options: [{ key: "k", label: "D\u1EA5u c\u1EE7a t\u1EC9 s\u1ED1 (1: d\u01B0\u01A1ng, \u22121: \xE2m)", def: 1 }] }
+    ),
+    T(
+      M5,
+      "spiral",
+      "\u0110\u1ED3ng d\u1EA1ng t\xE2m O bi\u1EBFn A th\xE0nh B",
+      ["obj", "point", "point", "point"],
+      ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng", "Ch\u1ECDn t\xE2m O", "Ch\u1ECDn \u0111i\u1EC3m A", "Ch\u1ECDn \u0111i\u1EC3m B (\u1EA3nh c\u1EE7a A) \u2013 quay \u2220AOB v\xE0 v\u1ECB t\u1EF1 t\u1EC9 s\u1ED1 OB/OA"],
+      run((S, p) => S.add("spiral", p)),
+      { icon: "\u21BB\u2922", allowRepeat: true }
     ),
     T(
       M5,
@@ -2539,7 +2850,7 @@
   // src/ui/tools.js
   var T2 = (id, label, group, icon, inputs, hints, make, extra = {}) => ({ id, label, group, icon, inputs, hints, make, ...extra });
   var one = (type, params, name) => (picks) => [{ type, args: picks, params, name }];
-  var withCenter = (type, params, centerName) => (picks, app) => {
+  var withCenter = (type, params, centerName = "O") => (picks, app) => {
     const out = [{ type, args: picks, params }];
     let c = null;
     try {
@@ -2868,8 +3179,9 @@
     const host = document.getElementById("props");
     if (!host) return;
     const ids = [...app.selection].filter((id) => stepById(app.doc, id));
-    host.classList.toggle("show", ids.length > 0 && app.mode !== "present");
-    if (!ids.length || app.mode === "present") {
+    const show = ids.length > 0 && app.mode !== "present" && app.toolId === "move";
+    host.classList.toggle("show", show);
+    if (!show) {
       host.innerHTML = "";
       return;
     }
@@ -2932,6 +3244,22 @@
     if (q("#p-hidden")) q("#p-hidden").onchange = (e) => app.setStepProp(s.id, "hidden", e.target.checked);
     if (q("#p-join")) q("#p-join").onchange = (e) => app.setStepProp(s.id, "joinPrev", e.target.checked);
     q("#p-del").onclick = () => app.deleteSteps(ids);
+    placeCard(app, host, ids);
+  }
+  function placeCard(app, host, ids) {
+    host.classList.remove("alt");
+    const st = app.stage.getBoundingClientRect(), r = host.getBoundingClientRect();
+    const box = { x: r.left - st.left - 14, y: r.top - st.top - 14, w: r.width + 28, h: r.height + 28 };
+    const covered = ids.some((id) => {
+      const v = app.values.get(id);
+      if (!v) return false;
+      const pts = v.kind === "point" ? [v] : v.kind === "circle" ? [v.c, { x: v.c.x + v.r, y: v.c.y }, { x: v.c.x - v.r, y: v.c.y }, { x: v.c.x, y: v.c.y + v.r }] : v.kind === "line" ? [v.p, { x: v.p.x + v.d.x, y: v.p.y + v.d.y }] : [];
+      return pts.some((P2) => {
+        const q = app.toScreen(P2);
+        return q.x > box.x && q.x < box.x + box.w && q.y > box.y && q.y < box.y + box.h;
+      });
+    });
+    if (covered) host.classList.add("alt");
   }
   function renderToolOptions(app) {
     var _a;
@@ -2993,12 +3321,15 @@
       this.theme = loadPref("theme", "mono");
       setTheme(this.theme);
       this.listeners = { change: [] };
+      this.typeToRename = true;
+      this.fitKey = "Home";
     }
     // ================= khởi tạo =================
     mount() {
       this.view = new CanvasView(document.getElementById("board"));
       this.view.setBoundingBox([-8, 6, 8, -6]);
       this.renderer = new Renderer(this.view);
+      this.renderer.trimLines = loadPref("trim", "1") === "1";
       this.stage = document.getElementById("stage");
       this.buildToolbar();
       this.bindPointer();
@@ -3156,14 +3487,18 @@
       const px = 1 / this.view.scale;
       const f = this.projector ? 1.6 : 1;
       const out = [];
+      let order = 0;
       for (const s of this.doc.steps) {
+        order++;
         if (s.hidden || vis && !vis.has(s.id)) continue;
         const v = this.values.get(s.id);
         const kind = k.get(s.id);
         if (!v || kind === "mark") continue;
-        const d = distToObject(v, P2) / px;
-        if (kind === "point" && d <= 11 * f) out.push({ id: s.id, kind, d, pri: 0 });
-        else if ((kind === "line" || kind === "circle") && d <= 7 * f) out.push({ id: s.id, kind, d, pri: 1 });
+        let d = distToObject(v, P2) / px;
+        const rg = kind === "line" && !this.renderer.ghostLines && this.renderer.lineRanges.get(s.id);
+        if (rg) d = dist(P2, pointOn({ ...v, sub: "line" }, Math.max(rg[0], Math.min(rg[1], lineParam(P2, v))))) / px;
+        if (kind === "point" && d <= 11 * f) out.push({ id: s.id, kind, d, pri: 0, order });
+        else if ((kind === "line" || kind === "circle") && d <= 7 * f) out.push({ id: s.id, kind, d, pri: 1, order });
       }
       for (const s of this.doc.steps) {
         if (s.hidden || vis && !vis.has(s.id) || k.get(s.id) !== "mark") continue;
@@ -3172,7 +3507,7 @@
         const d = markDistance(v, P2, px * f) / px;
         if (d <= 9 * f) out.push({ id: s.id, kind: "mark", d, pri: 2 });
       }
-      out.sort((a, b) => a.pri - b.pri || a.d - b.d);
+      out.sort((a, b) => a.pri - b.pri || (Math.abs(a.d - b.d) < 0.75 ? (b.order || 0) - (a.order || 0) : a.d - b.d));
       return out;
     }
     figureScale() {
@@ -3223,6 +3558,19 @@
       }
       return out;
     }
+    /** Cặp đường cắt nhau gần chỗ bấm nhất (nhiều cặp cùng chỗ: cặp dựng sau cùng). */
+    crossingPair(curves, P2) {
+      const px = 1 / this.view.scale;
+      const cs = curves.slice(0, 5);
+      let best = null;
+      for (let i = 0; i < cs.length; i++)
+        for (let j = i + 1; j < cs.length; j++)
+          for (const r of intersect(this.values.get(cs[i].id), this.values.get(cs[j].id))) {
+            const d = dist(r, P2) / px, rec = Math.min(cs[i].order || 0, cs[j].order || 0);
+            if (!best || d < best.d - 0.75 || Math.abs(d - best.d) <= 0.75 && rec > best.rec) best = { d, rec, ids: [cs[i].id, cs[j].id] };
+          }
+      return best ? best.ids : [curves[0].id, curves[1].id];
+    }
     /** Lấy (hoặc tạo) một điểm tại vị trí bấm: điểm có sẵn / giao điểm / điểm trên đường / điểm tự do. */
     resolvePoint(sx, sy, hits) {
       const pHit = hits.find((h) => h.kind === "point");
@@ -3235,7 +3583,8 @@
         for (let j = i + 1; j < curves.length; j++)
           for (const r of intersect(this.values.get(curves[i].id), this.values.get(curves[j].id))) {
             const d = dist(r, P2) / px;
-            if (d < 14 && (!best || d < best.d)) best = { d, a: curves[i].id, b: curves[j].id };
+            const rec = Math.min(curves[i].order || 0, curves[j].order || 0);
+            if (d < 14 && (!best || d < best.d - 0.75 || Math.abs(d - best.d) <= 0.75 && rec > best.rec)) best = { d, rec, a: curves[i].id, b: curves[j].id };
           }
       if (best) return this.createIntersections(best.a, best.b, P2)[0] ?? null;
       if (curves.length) {
@@ -3256,8 +3605,12 @@
       this.toolId = id;
       this.markActiveTool(id);
       this.stage.classList.toggle("tool-active", id !== "move");
+      this.rememberTool(id);
+      this.renderer.ghostLines = id !== "move" && this.mode === "edit";
+      this.view.requestDraw();
       this.showHint();
       renderToolOptions(this);
+      renderProps(this);
     }
     cancelTool() {
       this.picks = [];
@@ -3277,7 +3630,9 @@
       }
       const t = TOOL_BY_ID[this.toolId];
       const i = Math.min(this.picks.length, t.hints.length - 1);
-      el.textContent = msg || `${t.label}: ${t.hints[i] || ""}`;
+      const sel = this.selection.size === 1 && !this.picks.length ? stepById(this.doc, [...this.selection][0]) : null;
+      const tip = sel && sel.name && kinds(this.doc).get(sel.id) === "point" ? ` \xB7 G\xF5 ch\u1EEF \u0111\u1EC3 \u0111\u1EB7t t\xEAn ${sel.name}` : "";
+      el.textContent = msg || `${t.label}: ${t.hints[i] || ""}${tip}`;
     }
     neededTypes(tool) {
       if (tool.inputs[0] === "...point") return ["point"];
@@ -3304,14 +3659,19 @@
       if (tool.id === "intersect") {
         const curves = hits.filter((h) => h.kind === "line" || h.kind === "circle");
         if (!this.picks.length && curves.length >= 2) {
-          this.createIntersections(curves[0].id, curves[1].id, this.toUser(sx, sy));
+          const n0 = this.doc.steps.length;
+          const [c1, c2] = this.crossingPair(curves, this.toUser(sx, sy));
+          this.createIntersections(c1, c2, this.toUser(sx, sy));
+          this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
           return this.finishTool();
         }
         const c = curves.find((h) => !this.picks.includes(h.id));
         if (!c) return this.showHint("H\xE3y b\u1EA5m v\xE0o m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng ho\u1EB7c \u0111\u01B0\u1EDDng tr\xF2n");
         this.picks.push(c.id);
         if (this.picks.length === 2) {
+          const n0 = this.doc.steps.length;
           this.createIntersections(this.picks[0], this.picks[1], null);
+          this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
           return this.finishTool();
         }
         this.selection = new Set(this.picks);
@@ -3335,7 +3695,7 @@
         if (this.picks.includes(id)) return;
         this.picks.push(id);
       } else {
-        if (this.picks.includes(id)) return this.showHint("\u0110\u1ED1i t\u01B0\u1EE3ng n\xE0y \u0111\xE3 \u0111\u01B0\u1EE3c ch\u1ECDn, h\xE3y ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng kh\xE1c");
+        if (this.picks.includes(id) && !tool.allowRepeat) return this.showHint("\u0110\u1ED1i t\u01B0\u1EE3ng n\xE0y \u0111\xE3 \u0111\u01B0\u1EE3c ch\u1ECDn, h\xE3y ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng kh\xE1c");
         this.picks.push(id);
         if (tool.anyOrder && this.picks.length === tool.inputs.length) {
           const kk = kinds(this.doc);
@@ -3354,18 +3714,33 @@
       this.startPreview(tool);
       this.showHint();
     }
+    /** Điểm vừa dựng nằm ngoài khung nhìn → nhắc cách thu phóng (không tự đổi khung nhìn của người dùng). */
+    warnOutOfView() {
+      const ids = [...this.selection];
+      const out = ids.some((id) => {
+        const v = this.values.get(id);
+        if (!v || v.kind !== "point") return false;
+        const q = this.toScreen(v);
+        return q.x < 0 || q.y < 0 || q.x > this.view.W || q.y > this.view.H;
+      });
+      if (out) toast("\u0110i\u1EC3m v\u1EEBa d\u1EF1ng n\u1EB1m ngo\xE0i khung nh\xECn \u2013 nh\u1EA5n Home (ho\u1EB7c Hi\u1EC3n th\u1ECB \u203A Thu ph\xF3ng v\u1EEBa h\xECnh) \u0111\u1EC3 th\u1EA5y c\u1EA3 h\xECnh", 4200);
+    }
     completeTool(tool) {
       const specs = tool.make(this.picks, this);
       const ids = this.addSteps(specs);
-      this.selection = new Set(ids.slice(0, 1));
+      const k = kinds(this.doc);
+      const pts = ids.filter((id) => k.get(id) === "point" && !stepById(this.doc, id).hidden);
+      this.selection = new Set(pts.length === 1 ? pts : ids.slice(0, 1));
       this.finishTool();
     }
     finishTool() {
       this.picks = [];
       this.renderer.clearExtra();
       this.endTx();
-      if (this.toolId === "intersect") this.selection.clear();
+      if (this.toolId === "intersect") this.selection = new Set(this.lastCreatedPoints && this.lastCreatedPoints.length === 1 ? this.lastCreatedPoints : []);
+      this.lastCreatedPoints = null;
       this.afterChange();
+      this.warnOutOfView();
       this.showHint();
     }
     markStyle(kind) {
@@ -3431,7 +3806,7 @@
         if (this.mode === "present") return;
         const { sx, sy } = this.eventPos(e);
         const h = this.hitTest(sx, sy)[0];
-        if (h && h.kind === "point") this.renameStep(h.id);
+        if (h && h.kind === "point") this.inlineRename(h.id, null);
       });
     }
     /** Nhãn điểm tại vị trí chuột (để kéo nhãn). */
@@ -3541,7 +3916,7 @@
         this.mouse = this.toUser(sx, sy);
         if (info.kind === "label") {
           const sc = this.projector ? 1.9 : 1;
-          const off = [round1(info.off[0] + (sx - info.sx) / sc), round1(info.off[1] - (sy - info.sy) / sc)];
+          const off = [round12(info.off[0] + (sx - info.sx) / sc), round12(info.off[1] - (sy - info.sy) / sc)];
           step.style = { ...step.style || {}, labelOffset: off };
           this.renderer.setLabelOffset(info.id, off);
           return;
@@ -3594,16 +3969,62 @@
       if (v == null) return;
       this.setName(id, v.trim());
     }
+    /**
+     * Đặt tên ngay trên hình: ô nhập nhỏ hiện cạnh nhãn. Mở bằng cách GÕ CHỮ khi đang chọn một điểm (vd điểm vừa
+     * dựng), F2, hoặc nháy đúp. Enter/bấm ra ngoài: lưu; Esc: bỏ.
+     */
+    inlineRename(id, first = null) {
+      const s = stepById(this.doc, id);
+      const v = this.values.get(id);
+      if (!s || !s.name || !v || this.mode !== "edit") return;
+      document.querySelector(".inline-name")?.remove();
+      const inp = document.createElement("input");
+      inp.className = "inline-name";
+      inp.type = "text";
+      inp.spellcheck = false;
+      inp.value = first ?? s.name;
+      inp.title = "G\xF5 nh\u01B0 c\xF4ng th\u1EE9c: I_A, X_{AB}, B', A1 \u2192 A\u2081. Enter \u0111\u1EC3 l\u01B0u, Esc \u0111\u1EC3 b\u1ECF.";
+      const p = this.toScreen(v);
+      const off = this.renderer.labelOffsets.get(id) || [9, 9];
+      const sc = this.projector ? 1.9 : 1;
+      inp.style.left = Math.max(4, Math.min(this.view.W - 90, p.x + off[0] * sc - 20)) + "px";
+      inp.style.top = Math.max(4, Math.min(this.view.H - 30, p.y - off[1] * sc - 13)) + "px";
+      this.stage.appendChild(inp);
+      let done = false;
+      const finish = (save) => {
+        if (done) return;
+        done = true;
+        const val = inp.value.trim();
+        inp.remove();
+        if (save && val) this.setName(id, val);
+        this.showHint();
+      };
+      inp.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      inp.addEventListener("blur", () => finish(true));
+      inp.focus();
+      if (first == null) inp.select();
+      else inp.setSelectionRange(inp.value.length, inp.value.length);
+    }
+    /** Đổi tên; nếu tên đã thuộc đối tượng khác thì ĐỔI CHỖ hai tên (vd tam giác vuông dựng ở A mà đề cần vuông ở C). */
     setName(id, name) {
       const s = stepById(this.doc, id);
       if (!name || name === s.name) return false;
-      if (this.nameUsed(name, id)) {
-        toast(`T\xEAn "${name}" \u0111\xE3 \u0111\u01B0\u1EE3c d\xF9ng`);
-        return false;
-      }
+      const other = this.doc.steps.find((x) => x.name === name && x.id !== id);
+      const old = s.name;
       this.commit(() => {
+        if (other) other.name = old;
         s.name = name;
       });
+      if (other) toast(`\u0110\xE3 \u0111\u1ED5i ch\u1ED7 t\xEAn: ${name} \u2194 ${old}`);
       return true;
     }
     setStyle(ids, patch) {
@@ -3658,6 +4079,7 @@
       if (mode === "present") {
         this.frameIdx = 0;
         this.selection.clear();
+        this.renderer.ghostLines = false;
       } else this.setTool(this.toolId);
       this.refresh();
       this.showHint();
@@ -3708,6 +4130,7 @@
     updateMenuChecks() {
       document.querySelectorAll("[data-theme]").forEach((b) => b.classList.toggle("on", b.dataset.theme === this.theme));
       document.getElementById("btn-grid")?.classList.toggle("on", this.grid);
+      document.getElementById("btn-trim")?.classList.toggle("on", !!this.renderer?.trimLines);
       document.getElementById("menu-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
       document.getElementById("btn-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
     }
@@ -3764,6 +4187,19 @@
           } else if (e.key === "Home") this.gotoFrame(0);
           else if (e.key === "End") this.gotoFrame(1e9);
           else if (e.key === "Escape" && !this.projector) this.setMode("edit");
+          return;
+        }
+        if (!ctrl && !e.altKey && this.selection.size === 1 && !this.picks.length && (e.key === "F2" || e.key.length === 1 && /[\p{L}\d_'{}]/u.test(e.key))) {
+          const id = [...this.selection][0];
+          if (kinds(this.doc).get(id) === "point" && stepById(this.doc, id)?.name) {
+            e.preventDefault();
+            this.inlineRename(id, e.key === "F2" ? null : e.key);
+            return;
+          }
+        }
+        if (e.key === "Home") {
+          e.preventDefault();
+          this.zoomFit();
           return;
         }
         if (e.key === "Escape") {
@@ -3878,7 +4314,8 @@
           <button class="tb-btn" data-group="${g.id}" title="${escapeHTML(g.label)}">${ICONS[g.icon] || ""}${many ? '<span class="tb-more"></span>' : ""}</button>
           ${many ? `<div class="flyout"><div class="flyout-title">${escapeHTML(g.label)}</div>${items}</div>` : ""}
         </div>`;
-      }).join("");
+      }).join("") + '<div id="tb-recent" class="tb-recent" title="C\xF4ng c\u1EE5 v\u1EEBa d\xF9ng"></div>';
+      this.renderRecent();
       const closeAll = () => host.querySelectorAll(".tb-group.open, .sub.open").forEach((x) => x.classList.remove("open"));
       if (this.toolbarBound) return;
       this.toolbarBound = true;
@@ -3893,6 +4330,12 @@
         if (act) {
           closeAll();
           this.userToolAction(act.dataset.action || "delete", act.dataset.del);
+          return;
+        }
+        const rc = e.target.closest("[data-recent]");
+        if (rc) {
+          closeAll();
+          this.setTool(rc.dataset.recent);
           return;
         }
         const tb = e.target.closest(".tb-btn");
@@ -3937,6 +4380,28 @@
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeAll();
       });
+    }
+    /** Công cụ vừa dùng (tối đa 6) – hiện ở cuối thanh công cụ dọc, chọn lại bằng MỘT lần bấm. */
+    rememberTool(id) {
+      if (!this.recentTools) {
+        try {
+          this.recentTools = JSON.parse(loadPref("recent", "[]"));
+        } catch {
+          this.recentTools = [];
+        }
+      }
+      if (id !== "move" && TOOL_BY_ID[id]) {
+        this.recentTools = [id, ...this.recentTools.filter((x) => x !== id)].slice(0, 6);
+        savePref("recent", JSON.stringify(this.recentTools));
+      }
+      this.renderRecent();
+    }
+    renderRecent() {
+      const host = document.getElementById("tb-recent");
+      if (!host) return;
+      const list = (this.recentTools || []).filter((id) => TOOL_BY_ID[id]);
+      host.innerHTML = list.map((id) => `<button class="tb-rc${id === this.toolId ? " active" : ""}" data-recent="${id}" title="${escapeHTML(TOOL_BY_ID[id].label)}">${TOOL_BY_ID[id].icon}</button>`).join("");
+      host.style.display = list.length ? "" : "none";
     }
     /** Đánh dấu công cụ đang dùng trên thanh công cụ. */
     markActiveTool(id) {
@@ -3997,6 +4462,12 @@
       this.updateMenuChecks();
       on("btn-delete", () => this.deleteSteps([...this.selection]));
       on("btn-grid", () => this.toggleGrid());
+      on("btn-trim", () => {
+        this.renderer.trimLines = !this.renderer.trimLines;
+        savePref("trim", this.renderer.trimLines ? "1" : "0");
+        this.updateMenuChecks();
+        this.refresh();
+      });
       on("btn-fit", () => this.zoomFit());
       on("btn-present", () => this.setMode(this.mode === "present" ? "edit" : "present"));
       on("btn-projector", () => this.setProjector(!this.projector));
@@ -4031,7 +4502,7 @@
   }
   var round6 = (v) => Math.round(v * 1e6) / 1e6;
   var round9 = (v) => Math.round(v * 1e9) / 1e9;
-  var round1 = (v) => Math.round(v * 10) / 10;
+  var round12 = (v) => Math.round(v * 10) / 10;
   var escapeHTML = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   function typeName(t) {
     return { point: "m\u1ED9t \u0111i\u1EC3m", line: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng", circle: "m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n", curve: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng/\u0111\u01B0\u1EDDng tr\xF2n", obj: "m\u1ED9t \u0111\u1ED1i t\u01B0\u1EE3ng", pl: "m\u1ED9t \u0111i\u1EC3m ho\u1EB7c \u0111\u01B0\u1EDDng th\u1EB3ng", "...point": "m\u1ED9t \u0111i\u1EC3m" }[t] || t;
@@ -4771,7 +5242,7 @@
     "symmedian_foot",
     "mixtilinear"
   ]);
-  function findTriangles(doc, kindOf, { strict = false } = {}) {
+  function findTriangles(doc, kindOf, { strict = false, drawn = false } = {}) {
     const tri2 = /* @__PURE__ */ new Map();
     const addTri = (ids) => {
       if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === "point")) return;
@@ -4779,7 +5250,7 @@
       if (!tri2.has(key)) tri2.set(key, ids);
     };
     for (const s of doc.steps)
-      if (TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === "circle_3pts" || s.type === "angle_bisector"))) addTri(s.args);
+      if (!drawn && TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === "circle_3pts" || s.type === "angle_bisector"))) addTri(s.args);
     const adj = /* @__PURE__ */ new Map();
     const link = (a, b) => {
       if (!adj.has(a)) adj.set(a, /* @__PURE__ */ new Set());
@@ -4812,7 +5283,7 @@
     return ov;
   }
   function degenerate(doc, vals, ctx) {
-    const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist } = ctx;
+    const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments, tangentAtBase } = ctx;
     const scale = figureScale(vals, pointIds);
     for (const id of [...pointIds, ...curveIds]) if (!vals.get(id)) return "kh\xF4ng x\xE1c \u0111\u1ECBnh";
     const sep = opts.minSep * scale;
@@ -4830,12 +5301,19 @@
       const [A, B, C] = t.map((a) => vals.get(a));
       if (Math.min(ang(A, B, C), ang(B, C, A), ang(C, A, B)) < sinMin) return "tam gi\xE1c d\u1EB9t";
     }
+    if (onSegments) {
+      for (const [pid, sid] of onSegments) if (!insideSegment(vals.get(pid), vals.get(sid))) return "ra ngo\xE0i \u0111o\u1EA1n th\u1EB3ng";
+    }
+    if (baseShape) for (let i = 0; i < shapeTriangles.length; i++) {
+      const sh = triShape(shapeTriangles[i].map((a) => vals.get(a)));
+      if (baseShape[i].some((x, j) => x !== 0 && x !== sh[j])) return "\u0111\u1ED5i d\u1EA1ng tam gi\xE1c";
+    }
     for (const s of doc.steps) {
       const v = vals.get(s.id);
       if (v && v.kind === "circle" && v.r > opts.maxRadius * scale) return "\u0111\u01B0\u1EDDng tr\xF2n qu\xE1 l\u1EDBn";
       if (s.type === "intersection" || s.type === "intersection_other") {
         const r = intersect(vals.get(s.args[0]), vals.get(s.args[1]));
-        if (r.length === 2 && dist(r[0], r[1]) < sep * 2) return "g\u1EA7n ti\u1EBFp x\xFAc";
+        if (r.length === 2 && dist(r[0], r[1]) < sep * 2 && !(tangentAtBase && tangentAtBase.has(s.id))) return "g\u1EA7n ti\u1EBFp x\xFAc";
         if (r.length === 1 && kindOf.get(s.args[0]) === "line" && kindOf.get(s.args[1]) === "line") {
           const l1 = vals.get(s.args[0]), l2 = vals.get(s.args[1]);
           if (Math.abs(cross(unit(l1.d), unit(l2.d))) < sinMin) return "hai \u0111\u01B0\u1EDDng g\u1EA7n song song";
@@ -4843,6 +5321,27 @@
       }
     }
     return null;
+  }
+  var insideSegment = (P2, l) => {
+    const t = lineParam(P2, l);
+    return t > -1e-9 && t < 1 + 1e-9;
+  };
+  function pointsOnSegments(doc, base) {
+    const out = [];
+    const typeOf = new Map(doc.steps.map((s) => [s.id, s.type]));
+    for (const s of doc.steps) {
+      if (s.type !== "intersection" && s.type !== "intersection_other") continue;
+      const P2 = base.get(s.id);
+      if (!P2) continue;
+      for (const a of s.args.slice(0, 2)) if (typeOf.get(a) === "segment" && base.get(a) && insideSegment(P2, base.get(a))) out.push([s.id, a]);
+    }
+    return out;
+  }
+  function triShape([A, B, C]) {
+    const area = cross(sub(B, A), sub(C, A));
+    const cosAt = (P2, Q, R) => dot(sub(Q, P2), sub(R, P2)) / (dist(P2, Q) * dist(P2, R) + 1e-300);
+    const sg = (c) => Math.abs(c) < 0.05 ? 0 : Math.sign(c);
+    return [Math.sign(area), sg(cosAt(A, B, C)), sg(cosAt(B, C, A)), sg(cosAt(C, A, B))];
   }
   var T3 = {
     coincide: (P2, Q, e) => dist(P2, Q) < e,
@@ -4883,11 +5382,17 @@
     const rand = rng(opts.seed);
     const triangles = findTriangles(doc, kindOf);
     const baseDist = pointIds.map((a) => pointIds.map((b) => dist(base.get(a), base.get(b))));
-    const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist };
+    const shapeTriangles = findTriangles(doc, kindOf, { drawn: true });
+    const baseShape = shapeTriangles.map((t) => t.every((a) => base.get(a)) ? triShape(t.map((a) => base.get(a))) : [0, 0, 0, 0]);
+    const tangentAtBase = new Set(doc.steps.filter((s) => (s.type === "intersection" || s.type === "intersection_other") && (() => {
+      const r = intersect(base.get(s.args[0]), base.get(s.args[1]));
+      return r.length === 2 && dist(r[0], r[1]) < 1e-6 * scale0;
+    })()).map((s) => s.id));
+    const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments: pointsOnSegments(doc, base), tangentAtBase };
     const samples = [{ vals: base, scale: scale0 }];
     let attempts = 0;
     const rejected = {};
-    const baseDegenerate = degenerate(doc, base, { ...ctx, baseDist: null });
+    const baseDegenerate = degenerate(doc, base, { ...ctx, baseDist: null, baseShape: null, onSegments: null });
     while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
       attempts++;
       const ov = randomOverrides(doc, base, scale0, rand, opts.perturb);
@@ -5384,7 +5889,8 @@
         if (sub3 === "segment" && s.type === "segment") out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
         else if (sub3 === "segment") out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(add(v.p, v.d))};`);
         else {
-          const seg = clipLine(v, box, sub3 === "ray" ? 0 : -Infinity);
+          const rg = opts.trimLines ? trimmedRange(v, sub3, visible.filter((x) => k.get(x.id) === "point").map((x) => vals.get(x.id)), 1e-9 * (box.x2 - box.x1), cm(0.35), cm(1.1)) : null;
+          const seg = rg ? [add(v.p, mul(v.d, rg[0])), add(v.p, mul(v.d, rg[1]))] : clipLine(v, box, sub3 === "ray" ? 0 : -Infinity);
           if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub3 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub3 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${desc}`);
           if (seg && st.showLabel && s.name) {
             const P2 = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
@@ -5474,6 +5980,5042 @@
     return outL;
   }
 
+  // examples/thu-vien/muc-luc.json
+  var muc_luc_default = [
+    {
+      id: "imo2008-1",
+      nhom: "IMO",
+      ten: "IMO 2008 \u2013 B\xE0i 1",
+      de: "Tam gi\xE1c nh\u1ECDn ABC, tr\u1EF1c t\xE2m H. \u0110\u01B0\u1EDDng tr\xF2n t\xE2m l\xE0 trung \u0111i\u1EC3m BC \u0111i qua H c\u1EAFt \u0111\u01B0\u1EDDng th\u1EB3ng BC t\u1EA1i A\u2081, A\u2082; t\u01B0\u01A1ng t\u1EF1 B\u2081, B\u2082 (v\u1EDBi CA) v\xE0 C\u2081, C\u2082 (v\u1EDBi AB). Ch\u1EE9ng minh s\xE1u \u0111i\u1EC3m A\u2081, A\u2082, B\u2081, B\u2082, C\u2081, C\u2082 c\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n."
+    },
+    {
+      id: "imo2010-2",
+      nhom: "IMO",
+      ten: "IMO 2010 \u2013 B\xE0i 2",
+      de: "I l\xE0 t\xE2m n\u1ED9i ti\u1EBFp tam gi\xE1c ABC, \u0393 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp. AI c\u1EAFt \u0393 l\u1EA7n n\u1EEFa t\u1EA1i D. E thu\u1ED9c cung BDC, F thu\u1ED9c c\u1EA1nh BC sao cho \u2220BAF = \u2220CAE. G l\xE0 trung \u0111i\u1EC3m IF. Ch\u1EE9ng minh DG v\xE0 EI c\u1EAFt nhau tr\xEAn \u0393."
+    },
+    {
+      id: "imo2012-5",
+      nhom: "IMO",
+      ten: "IMO 2012 \u2013 B\xE0i 5",
+      de: "Tam gi\xE1c ABC vu\xF4ng t\u1EA1i C, D l\xE0 ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB C. X n\u1EB1m trong \u0111o\u1EA1n CD. K thu\u1ED9c \u0111o\u1EA1n AX v\u1EDBi BK = BC; L thu\u1ED9c \u0111o\u1EA1n BX v\u1EDBi AL = AC. M l\xE0 giao \u0111i\u1EC3m c\u1EE7a AL v\xE0 BK. Ch\u1EE9ng minh MK = ML."
+    },
+    {
+      id: "imo2013-4",
+      nhom: "IMO",
+      ten: "IMO 2013 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c nh\u1ECDn ABC, tr\u1EF1c t\xE2m H, W thu\u1ED9c c\u1EA1nh BC. M, N l\xE0 ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB B, C. \u03C9\u2081 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (BWN), X \u2208 \u03C9\u2081 v\u1EDBi WX l\xE0 \u0111\u01B0\u1EDDng k\xEDnh; \u03C9\u2082 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (CWM), Y \u2208 \u03C9\u2082 v\u1EDBi WY l\xE0 \u0111\u01B0\u1EDDng k\xEDnh. Ch\u1EE9ng minh X, Y, H th\u1EB3ng h\xE0ng."
+    },
+    {
+      id: "imo2014-4",
+      nhom: "IMO",
+      ten: "IMO 2014 \u2013 B\xE0i 4",
+      de: "P, Q thu\u1ED9c c\u1EA1nh BC c\u1EE7a tam gi\xE1c nh\u1ECDn ABC sao cho \u2220PAB = \u2220BCA v\xE0 \u2220CAQ = \u2220ABC. M, N thu\u1ED9c AP, AQ sao cho P l\xE0 trung \u0111i\u1EC3m AM, Q l\xE0 trung \u0111i\u1EC3m AN. Ch\u1EE9ng minh BM v\xE0 CN c\u1EAFt nhau tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp ABC."
+    },
+    {
+      id: "imo2015-4",
+      nhom: "IMO",
+      ten: "IMO 2015 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c ABC n\u1ED9i ti\u1EBFp \u03A9 t\xE2m O. \u0110\u01B0\u1EDDng tr\xF2n \u0393 t\xE2m A c\u1EAFt BC t\u1EA1i D, E (B, D, E, C theo th\u1EE9 t\u1EF1) v\xE0 c\u1EAFt \u03A9 t\u1EA1i F, G (A, F, B, C, G theo th\u1EE9 t\u1EF1). \u0110\u01B0\u1EDDng tr\xF2n (BDF) c\u1EAFt AB l\u1EA7n n\u1EEFa t\u1EA1i K, (CGE) c\u1EAFt CA l\u1EA7n n\u1EEFa t\u1EA1i L. FK v\xE0 GL c\u1EAFt nhau t\u1EA1i X. Ch\u1EE9ng minh X thu\u1ED9c AO."
+    },
+    {
+      id: "imo2017-4",
+      nhom: "IMO",
+      ten: "IMO 2017 \u2013 B\xE0i 4",
+      de: "R, S thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n \u03A9, RS kh\xF4ng l\xE0 \u0111\u01B0\u1EDDng k\xEDnh; \u2113 l\xE0 ti\u1EBFp tuy\u1EBFn c\u1EE7a \u03A9 t\u1EA1i R. T sao cho S l\xE0 trung \u0111i\u1EC3m RT. J thu\u1ED9c cung nh\u1ECF RS sao cho \u0111\u01B0\u1EDDng tr\xF2n \u0393 ngo\u1EA1i ti\u1EBFp JST c\u1EAFt \u2113 t\u1EA1i hai \u0111i\u1EC3m; A l\xE0 giao \u0111i\u1EC3m g\u1EA7n R h\u01A1n. AJ c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i K. Ch\u1EE9ng minh KT ti\u1EBFp x\xFAc \u0393."
+    },
+    {
+      id: "imo2018-1",
+      nhom: "IMO",
+      ten: "IMO 2018 \u2013 B\xE0i 1",
+      de: "\u0393 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp tam gi\xE1c nh\u1ECDn ABC. D, E thu\u1ED9c c\xE1c \u0111o\u1EA1n AB, AC v\u1EDBi AD = AE. Trung tr\u1EF1c c\u1EE7a BD v\xE0 CE c\u1EAFt c\xE1c cung nh\u1ECF AB, AC c\u1EE7a \u0393 t\u1EA1i F, G. Ch\u1EE9ng minh DE \u2225 FG (ho\u1EB7c tr\xF9ng)."
+    },
+    {
+      id: "imo2019-6",
+      nhom: "IMO",
+      ten: "IMO 2019 \u2013 B\xE0i 6",
+      de: "I l\xE0 t\xE2m n\u1ED9i ti\u1EBFp tam gi\xE1c nh\u1ECDn ABC (AB \u2260 AC), \u03C9 ti\u1EBFp x\xFAc BC, CA, AB t\u1EA1i D, E, F. \u0110\u01B0\u1EDDng th\u1EB3ng qua D vu\xF4ng g\xF3c EF c\u1EAFt \u03C9 l\u1EA7n n\u1EEFa t\u1EA1i R. AR c\u1EAFt \u03C9 l\u1EA7n n\u1EEFa t\u1EA1i P. \u0110\u01B0\u1EDDng tr\xF2n (PCE) v\xE0 (PBF) c\u1EAFt nhau l\u1EA7n n\u1EEFa t\u1EA1i Q. Ch\u1EE9ng minh DI v\xE0 PQ c\u1EAFt nhau tr\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng qua A vu\xF4ng g\xF3c AI."
+    },
+    {
+      id: "imo2021-4",
+      nhom: "IMO",
+      ten: "IMO 2021 \u2013 B\xE0i 4",
+      de: "\u0110\u01B0\u1EDDng tr\xF2n \u0393 t\xE2m I ti\u1EBFp x\xFAc b\u1ED1n c\u1EA1nh c\u1EE7a t\u1EE9 gi\xE1c l\u1ED3i ABCD. \u03A9 l\xE0 \u0111\u01B0\u1EDDng tr\xF2n (AIC). Tia \u0111\u1ED1i c\u1EE7a AB\u2026 c\u1EAFt \u03A9 t\u1EA1i X (BA k\xE9o d\xE0i qua A), Z (BC k\xE9o d\xE0i qua C); AD, CD k\xE9o d\xE0i qua D c\u1EAFt \u03A9 t\u1EA1i Y, T. Ch\u1EE9ng minh AD + DT + TX + XA = CD + DY + YZ + ZC."
+    },
+    {
+      id: "imo2023-2",
+      nhom: "IMO",
+      ten: "IMO 2023 \u2013 B\xE0i 2",
+      de: "Tam gi\xE1c nh\u1ECDn ABC, AB < AC, \u03A9 ngo\u1EA1i ti\u1EBFp. S l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung CB ch\u1EE9a A. \u0110\u01B0\u1EDDng vu\xF4ng g\xF3c t\u1EEB A xu\u1ED1ng BC c\u1EAFt BS t\u1EA1i D, c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i E. \u0110\u01B0\u1EDDng qua D song song BC c\u1EAFt BE t\u1EA1i L. \u03C9 = (BDL) c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i P. Ch\u1EE9ng minh ti\u1EBFp tuy\u1EBFn c\u1EE7a \u03C9 t\u1EA1i P c\u1EAFt BS tr\xEAn ph\xE2n gi\xE1c trong g\xF3c BAC."
+    },
+    {
+      id: "imo2024-4",
+      nhom: "IMO",
+      ten: "IMO 2024 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c ABC v\u1EDBi AB < AC < BC, t\xE2m n\u1ED9i ti\u1EBFp I, \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp \u03C9. X \u2260 C thu\u1ED9c BC sao cho \u0111\u01B0\u1EDDng qua X song song AC ti\u1EBFp x\xFAc \u03C9; Y \u2260 B thu\u1ED9c BC sao cho \u0111\u01B0\u1EDDng qua Y song song AB ti\u1EBFp x\xFAc \u03C9. AI c\u1EAFt (ABC) l\u1EA7n n\u1EEFa t\u1EA1i P. K, L l\xE0 trung \u0111i\u1EC3m AC, AB. Ch\u1EE9ng minh \u2220KIL + \u2220YPX = 180\xB0."
+    },
+    {
+      id: "imo2025-2",
+      nhom: "IMO",
+      ten: "IMO 2025 \u2013 B\xE0i 2",
+      de: "\u03A9 t\xE2m M v\xE0 \u0393 t\xE2m N (b\xE1n k\xEDnh \u03A9 nh\u1ECF h\u01A1n) c\u1EAFt nhau t\u1EA1i A, B. MN c\u1EAFt \u03A9 t\u1EA1i C, c\u1EAFt \u0393 t\u1EA1i D (C, M, N, D theo th\u1EE9 t\u1EF1). P l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp ACD. AP c\u1EAFt \u03A9 l\u1EA7n n\u1EEFa t\u1EA1i E, c\u1EAFt \u0393 l\u1EA7n n\u1EEFa t\u1EA1i F. H l\xE0 tr\u1EF1c t\xE2m PMN. Ch\u1EE9ng minh \u0111\u01B0\u1EDDng qua H song song AP ti\u1EBFp x\xFAc \u0111\u01B0\u1EDDng tr\xF2n (BEF)."
+    },
+    {
+      id: "vmo2014-4",
+      nhom: "VMO",
+      ten: "VMO 2014 \u2013 B\xE0i 4",
+      de: "Tam gi\xE1c nh\u1ECDn ABC (AB < AC) n\u1ED9i ti\u1EBFp (O); I l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A. K \u2260 C thu\u1ED9c AC v\u1EDBi IK = IC. BK c\u1EAFt (O) t\u1EA1i D (D \u2260 B), c\u1EAFt AI t\u1EA1i E. DI c\u1EAFt AC t\u1EA1i F. a) EF = BC/2. b) M thu\u1ED9c DI v\u1EDBi CM \u2225 AD; KM c\u1EAFt BC t\u1EA1i N; (BKN) c\u1EAFt (O) t\u1EA1i P \u2260 B. Ch\u1EE9ng minh PK \u0111i qua trung \u0111i\u1EC3m AD."
+    },
+    {
+      id: "vmo2016-3",
+      nhom: "VMO",
+      ten: "VMO 2016 \u2013 B\xE0i 3",
+      de: "B, C c\u1ED1 \u0111\u1ECBnh, A thay \u0111\u1ED5i (tam gi\xE1c ABC nh\u1ECDn). D l\xE0 trung \u0111i\u1EC3m BC; E, F l\xE0 h\xECnh chi\u1EBFu c\u1EE7a D tr\xEAn AB, AC. O l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp; EF c\u1EAFt AO, BC t\u1EA1i M, N. a) \u0110\u01B0\u1EDDng tr\xF2n (AMN) lu\xF4n \u0111i qua m\u1ED9t \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh. b) Ti\u1EBFp tuy\u1EBFn t\u1EA1i E, F c\u1EE7a (AEF) c\u1EAFt nhau t\u1EA1i T; T thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng c\u1ED1 \u0111\u1ECBnh."
+    },
+    {
+      id: "noi-bang-tiep",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "B\u1ED5 \u0111\u1EC1 t\xE2m n\u1ED9i ti\u1EBFp \u2013 b\xE0ng ti\u1EBFp",
+      de: "S l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BC kh\xF4ng ch\u1EE9a A c\u1EE7a (ABC). Ch\u1EE9ng minh B, C, I, I_A c\xF9ng n\u1EB1m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n t\xE2m S (S l\xE0 trung \u0111i\u1EC3m II_A)."
+    },
+    {
+      id: "euler-feuerbach",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "\u0110\u01B0\u1EDDng tr\xF2n Euler \u2013 \u0111\u1ECBnh l\xFD Feuerbach",
+      de: "\u0110\u01B0\u1EDDng tr\xF2n Euler c\u1EE7a tam gi\xE1c ABC ti\u1EBFp x\xFAc v\u1EDBi \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp v\xE0 ba \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp."
+    },
+    {
+      id: "mixtilinear",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear",
+      de: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear n\u1ED9i \u1EE9ng v\u1EDBi A ti\u1EBFp x\xFAc AB, AC t\u1EA1i K, L v\xE0 ti\u1EBFp x\xFAc trong (O) t\u1EA1i T. Ch\u1EE9ng minh I l\xE0 trung \u0111i\u1EC3m KL v\xE0 T, I v\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung BAC th\u1EB3ng h\xE0ng."
+    },
+    {
+      id: "nghich-dao-bc",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "Ngh\u1ECBch \u0111\u1EA3o \u221A(bc)",
+      de: "Ph\xE9p ngh\u1ECBch \u0111\u1EA3o t\xE2m A b\xE1n k\xEDnh \u221A(AB\xB7AC) h\u1EE3p v\u1EDBi ph\xE9p \u0111\u1ED1i x\u1EE9ng qua ph\xE2n gi\xE1c g\xF3c A \u0111\u1ED5i ch\u1ED7 B v\xE0 C, bi\u1EBFn (ABC) th\xE0nh \u0111\u01B0\u1EDDng th\u1EB3ng BC v\xE0 bi\u1EBFn \u0111\u01B0\u1EDDng tr\xF2n mixtilinear n\u1ED9i th\xE0nh \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp g\xF3c A."
+    },
+    {
+      id: "brocard",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp \u2013 \u0111\u1ECBnh l\xFD Brocard",
+      de: "T\u1EE9 gi\xE1c ABCD n\u1ED9i ti\u1EBFp (O). P = AC \u2229 BD, Q = AB \u2229 CD, R = AD \u2229 BC. Ch\u1EE9ng minh O l\xE0 tr\u1EF1c t\xE2m tam gi\xE1c PQR."
+    },
+    {
+      id: "monge",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "Ti\u1EBFp tuy\u1EBFn chung \u2013 \u0111\u1ECBnh l\xFD Monge",
+      de: "Ba \u0111\u01B0\u1EDDng tr\xF2n c\xF3 b\xE1n k\xEDnh kh\xE1c nhau. Hai ti\u1EBFp tuy\u1EBFn chung ngo\xE0i c\u1EE7a m\u1ED7i c\u1EB7p c\u1EAFt nhau t\u1EA1i t\xE2m v\u1ECB t\u1EF1 ngo\xE0i; ba t\xE2m v\u1ECB t\u1EF1 ngo\xE0i th\u1EB3ng h\xE0ng."
+    },
+    {
+      id: "dong-dang-xoan",
+      nhom: "C\u1EA5u h\xECnh",
+      ten: "T\xE2m \u0111\u1ED3ng d\u1EA1ng xo\u1EAFn (quay + v\u1ECB t\u1EF1)",
+      de: "X = AB \u2229 CD; (XAC) v\xE0 (XBD) c\u1EAFt nhau l\u1EA7n n\u1EEFa t\u1EA1i S. Ph\xE9p quay t\xE2m S g\xF3c \u2220ASC r\u1ED3i v\u1ECB t\u1EF1 t\xE2m S t\u1EC9 s\u1ED1 SC/SA bi\u1EBFn A th\xE0nh C v\xE0 B th\xE0nh D."
+    },
+    {
+      id: "hinh-day",
+      nhom: "H\xECnh d\xE0y",
+      ten: "Tam gi\xE1c v\u1EDBi ba t\xE2m b\xE0ng ti\u1EBFp (h\xECnh d\xE0y)",
+      de: "Tam gi\xE1c ABC, t\xE2m n\u1ED9i ti\u1EBFp I, ba t\xE2m b\xE0ng ti\u1EBFp I_A, I_B, I_C, \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp v\xE0 ba \u0111\u01B0\u1EDDng tr\xF2n b\xE0ng ti\u1EBFp. (O) l\xE0 \u0111\u01B0\u1EDDng tr\xF2n Euler c\u1EE7a tam gi\xE1c I_AI_BI_C, I l\xE0 tr\u1EF1c t\xE2m c\u1EE7a n\xF3, trung \u0111i\u1EC3m M_A c\u1EE7a II_A n\u1EB1m tr\xEAn (O). K\xE8m nh\xE3n c\xF3 ch\u1EC9 s\u1ED1 d\u01B0\u1EDBi v\xE0 d\u1EA5u ph\u1EA9y."
+    }
+  ];
+
+  // examples/thu-vien/imo2008-1.json
+  var imo2008_1_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2008 \u2013 B\xE0i 1",
+    view: {
+      bbox: [
+        -7.963,
+        4.407,
+        8.13,
+        -5.277
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.8,
+          y: 3.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -2
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.8,
+          y: -2
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "orthocenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "H"
+      },
+      {
+        id: "s8",
+        type: "midpoint",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "M_a"
+      },
+      {
+        id: "s9",
+        type: "circle",
+        args: [
+          "s8",
+          "s7"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s9",
+          "s5"
+        ],
+        params: {
+          which: 0
+        },
+        name: "A_1"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s9",
+          "s5",
+          "s10"
+        ],
+        name: "A_2"
+      },
+      {
+        id: "s12",
+        type: "midpoint",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "M_b"
+      },
+      {
+        id: "s13",
+        type: "circle",
+        args: [
+          "s12",
+          "s7"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s13",
+          "s6"
+        ],
+        params: {
+          which: 0
+        },
+        name: "B_1"
+      },
+      {
+        id: "s15",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s6",
+          "s14"
+        ],
+        name: "B_2"
+      },
+      {
+        id: "s16",
+        type: "midpoint",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "M_c"
+      },
+      {
+        id: "s17",
+        type: "circle",
+        args: [
+          "s16",
+          "s7"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s18",
+        type: "intersection",
+        args: [
+          "s17",
+          "s4"
+        ],
+        params: {
+          which: 0
+        },
+        name: "C_1"
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s17",
+          "s4",
+          "s18"
+        ],
+        name: "C_2"
+      },
+      {
+        id: "s20",
+        type: "circle_3pts",
+        args: [
+          "s10",
+          "s11",
+          "s14"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s21",
+        type: "center",
+        args: [
+          "s20"
+        ],
+        name: "O",
+        joinPrev: true
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2010-2.json
+  var imo2010_2_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2010 \u2013 B\xE0i 2",
+    view: {
+      bbox: [
+        -7.93,
+        4.621,
+        8.13,
+        -5.043
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.2,
+          y: 3.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.8,
+          y: -1.8
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I"
+      },
+      {
+        id: "s10",
+        type: "line",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s7",
+          "s1"
+        ],
+        name: "D"
+      },
+      {
+        id: "s12",
+        type: "point_on",
+        args: [
+          "s7"
+        ],
+        params: {
+          t: -0.9075712557190003
+        },
+        name: "E"
+      },
+      {
+        id: "s13",
+        type: "isogonal_line",
+        args: [
+          "s2",
+          "s1",
+          "s3",
+          "s12"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s13",
+          "s5"
+        ],
+        name: "F"
+      },
+      {
+        id: "s15",
+        type: "midpoint",
+        args: [
+          "s9",
+          "s14"
+        ],
+        name: "G"
+      },
+      {
+        id: "s16",
+        type: "line",
+        args: [
+          "s11",
+          "s15"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s12",
+          "s9"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s18",
+        type: "intersection",
+        args: [
+          "s17",
+          "s16"
+        ],
+        name: "X"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2012-5.json
+  var imo2012_5_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2012 \u2013 B\xE0i 5",
+    view: {
+      bbox: [
+        -15.548,
+        7.198,
+        12.697,
+        -9.799
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.5,
+          y: 3.5
+        },
+        name: "C"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4.5,
+          y: -1.5
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s4",
+        type: "perpendicular",
+        args: [
+          "s1",
+          "s3"
+        ],
+        name: "d2",
+        hidden: true,
+        joinPrev: true
+      },
+      {
+        id: "s5",
+        type: "point_on",
+        args: [
+          "s4"
+        ],
+        params: {
+          t: 0.75
+        },
+        name: "A",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s1",
+          "s5"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "segment",
+        args: [
+          "s2",
+          "s5"
+        ],
+        name: "d4",
+        joinPrev: true
+      },
+      {
+        id: "s8",
+        type: "altitude_foot",
+        args: [
+          "s1",
+          "s5",
+          "s2"
+        ],
+        name: "D"
+      },
+      {
+        id: "s9",
+        type: "segment",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d5",
+        style: {
+          dash: true
+        },
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "point_on",
+        args: [
+          "s9"
+        ],
+        params: {
+          t: 0.5499999576752862
+        },
+        name: "X"
+      },
+      {
+        id: "s11",
+        type: "segment",
+        args: [
+          "s5",
+          "s10"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s2",
+          "s10"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s13",
+        type: "circle",
+        args: [
+          "s2",
+          "s1"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s14",
+        type: "circle",
+        args: [
+          "s5",
+          "s1"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s13",
+          "s11"
+        ],
+        params: {
+          which: 0
+        },
+        name: "K"
+      },
+      {
+        id: "s16",
+        type: "intersection",
+        args: [
+          "s14",
+          "s12"
+        ],
+        params: {
+          which: 0
+        },
+        name: "L"
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s5",
+          "s16"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s2",
+          "s15"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s19",
+        type: "intersection",
+        args: [
+          "s18",
+          "s17"
+        ],
+        name: "M"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2013-4.json
+  var imo2013_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2013 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -6.921,
+        4.637,
+        7.825,
+        -4.237
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.8,
+          y: -1.8
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "orthocenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "H"
+      },
+      {
+        id: "s8",
+        type: "point_on",
+        args: [
+          "s5"
+        ],
+        params: {
+          t: 0.6074999640969668
+        },
+        name: "W"
+      },
+      {
+        id: "s9",
+        type: "altitude_foot",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "M"
+      },
+      {
+        id: "s10",
+        type: "segment",
+        args: [
+          "s2",
+          "s9"
+        ],
+        name: "d4",
+        style: {
+          dash: true
+        },
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "altitude_foot",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "N"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s3",
+          "s11"
+        ],
+        name: "d5",
+        style: {
+          dash: true
+        },
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s8",
+          "s11"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "O_1",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "reflect",
+        args: [
+          "s8",
+          "s14"
+        ],
+        name: "X"
+      },
+      {
+        id: "s16",
+        type: "circle_3pts",
+        args: [
+          "s3",
+          "s8",
+          "s9"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s17",
+        type: "center",
+        args: [
+          "s16"
+        ],
+        name: "O_2",
+        joinPrev: true
+      },
+      {
+        id: "s18",
+        type: "reflect",
+        args: [
+          "s8",
+          "s17"
+        ],
+        name: "Y"
+      },
+      {
+        id: "s19",
+        type: "line",
+        args: [
+          "s15",
+          "s18"
+        ],
+        name: "d6"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2014-4.json
+  var imo2014_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2014 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -12.147,
+        6.401,
+        11.831,
+        -8.028
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 3.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.8,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.6,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "circle_tangent_at",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s9",
+          "s5",
+          "s3"
+        ],
+        name: "P"
+      },
+      {
+        id: "s12",
+        type: "circle_tangent_at",
+        args: [
+          "s1",
+          "s3",
+          "s2"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s13",
+        type: "center",
+        args: [
+          "s12"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s14",
+        type: "intersection_other",
+        args: [
+          "s12",
+          "s5",
+          "s2"
+        ],
+        name: "Q"
+      },
+      {
+        id: "s15",
+        type: "reflect",
+        args: [
+          "s1",
+          "s11"
+        ],
+        name: "M"
+      },
+      {
+        id: "s16",
+        type: "reflect",
+        args: [
+          "s1",
+          "s14"
+        ],
+        name: "N"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s2",
+          "s15"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s18",
+        type: "line",
+        args: [
+          "s3",
+          "s16"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s19",
+        type: "intersection",
+        args: [
+          "s18",
+          "s17"
+        ],
+        name: "X"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2015-4.json
+  var imo2015_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2015 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -14.59,
+        10.895,
+        13.39,
+        -5.943
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "point_on",
+        args: [
+          "s5"
+        ],
+        params: {
+          t: 0.19999997756060434
+        },
+        name: "D"
+      },
+      {
+        id: "s10",
+        type: "circle",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s5",
+          "s9"
+        ],
+        name: "E"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s10",
+          "s7"
+        ],
+        params: {
+          which: 0
+        },
+        name: "F"
+      },
+      {
+        id: "s13",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s7",
+          "s12"
+        ],
+        name: "G"
+      },
+      {
+        id: "s14",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s9",
+          "s12"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s15",
+        type: "center",
+        args: [
+          "s14"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s16",
+        type: "intersection_other",
+        args: [
+          "s14",
+          "s4",
+          "s2"
+        ],
+        name: "K"
+      },
+      {
+        id: "s17",
+        type: "circle_3pts",
+        args: [
+          "s3",
+          "s13",
+          "s11"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s17",
+          "s6",
+          "s3"
+        ],
+        name: "L"
+      },
+      {
+        id: "s20",
+        type: "line",
+        args: [
+          "s12",
+          "s16"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s21",
+        type: "line",
+        args: [
+          "s13",
+          "s19"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s22",
+        type: "intersection",
+        args: [
+          "s21",
+          "s20"
+        ],
+        name: "X"
+      },
+      {
+        id: "s23",
+        type: "line",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d6"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2017-4.json
+  var imo2017_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2017 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -17.9,
+        7.762,
+        41.519,
+        -27.995
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: 0.6
+        },
+        name: "O"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: -3.4
+        },
+        name: "R"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -0.3490659190754673
+        },
+        name: "S"
+      },
+      {
+        id: "s5",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s6",
+        type: "reflect",
+        args: [
+          "s2",
+          "s4"
+        ],
+        name: "T"
+      },
+      {
+        id: "s7",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -1.0471975535926368
+        },
+        name: "J"
+      },
+      {
+        id: "s8",
+        type: "circle_3pts",
+        args: [
+          "s7",
+          "s4",
+          "s6"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s9",
+        type: "center",
+        args: [
+          "s8"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s8",
+          "s5"
+        ],
+        params: {
+          which: 0
+        },
+        name: "A"
+      },
+      {
+        id: "s11",
+        type: "line",
+        args: [
+          "s10",
+          "s7"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s12",
+        type: "intersection_other",
+        args: [
+          "s11",
+          "s3",
+          "s7"
+        ],
+        name: "K"
+      },
+      {
+        id: "s13",
+        type: "line",
+        args: [
+          "s12",
+          "s6"
+        ],
+        name: "d3"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2018-1.json
+  var imo2018_1_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2018 \u2013 B\xE0i 1",
+    view: {
+      bbox: [
+        -12.507,
+        9.097,
+        12.237,
+        -5.793
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "point_on",
+        args: [
+          "s4"
+        ],
+        params: {
+          t: 0.6250000268505589
+        },
+        name: "D"
+      },
+      {
+        id: "s10",
+        type: "circle",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "intersection",
+        args: [
+          "s10",
+          "s6"
+        ],
+        params: {
+          which: 0
+        },
+        name: "E"
+      },
+      {
+        id: "s12",
+        type: "perp_bisector",
+        args: [
+          "s2",
+          "s9"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s12",
+          "s7"
+        ],
+        params: {
+          which: 1
+        },
+        name: "F"
+      },
+      {
+        id: "s14",
+        type: "perp_bisector",
+        args: [
+          "s3",
+          "s11"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s14",
+          "s7"
+        ],
+        params: {
+          which: 0
+        },
+        name: "G"
+      },
+      {
+        id: "s16",
+        type: "segment",
+        args: [
+          "s9",
+          "s11"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s13",
+          "s15"
+        ],
+        name: "d7"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2019-6.json
+  var imo2019_6_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2019 \u2013 B\xE0i 6",
+    view: {
+      bbox: [
+        -7.599,
+        4.636,
+        7.487,
+        -4.443
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.8,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.8,
+          y: -1.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.8
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incircle_touch",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "D"
+      },
+      {
+        id: "s10",
+        type: "incircle_touch",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "E"
+      },
+      {
+        id: "s11",
+        type: "incircle_touch",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "F"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s10",
+          "s11"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "perpendicular",
+        args: [
+          "s9",
+          "s12"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s14",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s7",
+          "s9"
+        ],
+        name: "R"
+      },
+      {
+        id: "s15",
+        type: "line",
+        args: [
+          "s1",
+          "s14"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s16",
+        type: "intersection_other",
+        args: [
+          "s15",
+          "s7",
+          "s14"
+        ],
+        name: "P"
+      },
+      {
+        id: "s17",
+        type: "circle_3pts",
+        args: [
+          "s16",
+          "s3",
+          "s10"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "circle_3pts",
+        args: [
+          "s16",
+          "s2",
+          "s11"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s20",
+        type: "center",
+        args: [
+          "s19"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s21",
+        type: "intersection_other",
+        args: [
+          "s19",
+          "s17",
+          "s16"
+        ],
+        name: "Q"
+      },
+      {
+        id: "s22",
+        type: "line",
+        args: [
+          "s9",
+          "s8"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s23",
+        type: "line",
+        args: [
+          "s16",
+          "s21"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s24",
+        type: "line",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s25",
+        type: "perpendicular",
+        args: [
+          "s1",
+          "s24"
+        ],
+        name: "d10"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2021-4.json
+  var imo2021_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2021 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -22.661,
+        19.098,
+        18.072,
+        -5.413
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: 0
+        },
+        name: "I"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0,
+          y: -2.2
+        },
+        name: "U"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: 1.5707963267948966
+        },
+        name: "T_1"
+      },
+      {
+        id: "s5",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: 2.443460752297466
+        },
+        name: "T_2"
+      },
+      {
+        id: "s6",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -2.2689280718183586
+        },
+        name: "T_3"
+      },
+      {
+        id: "s7",
+        type: "point_on",
+        args: [
+          "s3"
+        ],
+        params: {
+          t: -0.523598796373967
+        },
+        name: "T_4"
+      },
+      {
+        id: "s8",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s4"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s9",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s5"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s10",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s6"
+        ],
+        name: "d3"
+      },
+      {
+        id: "s11",
+        type: "tangent_at",
+        args: [
+          "s3",
+          "s7"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s9",
+          "s8"
+        ],
+        name: "D"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s10",
+          "s9"
+        ],
+        name: "A"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s11",
+          "s10"
+        ],
+        name: "B"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s11",
+          "s8"
+        ],
+        name: "C"
+      },
+      {
+        id: "s16",
+        type: "circle_3pts",
+        args: [
+          "s13",
+          "s1",
+          "s15"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s17",
+        type: "center",
+        args: [
+          "s16"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s18",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s10",
+          "s13"
+        ],
+        name: "X"
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s11",
+          "s15"
+        ],
+        name: "Z"
+      },
+      {
+        id: "s20",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s9",
+          "s13"
+        ],
+        name: "Y"
+      },
+      {
+        id: "s21",
+        type: "intersection_other",
+        args: [
+          "s16",
+          "s8",
+          "s15"
+        ],
+        name: "T"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2023-2.json
+  var imo2023_2_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2023 \u2013 B\xE0i 2",
+    view: {
+      bbox: [
+        -11.179,
+        6.101,
+        8.115,
+        -5.51
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: true
+        },
+        name: "S"
+      },
+      {
+        id: "s10",
+        type: "perpendicular",
+        args: [
+          "s1",
+          "s5"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s11",
+        type: "line",
+        args: [
+          "s2",
+          "s9"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s11",
+          "s10"
+        ],
+        name: "D"
+      },
+      {
+        id: "s13",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s7",
+          "s1"
+        ],
+        name: "E"
+      },
+      {
+        id: "s14",
+        type: "parallel",
+        args: [
+          "s12",
+          "s5"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s15",
+        type: "line",
+        args: [
+          "s2",
+          "s13"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s16",
+        type: "intersection",
+        args: [
+          "s15",
+          "s14"
+        ],
+        name: "L"
+      },
+      {
+        id: "s17",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s12",
+          "s16"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "intersection_other",
+        args: [
+          "s17",
+          "s7",
+          "s2"
+        ],
+        name: "P"
+      },
+      {
+        id: "s20",
+        type: "tangent_at",
+        args: [
+          "s17",
+          "s19"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s21",
+        type: "intersection",
+        args: [
+          "s20",
+          "s11"
+        ],
+        name: "X"
+      },
+      {
+        id: "s22",
+        type: "line",
+        args: [
+          "s1",
+          "s21"
+        ],
+        name: "d9"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2024-4.json
+  var imo2024_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2024 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -7.613,
+        4.325,
+        8.813,
+        -5.56
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0.5,
+          y: 3.5
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.4,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.600001,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "reflect",
+        args: [
+          "s6",
+          "s8"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s9",
+          "s5"
+        ],
+        name: "X"
+      },
+      {
+        id: "s11",
+        type: "reflect",
+        args: [
+          "s4",
+          "s8"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s11",
+          "s5"
+        ],
+        name: "Y"
+      },
+      {
+        id: "s13",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "line",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s16",
+        type: "intersection_other",
+        args: [
+          "s15",
+          "s13",
+          "s1"
+        ],
+        name: "P"
+      },
+      {
+        id: "s17",
+        type: "midpoint",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "K"
+      },
+      {
+        id: "s18",
+        type: "midpoint",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "L"
+      },
+      {
+        id: "s19",
+        type: "segment",
+        args: [
+          "s17",
+          "s8"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s20",
+        type: "segment",
+        args: [
+          "s8",
+          "s18"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s21",
+        type: "segment",
+        args: [
+          "s12",
+          "s16"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s22",
+        type: "segment",
+        args: [
+          "s16",
+          "s10"
+        ],
+        name: "d10"
+      }
+    ]
+  };
+
+  // examples/thu-vien/imo2025-2.json
+  var imo2025_2_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "IMO 2025 \u2013 B\xE0i 2",
+    view: {
+      bbox: [
+        -6.227,
+        4.25,
+        7.727,
+        -4.147
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.5,
+          y: 0.3
+        },
+        name: "M"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.5,
+          y: -1.7
+        },
+        name: "U"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.9,
+          y: 0.3
+        },
+        name: "N"
+      },
+      {
+        id: "s5",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.9,
+          y: -2.8
+        },
+        name: "V"
+      },
+      {
+        id: "s6",
+        type: "circle",
+        args: [
+          "s4",
+          "s5"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s7",
+        type: "intersection",
+        args: [
+          "s6",
+          "s3"
+        ],
+        params: {
+          which: 0
+        },
+        name: "A"
+      },
+      {
+        id: "s8",
+        type: "intersection_other",
+        args: [
+          "s6",
+          "s3",
+          "s7"
+        ],
+        name: "B"
+      },
+      {
+        id: "s9",
+        type: "line",
+        args: [
+          "s1",
+          "s4"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s10",
+        type: "intersection",
+        args: [
+          "s9",
+          "s3"
+        ],
+        params: {
+          which: 0
+        },
+        name: "C"
+      },
+      {
+        id: "s11",
+        type: "intersection",
+        args: [
+          "s9",
+          "s6"
+        ],
+        params: {
+          which: 1
+        },
+        name: "D"
+      },
+      {
+        id: "s12",
+        type: "circumcenter",
+        args: [
+          "s7",
+          "s10",
+          "s11"
+        ],
+        name: "P"
+      },
+      {
+        id: "s13",
+        type: "line",
+        args: [
+          "s7",
+          "s12"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s14",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s3",
+          "s7"
+        ],
+        name: "E"
+      },
+      {
+        id: "s15",
+        type: "intersection_other",
+        args: [
+          "s13",
+          "s6",
+          "s7"
+        ],
+        name: "F"
+      },
+      {
+        id: "s16",
+        type: "orthocenter",
+        args: [
+          "s12",
+          "s1",
+          "s4"
+        ],
+        name: "H"
+      },
+      {
+        id: "s17",
+        type: "parallel",
+        args: [
+          "s16",
+          "s13"
+        ],
+        name: "d3"
+      },
+      {
+        id: "s18",
+        type: "circle_3pts",
+        args: [
+          "s8",
+          "s14",
+          "s15"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s19",
+        type: "center",
+        args: [
+          "s18"
+        ],
+        name: "O",
+        joinPrev: true
+      }
+    ]
+  };
+
+  // examples/thu-vien/vmo2014-4.json
+  var vmo2014_4_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "VMO 2014 \u2013 B\xE0i 4",
+    view: {
+      bbox: [
+        -12.75,
+        5.387,
+        13.35,
+        -10.319
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.2,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: false
+        },
+        name: "I"
+      },
+      {
+        id: "s10",
+        type: "circle",
+        args: [
+          "s9",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s6",
+          "s3"
+        ],
+        name: "K"
+      },
+      {
+        id: "s12",
+        type: "line",
+        args: [
+          "s2",
+          "s11"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "intersection_other",
+        args: [
+          "s12",
+          "s7",
+          "s2"
+        ],
+        name: "D"
+      },
+      {
+        id: "s14",
+        type: "line",
+        args: [
+          "s1",
+          "s9"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s14",
+          "s12"
+        ],
+        name: "E"
+      },
+      {
+        id: "s16",
+        type: "line",
+        args: [
+          "s13",
+          "s9"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s17",
+        type: "intersection",
+        args: [
+          "s16",
+          "s6"
+        ],
+        name: "F"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s15",
+          "s17"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s19",
+        type: "line",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s20",
+        type: "parallel",
+        args: [
+          "s3",
+          "s19"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s21",
+        type: "intersection",
+        args: [
+          "s20",
+          "s16"
+        ],
+        name: "M"
+      },
+      {
+        id: "s22",
+        type: "line",
+        args: [
+          "s11",
+          "s21"
+        ],
+        name: "d10"
+      },
+      {
+        id: "s23",
+        type: "intersection",
+        args: [
+          "s22",
+          "s5"
+        ],
+        name: "N"
+      },
+      {
+        id: "s24",
+        type: "circle_3pts",
+        args: [
+          "s2",
+          "s11",
+          "s23"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s25",
+        type: "center",
+        args: [
+          "s24"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s26",
+        type: "intersection_other",
+        args: [
+          "s24",
+          "s7",
+          "s2"
+        ],
+        name: "P"
+      },
+      {
+        id: "s27",
+        type: "midpoint",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "J"
+      },
+      {
+        id: "s28",
+        type: "line",
+        args: [
+          "s26",
+          "s11"
+        ],
+        name: "d11"
+      }
+    ]
+  };
+
+  // examples/thu-vien/vmo2016-3.json
+  var vmo2016_3_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "VMO 2016 \u2013 B\xE0i 3",
+    view: {
+      bbox: [
+        -18.274,
+        17.933,
+        46.614,
+        -21.115
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0.8,
+          y: 3.4
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.6,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.6,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "midpoint",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "D"
+      },
+      {
+        id: "s8",
+        type: "projection",
+        args: [
+          "s7",
+          "s4"
+        ],
+        name: "E"
+      },
+      {
+        id: "s9",
+        type: "projection",
+        args: [
+          "s7",
+          "s6"
+        ],
+        name: "F"
+      },
+      {
+        id: "s10",
+        type: "circumcenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "O"
+      },
+      {
+        id: "s11",
+        type: "line",
+        args: [
+          "s8",
+          "s9"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s12",
+        type: "line",
+        args: [
+          "s1",
+          "s10"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s12",
+          "s11"
+        ],
+        name: "M"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s11",
+          "s5"
+        ],
+        name: "N"
+      },
+      {
+        id: "s15",
+        type: "circle_3pts",
+        args: [
+          "s1",
+          "s13",
+          "s14"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s16",
+        type: "center",
+        args: [
+          "s15"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "circle_diameter",
+        args: [
+          "s1",
+          "s7"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s18",
+        type: "center",
+        args: [
+          "s17"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s19",
+        type: "tangent_at",
+        args: [
+          "s17",
+          "s8"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s20",
+        type: "tangent_at",
+        args: [
+          "s17",
+          "s9"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s21",
+        type: "intersection",
+        args: [
+          "s20",
+          "s19"
+        ],
+        name: "T"
+      },
+      {
+        id: "s22",
+        type: "perp_bisector",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d8"
+      }
+    ]
+  };
+
+  // examples/thu-vien/noi-bang-tiep.json
+  var noi_bang_tiep_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "B\u1ED5 \u0111\u1EC1 t\xE2m n\u1ED9i ti\u1EBFp \u2013 b\xE0ng ti\u1EBFp",
+    view: {
+      bbox: [
+        -9.034,
+        5.358,
+        9.234,
+        -5.635
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 4.4
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -2.6,
+          y: 0.2
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2.8,
+          y: 0.2
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I"
+      },
+      {
+        id: "s10",
+        type: "excenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I_A"
+      },
+      {
+        id: "s11",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: false
+        },
+        name: "S"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s1",
+          "s10"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s13",
+        type: "circle",
+        args: [
+          "s11",
+          "s2"
+        ],
+        name: "\u03C92"
+      }
+    ]
+  };
+
+  // examples/thu-vien/euler-feuerbach.json
+  var euler_feuerbach_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "\u0110\u01B0\u1EDDng tr\xF2n Euler \u2013 \u0111\u1ECBnh l\xFD Feuerbach",
+    view: {
+      bbox: [
+        -14.652,
+        8.752,
+        16.048,
+        -9.722
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 2.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -2,
+          y: -0.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2.2,
+          y: -0.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "nine_point_circle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "N",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "excircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s12",
+        type: "center",
+        args: [
+          "s11"
+        ],
+        name: "I_A",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "excircle",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "I_B",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "excircle",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "\u03C95"
+      },
+      {
+        id: "s16",
+        type: "center",
+        args: [
+          "s15"
+        ],
+        name: "I_C",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "intersection",
+        args: [
+          "s9",
+          "s7"
+        ],
+        params: {
+          which: 1
+        },
+        name: "F_e"
+      }
+    ]
+  };
+
+  // examples/thu-vien/mixtilinear.json
+  var mixtilinear_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "\u0110\u01B0\u1EDDng tr\xF2n mixtilinear",
+    view: {
+      bbox: [
+        -8.107,
+        4.654,
+        8.307,
+        -5.224
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.4,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.8,
+          y: -1.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4,
+          y: -1.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "mixtilinear",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "J",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "incenter",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "I"
+      },
+      {
+        id: "s12",
+        type: "intersection",
+        args: [
+          "s9",
+          "s7"
+        ],
+        params: {
+          which: 0
+        },
+        name: "T"
+      },
+      {
+        id: "s13",
+        type: "projection",
+        args: [
+          "s10",
+          "s4"
+        ],
+        name: "K"
+      },
+      {
+        id: "s14",
+        type: "projection",
+        args: [
+          "s10",
+          "s6"
+        ],
+        name: "L"
+      },
+      {
+        id: "s15",
+        type: "segment",
+        args: [
+          "s13",
+          "s14"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s16",
+        type: "arc_midpoint",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        params: {
+          contains: true
+        },
+        name: "S"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s12",
+          "s16"
+        ],
+        name: "d5"
+      }
+    ]
+  };
+
+  // examples/thu-vien/nghich-dao-bc.json
+  var nghich_dao_bc_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "Ngh\u1ECBch \u0111\u1EA3o \u221A(bc)",
+    view: {
+      bbox: [
+        -24.071,
+        12.332,
+        25.24,
+        -17.341
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.6,
+          y: 3.8
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3,
+          y: -0.8
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.4
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "angle_bisector",
+        args: [
+          "s2",
+          "s1",
+          "s3"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s10",
+        type: "reflect",
+        args: [
+          "s3",
+          "s9"
+        ],
+        name: "C'"
+      },
+      {
+        id: "s11",
+        type: "circle_diameter",
+        args: [
+          "s2",
+          "s10"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s12",
+        type: "center",
+        args: [
+          "s11"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "tangent_point",
+        args: [
+          "s11",
+          "s1"
+        ],
+        params: {
+          which: 0
+        },
+        name: "T"
+      },
+      {
+        id: "s14",
+        type: "line",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "d5",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "tangent_point",
+        args: [
+          "s11",
+          "s1"
+        ],
+        params: {
+          which: 1
+        },
+        name: "E",
+        joinPrev: true
+      },
+      {
+        id: "s16",
+        type: "line",
+        args: [
+          "s1",
+          "s15"
+        ],
+        name: "d6",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "circle",
+        args: [
+          "s1",
+          "s13"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s18",
+        type: "invert_line",
+        args: [
+          "s7",
+          "s17"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s19",
+        type: "reflect",
+        args: [
+          "s18",
+          "s9"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s20",
+        type: "mixtilinear",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C94"
+      },
+      {
+        id: "s21",
+        type: "center",
+        args: [
+          "s20"
+        ],
+        name: "O2",
+        joinPrev: true
+      },
+      {
+        id: "s22",
+        type: "invert_circle",
+        args: [
+          "s20",
+          "s17"
+        ],
+        name: "\u03C95"
+      },
+      {
+        id: "s23",
+        type: "reflect",
+        args: [
+          "s22",
+          "s9"
+        ],
+        name: "\u03C96"
+      },
+      {
+        id: "s24",
+        type: "excircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C97"
+      },
+      {
+        id: "s25",
+        type: "center",
+        args: [
+          "s24"
+        ],
+        name: "I_A",
+        joinPrev: true
+      }
+    ]
+  };
+
+  // examples/thu-vien/brocard.json
+  var brocard_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp \u2013 \u0111\u1ECBnh l\xFD Brocard",
+    view: {
+      bbox: [
+        -25.633,
+        6.563,
+        34.011,
+        -29.329
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -2.6,
+          y: 2.6
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.4,
+          y: -1.4
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2.2,
+          y: -2.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "circle_3pts",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s5",
+        type: "center",
+        args: [
+          "s4"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "point_on",
+        args: [
+          "s4"
+        ],
+        params: {
+          t: 0
+        },
+        name: "D",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1",
+        joinPrev: true
+      },
+      {
+        id: "s8",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "segment",
+        args: [
+          "s3",
+          "s6"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "segment",
+        args: [
+          "s6",
+          "s1"
+        ],
+        name: "d4",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "segment",
+        args: [
+          "s1",
+          "s3"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s12",
+        type: "segment",
+        args: [
+          "s2",
+          "s6"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s13",
+        type: "intersection",
+        args: [
+          "s12",
+          "s11"
+        ],
+        name: "P"
+      },
+      {
+        id: "s14",
+        type: "intersection",
+        args: [
+          "s7",
+          "s9"
+        ],
+        name: "Q"
+      },
+      {
+        id: "s15",
+        type: "intersection",
+        args: [
+          "s10",
+          "s8"
+        ],
+        name: "R"
+      },
+      {
+        id: "s16",
+        type: "segment",
+        args: [
+          "s13",
+          "s14"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s14",
+          "s15"
+        ],
+        name: "d8"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s15",
+          "s13"
+        ],
+        name: "d9"
+      },
+      {
+        id: "s19",
+        type: "perpendicular",
+        args: [
+          "s5",
+          "s17"
+        ],
+        name: "d10"
+      }
+    ]
+  };
+
+  // examples/thu-vien/monge.json
+  var monge_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "Ti\u1EBFp tuy\u1EBFn chung \u2013 \u0111\u1ECBnh l\xFD Monge",
+    view: {
+      bbox: [
+        -18.11,
+        11.234,
+        25.21,
+        -14.834
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4.5,
+          y: -1
+        },
+        name: "O_1"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -3.78,
+          y: -1.96
+        },
+        name: "R_1"
+      },
+      {
+        id: "s3",
+        type: "circle",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s4",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 0.5,
+          y: 2.4
+        },
+        name: "O_2"
+      },
+      {
+        id: "s5",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.58,
+          y: 0.96
+        },
+        name: "R_2"
+      },
+      {
+        id: "s6",
+        type: "circle",
+        args: [
+          "s4",
+          "s5"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s7",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.2,
+          y: -1.5
+        },
+        name: "O_3"
+      },
+      {
+        id: "s8",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 4.68,
+          y: -2.14
+        },
+        name: "R_3"
+      },
+      {
+        id: "s9",
+        type: "circle",
+        args: [
+          "s7",
+          "s8"
+        ],
+        name: "\u03C93"
+      },
+      {
+        id: "s10",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: false,
+          which: 0
+        },
+        name: "d1"
+      },
+      {
+        id: "s11",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: false,
+          which: 1
+        },
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s12",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: true,
+          which: 0
+        },
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "common_tangent",
+        args: [
+          "s3",
+          "s6"
+        ],
+        params: {
+          internal: true,
+          which: 1
+        },
+        name: "d4",
+        joinPrev: true
+      },
+      {
+        id: "s14",
+        type: "homothety_center",
+        args: [
+          "s3",
+          "s6"
+        ],
+        name: "S_{12}"
+      },
+      {
+        id: "s15",
+        type: "homothety_center",
+        args: [
+          "s6",
+          "s9"
+        ],
+        name: "S_{23}"
+      },
+      {
+        id: "s16",
+        type: "homothety_center",
+        args: [
+          "s3",
+          "s9"
+        ],
+        name: "S_{13}"
+      },
+      {
+        id: "s17",
+        type: "line",
+        args: [
+          "s14",
+          "s15"
+        ],
+        name: "d5"
+      }
+    ]
+  };
+
+  // examples/thu-vien/dong-dang-xoan.json
+  var dong_dang_xoan_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "T\xE2m \u0111\u1ED3ng d\u1EA1ng xo\u1EAFn (quay + v\u1ECB t\u1EF1)",
+    view: {
+      bbox: [
+        -6.453,
+        5.08,
+        6.251,
+        -2.565
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -4,
+          y: 1.5
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.6,
+          y: -0.3
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 1.5,
+          y: 0.3
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 3.5,
+          y: 2.7
+        },
+        name: "D"
+      },
+      {
+        id: "s5",
+        type: "line",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s6",
+        type: "line",
+        args: [
+          "s3",
+          "s4"
+        ],
+        name: "d2"
+      },
+      {
+        id: "s7",
+        type: "intersection",
+        args: [
+          "s6",
+          "s5"
+        ],
+        name: "X"
+      },
+      {
+        id: "s8",
+        type: "circle_3pts",
+        args: [
+          "s7",
+          "s1",
+          "s3"
+        ],
+        name: "\u03C91"
+      },
+      {
+        id: "s9",
+        type: "center",
+        args: [
+          "s8"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "circle_3pts",
+        args: [
+          "s7",
+          "s2",
+          "s4"
+        ],
+        name: "\u03C92"
+      },
+      {
+        id: "s11",
+        type: "center",
+        args: [
+          "s10"
+        ],
+        name: "O1",
+        joinPrev: true
+      },
+      {
+        id: "s12",
+        type: "intersection_other",
+        args: [
+          "s10",
+          "s8",
+          "s7"
+        ],
+        name: "S"
+      },
+      {
+        id: "s13",
+        type: "rotate_by",
+        args: [
+          "s2",
+          "s12",
+          "s1",
+          "s12",
+          "s3"
+        ],
+        name: "B_1"
+      },
+      {
+        id: "s14",
+        type: "homothety_by",
+        args: [
+          "s13",
+          "s12",
+          "s12",
+          "s3",
+          "s12",
+          "s1"
+        ],
+        name: "D'"
+      },
+      {
+        id: "s15",
+        type: "segment",
+        args: [
+          "s12",
+          "s2"
+        ],
+        name: "d3"
+      },
+      {
+        id: "s16",
+        type: "segment",
+        args: [
+          "s12",
+          "s14"
+        ],
+        name: "d4"
+      }
+    ]
+  };
+
+  // examples/thu-vien/hinh-day.json
+  var hinh_day_default = {
+    format: "hinh-hoc-dong",
+    version: 1,
+    title: "Tam gi\xE1c v\u1EDBi ba t\xE2m b\xE0ng ti\u1EBFp (h\xECnh d\xE0y)",
+    view: {
+      bbox: [
+        -13.115,
+        7.517,
+        13.996,
+        -8.798
+      ]
+    },
+    steps: [
+      {
+        id: "s1",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -0.3,
+          y: 2.4
+        },
+        name: "A"
+      },
+      {
+        id: "s2",
+        type: "free_point",
+        args: [],
+        params: {
+          x: -1.8,
+          y: -0.6
+        },
+        name: "B"
+      },
+      {
+        id: "s3",
+        type: "free_point",
+        args: [],
+        params: {
+          x: 2,
+          y: -0.6
+        },
+        name: "C"
+      },
+      {
+        id: "s4",
+        type: "segment",
+        args: [
+          "s1",
+          "s2"
+        ],
+        name: "d1"
+      },
+      {
+        id: "s5",
+        type: "segment",
+        args: [
+          "s2",
+          "s3"
+        ],
+        name: "d2",
+        joinPrev: true
+      },
+      {
+        id: "s6",
+        type: "segment",
+        args: [
+          "s3",
+          "s1"
+        ],
+        name: "d3",
+        joinPrev: true
+      },
+      {
+        id: "s7",
+        type: "circumcircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C91",
+        joinPrev: true
+      },
+      {
+        id: "s8",
+        type: "center",
+        args: [
+          "s7"
+        ],
+        name: "O",
+        joinPrev: true
+      },
+      {
+        id: "s9",
+        type: "incircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C92",
+        joinPrev: true
+      },
+      {
+        id: "s10",
+        type: "center",
+        args: [
+          "s9"
+        ],
+        name: "I",
+        joinPrev: true
+      },
+      {
+        id: "s11",
+        type: "excircle",
+        args: [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        name: "\u03C93",
+        joinPrev: true
+      },
+      {
+        id: "s12",
+        type: "center",
+        args: [
+          "s11"
+        ],
+        name: "I_A",
+        joinPrev: true
+      },
+      {
+        id: "s13",
+        type: "excircle",
+        args: [
+          "s2",
+          "s3",
+          "s1"
+        ],
+        name: "\u03C94",
+        joinPrev: true
+      },
+      {
+        id: "s14",
+        type: "center",
+        args: [
+          "s13"
+        ],
+        name: "I_B",
+        joinPrev: true
+      },
+      {
+        id: "s15",
+        type: "excircle",
+        args: [
+          "s3",
+          "s1",
+          "s2"
+        ],
+        name: "\u03C95",
+        joinPrev: true
+      },
+      {
+        id: "s16",
+        type: "center",
+        args: [
+          "s15"
+        ],
+        name: "I_C",
+        joinPrev: true
+      },
+      {
+        id: "s17",
+        type: "segment",
+        args: [
+          "s14",
+          "s16"
+        ],
+        name: "d4"
+      },
+      {
+        id: "s18",
+        type: "segment",
+        args: [
+          "s16",
+          "s12"
+        ],
+        name: "d5"
+      },
+      {
+        id: "s19",
+        type: "segment",
+        args: [
+          "s12",
+          "s14"
+        ],
+        name: "d6"
+      },
+      {
+        id: "s20",
+        type: "midpoint",
+        args: [
+          "s10",
+          "s12"
+        ],
+        name: "M_A"
+      },
+      {
+        id: "s21",
+        type: "midpoint",
+        args: [
+          "s10",
+          "s14"
+        ],
+        name: "M_B"
+      },
+      {
+        id: "s22",
+        type: "midpoint",
+        args: [
+          "s10",
+          "s16"
+        ],
+        name: "M_C"
+      },
+      {
+        id: "s23",
+        type: "projection",
+        args: [
+          "s12",
+          "s5"
+        ],
+        name: "T_A"
+      },
+      {
+        id: "s24",
+        type: "projection",
+        args: [
+          "s14",
+          "s6"
+        ],
+        name: "T_B"
+      },
+      {
+        id: "s25",
+        type: "projection",
+        args: [
+          "s16",
+          "s4"
+        ],
+        name: "T_C"
+      },
+      {
+        id: "s26",
+        type: "reflect",
+        args: [
+          "s1",
+          "s8"
+        ],
+        name: "A'"
+      },
+      {
+        id: "s27",
+        type: "reflect",
+        args: [
+          "s2",
+          "s8"
+        ],
+        name: "B'"
+      },
+      {
+        id: "s28",
+        type: "reflect",
+        args: [
+          "s3",
+          "s8"
+        ],
+        name: "C'"
+      },
+      {
+        id: "s29",
+        type: "segment",
+        args: [
+          "s1",
+          "s26"
+        ],
+        name: "d7"
+      },
+      {
+        id: "s30",
+        type: "segment",
+        args: [
+          "s10",
+          "s12"
+        ],
+        name: "d8"
+      }
+    ]
+  };
+
+  // src/core/thu-vien.js
+  var DOCS = [imo2008_1_default, imo2010_2_default, imo2012_5_default, imo2013_4_default, imo2014_4_default, imo2015_4_default, imo2017_4_default, imo2018_1_default, imo2019_6_default, imo2021_4_default, imo2023_2_default, imo2024_4_default, imo2025_2_default, vmo2014_4_default, vmo2016_3_default, noi_bang_tiep_default, euler_feuerbach_default, mixtilinear_default, nghich_dao_bc_default, brocard_default, monge_default, dong_dang_xoan_default, hinh_day_default];
+  var THU_VIEN = muc_luc_default.map((m, i) => ({ ...m, doc: DOCS[i] }));
+
   // src/ui/main.js
   function start() {
     const app = new App();
@@ -5484,8 +11026,17 @@
       document.querySelectorAll(".tabpane").forEach((p) => p.classList.toggle("active", p.id === t.dataset.tab));
     }));
     document.getElementById("exit-projector").onclick = () => app.setProjector(false);
-    const exList = document.getElementById("example-list");
-    exList.innerHTML = Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${e.title}</button>`).join("");
+    const exMenu = document.getElementById("example-menu");
+    const esc4 = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const groups = [];
+    for (const e of THU_VIEN) {
+      let g = groups.find((x) => x.name === e.nhom);
+      if (!g) groups.push(g = { name: e.nhom, items: [] });
+      g.items.push(`<button data-lib="${e.id}" title="${esc4(e.de)}">${esc4(e.ten)}</button>`);
+    }
+    groups.push({ name: "H\xECnh m\u1EABu", items: Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${esc4(e.title)}</button>`) });
+    const GROUP_LABEL = { "C\u1EA5u h\xECnh": "C\u1EA5u h\xECnh hay g\u1EB7p" };
+    exMenu.innerHTML = groups.map((g) => `<div class="ex-col"><div class="menu-label">${esc4(GROUP_LABEL[g.name] || g.name)}</div>${g.items.join("")}</div>`).join("");
     app.loadExample = (key) => {
       const ex = EXAMPLES[key];
       if (!ex) return;
@@ -5494,9 +11045,17 @@
       app.loadDoc(doc, { keepHistory: true });
       app.zoomFit();
     };
-    exList.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-example]");
-      if (b) app.loadExample(b.dataset.example);
+    app.loadLibrary = (id) => {
+      const e = THU_VIEN.find((x) => x.id === id);
+      if (!e) return;
+      app.loadDoc(JSON.parse(JSON.stringify(e.doc)), { keepHistory: true });
+      app.zoomFit();
+      toast(`${e.ten}. ${e.de}`, 9e3);
+    };
+    exMenu.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-example], [data-lib]");
+      if (b && b.dataset.example) app.loadExample(b.dataset.example);
+      else if (b) app.loadLibrary(b.dataset.lib);
     });
     app.drawRelationOverlay = () => drawRelationOverlay(app);
     setupExplore(app);
@@ -5505,7 +11064,7 @@
       const doc = vis ? { ...app.doc, steps: app.doc.steps.map((s) => vis.has(s.id) ? s : { ...s, hidden: true }) } : app.doc;
       textDialog(
         "M\xE3 TikZ",
-        toTikZ(doc, { values: app.values, theme: app.theme }),
+        toTikZ(doc, { values: app.values, theme: app.theme, trimLines: app.renderer.trimLines }),
         `<div class="modal-body">Theo b\u1ED9 ki\u1EC3u \u0111ang ch\u1ECDn (<b>${app.theme === "mono" ? "\u0110\u01A1n s\u1EAFc" : "S\xE1ch gi\xE1o khoa"}</b>). D\xE1n v\xE0o t\xE0i li\u1EC7u LaTeX (ch\u1EC9 c\u1EA7n <code>\\usepackage{tikz}</code>). \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc b\u1EB1ng c\xE1ch s\u1EEDa <code>x=\u2026, y=\u2026</code>.</div>`
       );
     };
@@ -5533,7 +11092,7 @@
       title.value = app.doc.title || "";
     });
     window.__app = app;
-    window.GeoCore = { ...core_exports, Builder, EXAMPLES, codec: codec_exports, explore, toTikZ };
+    window.GeoCore = { ...core_exports, Builder, EXAMPLES, THU_VIEN, codec: codec_exports, explore, toTikZ };
     return app;
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

@@ -1,0 +1,220 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "VMO 2016 – Bài 3",
+ "view": {
+  "bbox": [
+   -18.274,
+   17.933,
+   46.614,
+   -21.115
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 0.8,
+    "y": 3.4
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.6,
+    "y": -1.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 3.6,
+    "y": -1.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "midpoint",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "D"
+  },
+  {
+   "id": "s8",
+   "type": "projection",
+   "args": [
+    "s7",
+    "s4"
+   ],
+   "name": "E"
+  },
+  {
+   "id": "s9",
+   "type": "projection",
+   "args": [
+    "s7",
+    "s6"
+   ],
+   "name": "F"
+  },
+  {
+   "id": "s10",
+   "type": "circumcenter",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "O"
+  },
+  {
+   "id": "s11",
+   "type": "line",
+   "args": [
+    "s8",
+    "s9"
+   ],
+   "name": "d4"
+  },
+  {
+   "id": "s12",
+   "type": "line",
+   "args": [
+    "s1",
+    "s10"
+   ],
+   "name": "d5"
+  },
+  {
+   "id": "s13",
+   "type": "intersection",
+   "args": [
+    "s12",
+    "s11"
+   ],
+   "name": "M"
+  },
+  {
+   "id": "s14",
+   "type": "intersection",
+   "args": [
+    "s11",
+    "s5"
+   ],
+   "name": "N"
+  },
+  {
+   "id": "s15",
+   "type": "circle_3pts",
+   "args": [
+    "s1",
+    "s13",
+    "s14"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s16",
+   "type": "center",
+   "args": [
+    "s15"
+   ],
+   "name": "O1",
+   "joinPrev": true
+  },
+  {
+   "id": "s17",
+   "type": "circle_diameter",
+   "args": [
+    "s1",
+    "s7"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s18",
+   "type": "center",
+   "args": [
+    "s17"
+   ],
+   "name": "O2",
+   "joinPrev": true
+  },
+  {
+   "id": "s19",
+   "type": "tangent_at",
+   "args": [
+    "s17",
+    "s8"
+   ],
+   "name": "d6"
+  },
+  {
+   "id": "s20",
+   "type": "tangent_at",
+   "args": [
+    "s17",
+    "s9"
+   ],
+   "name": "d7"
+  },
+  {
+   "id": "s21",
+   "type": "intersection",
+   "args": [
+    "s20",
+    "s19"
+   ],
+   "name": "T"
+  },
+  {
+   "id": "s22",
+   "type": "perp_bisector",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d8"
+  }
+ ]
+}

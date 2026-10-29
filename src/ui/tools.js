@@ -13,7 +13,8 @@ const T = (id, label, group, icon, inputs, hints, make, extra = {}) => ({ id, la
 const one = (type, params, name) => (picks) => [{ type, args: picks, params, name }];
 /** Đường tròn kèm tâm (tâm là một điểm dựng được, dùng tiếp được). */
 // Nếu tâm đã có sẵn (vd đã dựng O trước khi vẽ đường tròn ngoại tiếp) thì không dựng thêm điểm trùng.
-const withCenter = (type, params, centerName) => (picks, app) => {
+// Tâm tự đặt tên O (O₁, O₂… nếu O đã có) – không chiếm các chữ A, B, C, D, K, L… mà đề bài thường dùng.
+const withCenter = (type, params, centerName = 'O') => (picks, app) => {
   const out = [{ type, args: picks, params }];
   let c = null;
   try { c = STEP_TYPES[type].compute(picks.map((id) => app.values.get(id)), { ...(STEP_TYPES[type].params || {}), ...(params || {}) }); } catch { c = null; }

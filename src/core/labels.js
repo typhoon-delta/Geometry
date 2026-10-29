@@ -73,3 +73,105 @@ function angDiff(a, b) {
   let d = Math.abs(a - b) % (2 * Math.PI);
   return d > Math.PI ? 2 * Math.PI - d : d;
 }
+
+// ======================= Đặt nhãn theo KHUNG CHỮ trên màn hình (bản 1.2) =======================
+// autoLabelDirs ở trên chỉ chọn HƯỚNG và đặt TÂM nhãn cách điểm một khoảng cố định – nhãn rộng (I_A, M_{BC})
+// đặt sang trái/phải sẽ đè lên chính điểm của nó, và không biết nhãn có cắt đường hay đè nhãn khác không.
+// placeLabels làm việc trong toạ độ màn hình với kích thước chữ thật: mỗi ứng viên là một khung chữ đặt sát
+// điểm theo kiểu "neo" của TikZ (cạnh/góc gần điểm nhất cách điểm `gap` px), chấm điểm theo số đường cắt qua
+// khung, điểm bị che, nhãn đã đặt bị đè, ra ngoài khung nhìn; nhãn khó đặt (nhiều đường qua, sát điểm khác)
+// được đặt trước (tham lam).
+
+const N_CAND = 24;
+
+/**
+ * pts   : [{id, x, y, w, h, r}] – toạ độ màn hình (y hướng xuống), w×h khung chữ, r bán kính chấm điểm
+ * curves: [{kind:'seg', x1, y1, x2, y2} | {kind:'circle', cx, cy, r}] – các đường đang hiện (màn hình)
+ * fixed : [{x, y, w, h}] – khung chữ đã cố định (nhãn người dùng tự kéo) để tránh
+ * opts  : {W, H, gap, center:{x,y}}
+ * Trả về Map id → {dx, dy}: độ dời TÂM khung chữ so với điểm (px, y hướng xuống).
+ */
+export function placeLabels(pts, curves, fixed = [], opts = {}) {
+  const W = opts.W ?? Infinity, H = opts.H ?? Infinity, gap = opts.gap ?? 3;
+  const center = opts.center || centroidOf(pts);
+  const placed = fixed.map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
+  // độ khó: số đường đi qua sát điểm + số điểm lân cận
+  const crowd = pts.map((p) => {
+    let c = 0;
+    for (const cv of curves) if (distToCurve(cv, p.x, p.y) < 2) c += 1;
+    for (const q of pts) if (q !== p && Math.hypot(q.x - p.x, q.y - p.y) < 3 * (p.w + p.h)) c += 0.7;
+    return c;
+  });
+  const order = pts.map((_, i) => i).sort((a, b) => crowd[b] - crowd[a]);
+  const out = new Map();
+  for (const i of order) {
+    const p = pts[i];
+    const away = Math.atan2(p.y - center.y, p.x - center.x);
+    const hasAway = Math.hypot(p.x - center.x, p.y - center.y) > 4;
+    let best = null;
+    for (const ring of [0, 1]) {
+      const g = p.r + gap + ring * 7;
+      for (let k = 0; k < N_CAND; k++) {
+        const th = (2 * Math.PI * k) / N_CAND;
+        const c = Math.cos(th), s = Math.sin(th); // màn hình: y xuống
+        const ax = clamp(1.6 * c), ay = clamp(1.6 * s);
+        const cx = p.x + g * c + (p.w / 2) * ax, cy = p.y + g * s + (p.h / 2) * ay;
+        const box = { x: cx - p.w / 2, y: cy - p.h / 2, w: p.w, h: p.h };
+        let cost = ring * 1.2;
+        const inner = shrink(box, 1);
+        for (const cv of curves) if (curveHitsBox(cv, inner)) cost += 8;
+        for (const q of pts) if (q !== p && q.x > box.x - q.r - 1 && q.x < box.x + box.w + q.r + 1 && q.y > box.y - q.r - 1 && q.y < box.y + box.h + q.r + 1) cost += 12;
+        for (const b of placed) { const a = overlapArea(box, b); if (a > 0) cost += 14 + (20 * a) / (box.w * box.h); }
+        if (box.x < 2 || box.y < 2 || box.x + box.w > W - 2 || box.y + box.h > H - 2) cost += 6;
+        if (hasAway) cost += 0.6 * (1 - Math.cos(th - away)) / 2;
+        cost += 0.08 * (1 - Math.cos(th + Math.PI / 4)) / 2; // hơi ưu tiên phía trên-phải
+        if (!best || cost < best.cost - 1e-9) best = { cost, box, dx: cx - p.x, dy: cy - p.y };
+      }
+      if (best && best.cost < 1.5) break; // vòng sát điểm đã có chỗ tốt
+    }
+    placed.push(best.box);
+    out.set(p.id, { dx: best.dx, dy: best.dy });
+  }
+  return out;
+}
+
+const clamp = (v) => Math.max(-1, Math.min(1, v));
+const shrink = (b, m) => ({ x: b.x + m, y: b.y + m, w: b.w - 2 * m, h: b.h - 2 * m });
+
+function centroidOf(pts) {
+  let x = 0, y = 0;
+  for (const p of pts) { x += p.x; y += p.y; }
+  return pts.length ? { x: x / pts.length, y: y / pts.length } : { x: 0, y: 0 };
+}
+
+function overlapArea(a, b) {
+  const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return ix > 0 && iy > 0 ? ix * iy : 0;
+}
+
+function distToCurve(cv, x, y) {
+  if (cv.kind === 'circle') return Math.abs(Math.hypot(x - cv.cx, y - cv.cy) - cv.r);
+  const dx = cv.x2 - cv.x1, dy = cv.y2 - cv.y1, L2 = dx * dx + dy * dy;
+  const t = L2 > 0 ? Math.max(0, Math.min(1, ((x - cv.x1) * dx + (y - cv.y1) * dy) / L2)) : 0;
+  return Math.hypot(x - cv.x1 - t * dx, y - cv.y1 - t * dy);
+}
+
+/** Đường (đoạn hoặc đường tròn, toạ độ màn hình) có đi qua bên trong khung chữ nhật không. */
+export function curveHitsBox(cv, b) {
+  if (cv.kind === 'circle') {
+    const nx = Math.max(b.x, Math.min(cv.cx, b.x + b.w)), ny = Math.max(b.y, Math.min(cv.cy, b.y + b.h));
+    const dmin = Math.hypot(nx - cv.cx, ny - cv.cy);
+    const dmax = Math.max(Math.hypot(b.x - cv.cx, b.y - cv.cy), Math.hypot(b.x + b.w - cv.cx, b.y - cv.cy), Math.hypot(b.x - cv.cx, b.y + b.h - cv.cy), Math.hypot(b.x + b.w - cv.cx, b.y + b.h - cv.cy));
+    return dmin < cv.r && cv.r < dmax;
+  }
+  let t0 = 0, t1 = 1;
+  const dx = cv.x2 - cv.x1, dy = cv.y2 - cv.y1;
+  for (const [p, d, lo, hi] of [[cv.x1, dx, b.x, b.x + b.w], [cv.y1, dy, b.y, b.y + b.h]]) {
+    if (Math.abs(d) < 1e-12) { if (p < lo || p > hi) return false; continue; }
+    let a = (lo - p) / d, c = (hi - p) / d;
+    if (a > c) [a, c] = [c, a];
+    t0 = Math.max(t0, a);
+    t1 = Math.min(t1, c);
+  }
+  return t0 < t1;
+}

@@ -96,8 +96,11 @@ export function renderProps(app) {
   const host = document.getElementById('props');
   if (!host) return;
   const ids = [...app.selection].filter((id) => stepById(app.doc, id));
-  host.classList.toggle('show', ids.length > 0 && app.mode !== 'present');
-  if (!ids.length || app.mode === 'present') {
+  // Thẻ thuộc tính chỉ hiện với công cụ Chọn: khi đang dựng, đối tượng vừa dựng được chọn sẵn (để gõ tên)
+  // nhưng thẻ không được nổi lên che hình và chặn lần bấm tiếp theo.
+  const show = ids.length > 0 && app.mode !== 'present' && app.toolId === 'move';
+  host.classList.toggle('show', show);
+  if (!show) {
     host.innerHTML = '';
     return;
   }
@@ -159,6 +162,21 @@ export function renderProps(app) {
   if (q('#p-hidden')) q('#p-hidden').onchange = (e) => app.setStepProp(s.id, 'hidden', e.target.checked);
   if (q('#p-join')) q('#p-join').onchange = (e) => app.setStepProp(s.id, 'joinPrev', e.target.checked);
   q('#p-del').onclick = () => app.deleteSteps(ids);
+  placeCard(app, host, ids);
+}
+
+/** Thẻ nổi không được che chính đối tượng đang chọn: nếu che thì chuyển xuống góc dưới bên phải. */
+function placeCard(app, host, ids) {
+  host.classList.remove('alt');
+  const st = app.stage.getBoundingClientRect(), r = host.getBoundingClientRect();
+  const box = { x: r.left - st.left - 14, y: r.top - st.top - 14, w: r.width + 28, h: r.height + 28 };
+  const covered = ids.some((id) => {
+    const v = app.values.get(id);
+    if (!v) return false;
+    const pts = v.kind === 'point' ? [v] : v.kind === 'circle' ? [v.c, { x: v.c.x + v.r, y: v.c.y }, { x: v.c.x - v.r, y: v.c.y }, { x: v.c.x, y: v.c.y + v.r }] : v.kind === 'line' ? [v.p, { x: v.p.x + v.d.x, y: v.p.y + v.d.y }] : [];
+    return pts.some((P) => { const q = app.toScreen(P); return q.x > box.x && q.x < box.x + box.w && q.y > box.y && q.y < box.y + box.h; });
+  });
+  if (covered) host.classList.add('alt');
 }
 
 /** Tuỳ chọn cho công cụ đánh dấu (màu, số cung, số vạch của dấu sắp tạo). */

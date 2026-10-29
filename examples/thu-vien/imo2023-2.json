@@ -1,0 +1,226 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "IMO 2023 – Bài 2",
+ "view": {
+  "bbox": [
+   -11.179,
+   6.101,
+   8.115,
+   -5.51
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -1,
+    "y": 3.8
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.6,
+    "y": -1.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 4.2,
+    "y": -1.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s8",
+   "type": "center",
+   "args": [
+    "s7"
+   ],
+   "name": "O",
+   "joinPrev": true
+  },
+  {
+   "id": "s9",
+   "type": "arc_midpoint",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "params": {
+    "contains": true
+   },
+   "name": "S"
+  },
+  {
+   "id": "s10",
+   "type": "perpendicular",
+   "args": [
+    "s1",
+    "s5"
+   ],
+   "name": "d4"
+  },
+  {
+   "id": "s11",
+   "type": "line",
+   "args": [
+    "s2",
+    "s9"
+   ],
+   "name": "d5"
+  },
+  {
+   "id": "s12",
+   "type": "intersection",
+   "args": [
+    "s11",
+    "s10"
+   ],
+   "name": "D"
+  },
+  {
+   "id": "s13",
+   "type": "intersection_other",
+   "args": [
+    "s10",
+    "s7",
+    "s1"
+   ],
+   "name": "E"
+  },
+  {
+   "id": "s14",
+   "type": "parallel",
+   "args": [
+    "s12",
+    "s5"
+   ],
+   "name": "d6"
+  },
+  {
+   "id": "s15",
+   "type": "line",
+   "args": [
+    "s2",
+    "s13"
+   ],
+   "name": "d7"
+  },
+  {
+   "id": "s16",
+   "type": "intersection",
+   "args": [
+    "s15",
+    "s14"
+   ],
+   "name": "L"
+  },
+  {
+   "id": "s17",
+   "type": "circle_3pts",
+   "args": [
+    "s2",
+    "s12",
+    "s16"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s18",
+   "type": "center",
+   "args": [
+    "s17"
+   ],
+   "name": "O1",
+   "joinPrev": true
+  },
+  {
+   "id": "s19",
+   "type": "intersection_other",
+   "args": [
+    "s17",
+    "s7",
+    "s2"
+   ],
+   "name": "P"
+  },
+  {
+   "id": "s20",
+   "type": "tangent_at",
+   "args": [
+    "s17",
+    "s19"
+   ],
+   "name": "d8"
+  },
+  {
+   "id": "s21",
+   "type": "intersection",
+   "args": [
+    "s20",
+    "s11"
+   ],
+   "name": "X"
+  },
+  {
+   "id": "s22",
+   "type": "line",
+   "args": [
+    "s1",
+    "s21"
+   ],
+   "name": "d9"
+  }
+ ]
+}

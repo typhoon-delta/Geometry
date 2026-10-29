@@ -1,0 +1,197 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Tứ giác nội tiếp – định lý Brocard",
+ "view": {
+  "bbox": [
+   -25.633,
+   6.563,
+   34.011,
+   -29.329
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -2.6,
+    "y": 2.6
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.4,
+    "y": -1.4
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 2.2,
+    "y": -2.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "circle_3pts",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s5",
+   "type": "center",
+   "args": [
+    "s4"
+   ],
+   "name": "O",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "point_on",
+   "args": [
+    "s4"
+   ],
+   "params": {
+    "t": 0
+   },
+   "name": "D",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1",
+   "joinPrev": true
+  },
+  {
+   "id": "s8",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s9",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s6"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s10",
+   "type": "segment",
+   "args": [
+    "s6",
+    "s1"
+   ],
+   "name": "d4",
+   "joinPrev": true
+  },
+  {
+   "id": "s11",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s3"
+   ],
+   "name": "d5"
+  },
+  {
+   "id": "s12",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s6"
+   ],
+   "name": "d6"
+  },
+  {
+   "id": "s13",
+   "type": "intersection",
+   "args": [
+    "s12",
+    "s11"
+   ],
+   "name": "P"
+  },
+  {
+   "id": "s14",
+   "type": "intersection",
+   "args": [
+    "s7",
+    "s9"
+   ],
+   "name": "Q"
+  },
+  {
+   "id": "s15",
+   "type": "intersection",
+   "args": [
+    "s10",
+    "s8"
+   ],
+   "name": "R"
+  },
+  {
+   "id": "s16",
+   "type": "segment",
+   "args": [
+    "s13",
+    "s14"
+   ],
+   "name": "d7"
+  },
+  {
+   "id": "s17",
+   "type": "segment",
+   "args": [
+    "s14",
+    "s15"
+   ],
+   "name": "d8"
+  },
+  {
+   "id": "s18",
+   "type": "segment",
+   "args": [
+    "s15",
+    "s13"
+   ],
+   "name": "d9"
+  },
+  {
+   "id": "s19",
+   "type": "perpendicular",
+   "args": [
+    "s5",
+    "s17"
+   ],
+   "name": "d10"
+  }
+ ]
+}

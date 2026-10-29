@@ -380,6 +380,58 @@ def invert_point(P, c):
     return Pt(c.c.x + k * dx, c.c.y + k * dy)
 
 
+# ---- Nghịch đảo đường thẳng / đường tròn, góc và đồng dạng lấy trên hình (bản 1.2) ----
+def _passes_through(X, O):
+    if X.kind == "line":
+        return dist_point_line(O, X) <= 1e-7 * max(norm(X.d), dist(O, X.p))
+    return abs(dist(O, X.c) - X.r) <= 1e-7 * X.r
+
+
+def invert_to_line(X, c):
+    """Ảnh của đường thẳng/đường tròn X đi qua tâm nghịch đảo: một đường thẳng (None nếu không qua tâm)."""
+    if X is None or c is None:
+        return None
+    O = c.c
+    if not _passes_through(X, O):
+        return None
+    if X.kind == "line":
+        return line(X.p, X.d)
+    P = invert_point(Pt(2 * X.c.x - O.x, 2 * X.c.y - O.y), c)
+    return line(P, perp(sub(X.c, O))) if P is not None else None
+
+
+def invert_to_circle(X, c):
+    """Ảnh của đường thẳng/đường tròn X không qua tâm nghịch đảo: một đường tròn."""
+    if X is None or c is None:
+        return None
+    O, k2 = c.c, c.r * c.r
+    if _passes_through(X, O):
+        return None
+    if X.kind == "line":
+        F = invert_point(project(O, X), c)
+        return circle(mid(O, F), dist(O, F) / 2) if F is not None else None
+    v = sub(X.c, O)
+    s = k2 / (dot(v, v) - X.r * X.r)
+    return circle(Pt(O.x + s * v.x, O.y + s * v.y), abs(s) * X.r)
+
+
+def directed_angle(A, B, C):
+    u, v = sub(A, B), sub(C, B)
+    if norm(u) < EPS or norm(v) < EPS:
+        return None
+    return math.atan2(cross(u, v), dot(u, v)) * 180 / math.pi
+
+
+def spiral_point(P, O, A, B):
+    a, b = sub(A, O), sub(B, O)
+    a2 = dot(a, a)
+    if a2 < EPS * EPS:
+        return None
+    re, im = dot(a, b) / a2, cross(a, b) / a2
+    x, y = P.x - O.x, P.y - O.y
+    return Pt(O.x + re * x - im * y, O.y + im * x + re * y)
+
+
 def map_object(X, f):
     """Áp phép biến đổi điểm f cho điểm / đường thẳng / đường tròn (phép đồng dạng)."""
     if X is None:

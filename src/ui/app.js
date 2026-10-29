@@ -36,6 +36,8 @@ export class App {
     this.theme = loadPref('theme', 'mono');
     setTheme(this.theme);
     this.listeners = { change: [] };
+    this.typeToRename = true; // gõ chữ khi đang chọn một điểm → đặt tên ngay (xem inlineRename)
+    this.fitKey = 'Home'; // phím thu phóng vừa hình
   }
 
   // ================= khởi tạo =================
@@ -43,6 +45,7 @@ export class App {
     this.view = new CanvasView(document.getElementById('board'));
     this.view.setBoundingBox([-8, 6, 8, -6]);
     this.renderer = new Renderer(this.view);
+    this.renderer.trimLines = loadPref('trim', '1') === '1';
     this.stage = document.getElementById('stage');
     this.buildToolbar();
     this.bindPointer();
@@ -209,14 +212,19 @@ export class App {
     const px = 1 / this.view.scale;
     const f = this.projector ? 1.6 : 1;
     const out = [];
+    let order = 0;
     for (const s of this.doc.steps) {
+      order++;
       if (s.hidden || (vis && !vis.has(s.id))) continue;
       const v = this.values.get(s.id);
       const kind = k.get(s.id);
       if (!v || kind === 'mark') continue;
-      const d = G.distToObject(v, P) / px;
-      if (kind === 'point' && d <= 11 * f) out.push({ id: s.id, kind, d, pri: 0 });
-      else if ((kind === 'line' || kind === 'circle') && d <= 7 * f) out.push({ id: s.id, kind, d, pri: 1 });
+      let d = G.distToObject(v, P) / px;
+      // đường thẳng/tia đang vẽ "vừa đủ": chỉ phần đang thấy mới bấm trúng
+      const rg = kind === 'line' && !this.renderer.ghostLines && this.renderer.lineRanges.get(s.id);
+      if (rg) d = G.dist(P, G.pointOn({ ...v, sub: 'line' }, Math.max(rg[0], Math.min(rg[1], G.lineParam(P, v))))) / px;
+      if (kind === 'point' && d <= 11 * f) out.push({ id: s.id, kind, d, pri: 0, order });
+      else if ((kind === 'line' || kind === 'circle') && d <= 7 * f) out.push({ id: s.id, kind, d, pri: 1, order });
     }
     // đánh dấu (góc, đoạn, miền) – chọn được bằng cách bấm gần
     for (const s of this.doc.steps) {
@@ -226,7 +234,8 @@ export class App {
       const d = markDistance(v, P, px * f) / px;
       if (d <= 9 * f) out.push({ id: s.id, kind: 'mark', d, pri: 2 });
     }
-    out.sort((a, b) => a.pri - b.pri || a.d - b.d);
+    // gần như cùng khoảng cách (vd hai điểm trùng nhau): đối tượng dựng SAU (vẽ đè lên trên) được chọn trước
+    out.sort((a, b) => a.pri - b.pri || (Math.abs(a.d - b.d) < 0.75 ? (b.order || 0) - (a.order || 0) : a.d - b.d));
     return out;
   }
 
@@ -272,6 +281,20 @@ export class App {
     return out;
   }
 
+  /** Cặp đường cắt nhau gần chỗ bấm nhất (nhiều cặp cùng chỗ: cặp dựng sau cùng). */
+  crossingPair(curves, P) {
+    const px = 1 / this.view.scale;
+    const cs = curves.slice(0, 5);
+    let best = null;
+    for (let i = 0; i < cs.length; i++)
+      for (let j = i + 1; j < cs.length; j++)
+        for (const r of G.intersect(this.values.get(cs[i].id), this.values.get(cs[j].id))) {
+          const d = G.dist(r, P) / px, rec = Math.min(cs[i].order || 0, cs[j].order || 0);
+          if (!best || d < best.d - 0.75 || (Math.abs(d - best.d) <= 0.75 && rec > best.rec)) best = { d, rec, ids: [cs[i].id, cs[j].id] };
+        }
+    return best ? best.ids : [curves[0].id, curves[1].id];
+  }
+
   /** Lấy (hoặc tạo) một điểm tại vị trí bấm: điểm có sẵn / giao điểm / điểm trên đường / điểm tự do. */
   resolvePoint(sx, sy, hits) {
     const pHit = hits.find((h) => h.kind === 'point');
@@ -284,7 +307,9 @@ export class App {
       for (let j = i + 1; j < curves.length; j++)
         for (const r of G.intersect(this.values.get(curves[i].id), this.values.get(curves[j].id))) {
           const d = G.dist(r, P) / px;
-          if (d < 14 && (!best || d < best.d)) best = { d, a: curves[i].id, b: curves[j].id };
+          // nhiều cặp cắt nhau tại cùng một chỗ (ba đường đồng quy): lấy cặp đường dựng sau cùng – thường là ý người dựng
+          const rec = Math.min(curves[i].order || 0, curves[j].order || 0);
+          if (d < 14 && (!best || d < best.d - 0.75 || (Math.abs(d - best.d) <= 0.75 && rec > best.rec))) best = { d, rec, a: curves[i].id, b: curves[j].id };
         }
     if (best) return this.createIntersections(best.a, best.b, P)[0] ?? null;
     if (curves.length) {
@@ -307,8 +332,12 @@ export class App {
     this.toolId = id;
     this.markActiveTool(id);
     this.stage.classList.toggle('tool-active', id !== 'move');
+    this.rememberTool(id);
+    this.renderer.ghostLines = id !== 'move' && this.mode === 'edit';
+    this.view.requestDraw();
     this.showHint();
     renderToolOptions(this);
+    renderProps(this);
   }
 
   cancelTool() {
@@ -327,7 +356,9 @@ export class App {
     if (this.mode === 'present') { el.textContent = 'Chế độ trình bày: ← → (hoặc PageUp/PageDown) để chuyển khung. Vẫn kéo được điểm tự do.'; return; }
     const t = TOOL_BY_ID[this.toolId];
     const i = Math.min(this.picks.length, t.hints.length - 1);
-    el.textContent = msg || `${t.label}: ${t.hints[i] || ''}`;
+    const sel = this.selection.size === 1 && !this.picks.length ? stepById(this.doc, [...this.selection][0]) : null;
+    const tip = sel && sel.name && kinds(this.doc).get(sel.id) === 'point' ? ` · Gõ chữ để đặt tên ${sel.name}` : '';
+    el.textContent = msg || `${t.label}: ${t.hints[i] || ''}${tip}`;
   }
 
   neededTypes(tool) {
@@ -358,14 +389,19 @@ export class App {
     if (tool.id === 'intersect') {
       const curves = hits.filter((h) => h.kind === 'line' || h.kind === 'circle');
       if (!this.picks.length && curves.length >= 2) {
-        this.createIntersections(curves[0].id, curves[1].id, this.toUser(sx, sy));
+        const n0 = this.doc.steps.length;
+        const [c1, c2] = this.crossingPair(curves, this.toUser(sx, sy));
+        this.createIntersections(c1, c2, this.toUser(sx, sy));
+        this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
         return this.finishTool();
       }
       const c = curves.find((h) => !this.picks.includes(h.id));
       if (!c) return this.showHint('Hãy bấm vào một đường thẳng hoặc đường tròn');
       this.picks.push(c.id);
       if (this.picks.length === 2) {
+        const n0 = this.doc.steps.length;
         this.createIntersections(this.picks[0], this.picks[1], null);
+        this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
         return this.finishTool();
       }
       this.selection = new Set(this.picks);
@@ -393,7 +429,8 @@ export class App {
       if (this.picks.includes(id)) return;
       this.picks.push(id);
     } else {
-      if (this.picks.includes(id)) return this.showHint('Đối tượng này đã được chọn, hãy chọn đối tượng khác');
+      // công cụ lấy góc/tỉ số trên hình cho phép chọn lại một điểm (vd quay quanh S theo góc ASC)
+      if (this.picks.includes(id) && !tool.allowRepeat) return this.showHint('Đối tượng này đã được chọn, hãy chọn đối tượng khác');
       this.picks.push(id);
       // sắp lại theo thứ tự khai báo khi cho phép chọn tuỳ thứ tự
       if (tool.anyOrder && this.picks.length === tool.inputs.length) {
@@ -414,10 +451,25 @@ export class App {
     this.showHint();
   }
 
+  /** Điểm vừa dựng nằm ngoài khung nhìn → nhắc cách thu phóng (không tự đổi khung nhìn của người dùng). */
+  warnOutOfView() {
+    const ids = [...this.selection];
+    const out = ids.some((id) => {
+      const v = this.values.get(id);
+      if (!v || v.kind !== 'point') return false;
+      const q = this.toScreen(v);
+      return q.x < 0 || q.y < 0 || q.x > this.view.W || q.y > this.view.H;
+    });
+    if (out) toast('Điểm vừa dựng nằm ngoài khung nhìn – nhấn Home (hoặc Hiển thị › Thu phóng vừa hình) để thấy cả hình', 4200);
+  }
+
   completeTool(tool) {
     const specs = tool.make(this.picks, this);
     const ids = this.addSteps(specs);
-    this.selection = new Set(ids.slice(0, 1));
+    // chọn sẵn kết quả chính – điểm mới duy nhất nếu có – để gõ tên ngay (không phải đổi công cụ rồi nháy đúp)
+    const k = kinds(this.doc);
+    const pts = ids.filter((id) => k.get(id) === 'point' && !stepById(this.doc, id).hidden);
+    this.selection = new Set(pts.length === 1 ? pts : ids.slice(0, 1));
     this.finishTool();
   }
 
@@ -425,8 +477,10 @@ export class App {
     this.picks = [];
     this.renderer.clearExtra();
     this.endTx();
-    if (this.toolId === 'intersect') this.selection.clear();
+    if (this.toolId === 'intersect') this.selection = new Set(this.lastCreatedPoints && this.lastCreatedPoints.length === 1 ? this.lastCreatedPoints : []);
+    this.lastCreatedPoints = null;
     this.afterChange();
+    this.warnOutOfView();
     this.showHint();
   }
 
@@ -495,7 +549,7 @@ export class App {
       if (this.mode === 'present') return;
       const { sx, sy } = this.eventPos(e);
       const h = this.hitTest(sx, sy)[0];
-      if (h && h.kind === 'point') this.renameStep(h.id);
+      if (h && h.kind === 'point') this.inlineRename(h.id, null);
     });
   }
 
@@ -667,11 +721,58 @@ export class App {
     this.setName(id, v.trim());
   }
 
+  /**
+   * Đặt tên ngay trên hình: ô nhập nhỏ hiện cạnh nhãn. Mở bằng cách GÕ CHỮ khi đang chọn một điểm (vd điểm vừa
+   * dựng), F2, hoặc nháy đúp. Enter/bấm ra ngoài: lưu; Esc: bỏ.
+   */
+  inlineRename(id, first = null) {
+    const s = stepById(this.doc, id);
+    const v = this.values.get(id);
+    if (!s || !s.name || !v || this.mode !== 'edit') return;
+    document.querySelector('.inline-name')?.remove();
+    const inp = document.createElement('input');
+    inp.className = 'inline-name';
+    inp.type = 'text';
+    inp.spellcheck = false;
+    inp.value = first ?? s.name;
+    inp.title = 'Gõ như công thức: I_A, X_{AB}, B\', A1 → A₁. Enter để lưu, Esc để bỏ.';
+    const p = this.toScreen(v);
+    const off = this.renderer.labelOffsets.get(id) || [9, 9];
+    const sc = this.projector ? 1.9 : 1;
+    inp.style.left = Math.max(4, Math.min(this.view.W - 90, p.x + off[0] * sc - 20)) + 'px';
+    inp.style.top = Math.max(4, Math.min(this.view.H - 30, p.y - off[1] * sc - 13)) + 'px';
+    this.stage.appendChild(inp);
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      const val = inp.value.trim();
+      inp.remove();
+      if (save && val) this.setName(id, val);
+      this.showHint();
+    };
+    inp.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    inp.addEventListener('blur', () => finish(true));
+    inp.focus();
+    if (first == null) inp.select();
+    else inp.setSelectionRange(inp.value.length, inp.value.length);
+  }
+
+  /** Đổi tên; nếu tên đã thuộc đối tượng khác thì ĐỔI CHỖ hai tên (vd tam giác vuông dựng ở A mà đề cần vuông ở C). */
   setName(id, name) {
     const s = stepById(this.doc, id);
     if (!name || name === s.name) return false;
-    if (this.nameUsed(name, id)) { toast(`Tên "${name}" đã được dùng`); return false; }
-    this.commit(() => { s.name = name; });
+    const other = this.doc.steps.find((x) => x.name === name && x.id !== id);
+    const old = s.name;
+    this.commit(() => {
+      if (other) other.name = old;
+      s.name = name;
+    });
+    if (other) toast(`Đã đổi chỗ tên: ${name} ↔ ${old}`);
     return true;
   }
 
@@ -732,6 +833,7 @@ export class App {
     if (mode === 'present') {
       this.frameIdx = 0;
       this.selection.clear();
+      this.renderer.ghostLines = false;
     } else this.setTool(this.toolId);
     this.refresh();
     this.showHint();
@@ -780,6 +882,7 @@ export class App {
   updateMenuChecks() {
     document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('on', b.dataset.theme === this.theme));
     document.getElementById('btn-grid')?.classList.toggle('on', this.grid);
+    document.getElementById('btn-trim')?.classList.toggle('on', !!this.renderer?.trimLines);
     document.getElementById('menu-panel')?.classList.toggle('on', document.body.classList.contains('panel-open'));
     document.getElementById('btn-panel')?.classList.toggle('on', document.body.classList.contains('panel-open'));
   }
@@ -830,6 +933,16 @@ export class App {
         else if (e.key === 'Escape' && !this.projector) this.setMode('edit');
         return;
       }
+      // gõ chữ khi đang chọn MỘT điểm (vd điểm vừa dựng) → đặt tên ngay; F2 → sửa tên
+      if (!ctrl && !e.altKey && this.selection.size === 1 && !this.picks.length && (e.key === 'F2' || (e.key.length === 1 && /[\p{L}\d_'{}]/u.test(e.key)))) {
+        const id = [...this.selection][0];
+        if (kinds(this.doc).get(id) === 'point' && stepById(this.doc, id)?.name) {
+          e.preventDefault();
+          this.inlineRename(id, e.key === 'F2' ? null : e.key);
+          return;
+        }
+      }
+      if (e.key === 'Home') { e.preventDefault(); this.zoomFit(); return; }
       if (e.key === 'Escape') {
         if (this.picks.length) this.cancelTool();
         else if (this.toolId !== 'move') this.setTool('move');
@@ -940,7 +1053,8 @@ export class App {
           ${many ? `<div class="flyout"><div class="flyout-title">${escapeHTML(g.label)}</div>${items}</div>` : ''}
         </div>`;
       })
-      .join('');
+      .join('') + '<div id="tb-recent" class="tb-recent" title="Công cụ vừa dùng"></div>';
+    this.renderRecent();
     const closeAll = () => host.querySelectorAll('.tb-group.open, .sub.open').forEach((x) => x.classList.remove('open'));
     if (this.toolbarBound) return;
     this.toolbarBound = true;
@@ -958,6 +1072,8 @@ export class App {
         this.userToolAction(act.dataset.action || 'delete', act.dataset.del);
         return;
       }
+      const rc = e.target.closest('[data-recent]');
+      if (rc) { closeAll(); this.setTool(rc.dataset.recent); return; }
       const tb = e.target.closest('.tb-btn');
       const tl = e.target.closest('.tool');
       const st = e.target.closest('.sub-title');
@@ -990,6 +1106,24 @@ export class App {
       if (e.target.closest('#board')) { e.stopPropagation(); e.preventDefault(); }
     }, true);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(); });
+  }
+
+  /** Công cụ vừa dùng (tối đa 6) – hiện ở cuối thanh công cụ dọc, chọn lại bằng MỘT lần bấm. */
+  rememberTool(id) {
+    if (!this.recentTools) { try { this.recentTools = JSON.parse(loadPref('recent', '[]')); } catch { this.recentTools = []; } }
+    if (id !== 'move' && TOOL_BY_ID[id]) {
+      this.recentTools = [id, ...this.recentTools.filter((x) => x !== id)].slice(0, 6);
+      savePref('recent', JSON.stringify(this.recentTools));
+    }
+    this.renderRecent();
+  }
+
+  renderRecent() {
+    const host = document.getElementById('tb-recent');
+    if (!host) return;
+    const list = (this.recentTools || []).filter((id) => TOOL_BY_ID[id]);
+    host.innerHTML = list.map((id) => `<button class="tb-rc${id === this.toolId ? ' active' : ''}" data-recent="${id}" title="${escapeHTML(TOOL_BY_ID[id].label)}">${TOOL_BY_ID[id].icon}</button>`).join('');
+    host.style.display = list.length ? '' : 'none';
   }
 
   /** Đánh dấu công cụ đang dùng trên thanh công cụ. */
@@ -1041,6 +1175,7 @@ export class App {
     this.updateMenuChecks();
     on('btn-delete', () => this.deleteSteps([...this.selection]));
     on('btn-grid', () => this.toggleGrid());
+    on('btn-trim', () => { this.renderer.trimLines = !this.renderer.trimLines; savePref('trim', this.renderer.trimLines ? '1' : '0'); this.updateMenuChecks(); this.refresh(); });
     on('btn-fit', () => this.zoomFit());
     on('btn-present', () => this.setMode(this.mode === 'present' ? 'edit' : 'present'));
     on('btn-projector', () => this.setProjector(!this.projector));
