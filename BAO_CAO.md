@@ -845,3 +845,12 @@ Chi tiết cài đặt, cách dùng, cấu trúc repo: [`docs/KHO_BAI.md`](docs/
   mạng → hàng chờ → có mạng tự lưu, nhập 22 bài ví dụ, Ctrl+K tìm "brocard"/lọc IMO/mở, 3 tab thành buổi dạy, phiếu
   .tex cho buổi, mở buổi không trùng).
 * `npm test` 141 test đạt; `npm run test:browser` đạt.
+* Dựng thử lại 23 bài qua giao diện mới (có menu Kho, nút kho): 23/23 đúng. `npm run test:perf`: ×1 6,78 ms/khung,
+  ×4 31,8 ms, p95 16,7–16,8 ms – trong ngưỡng, như bản 1.4 (kho không chạy gì khi kéo điểm).
+
+## 4. Hạn chế
+
+* Cần mạng để lưu/mở kho; bài **mới** cần kết nối được kho lần đầu (khi mất mạng, tạm lưu ra tệp).
+* Token nằm trong trình duyệt của máy (chỉ nên dùng máy riêng); token hết hạn thì tạo token mới và dán lại.
+* Trang artifact của claude.ai chặn gọi GitHub – kho chỉ dùng được trên GitHub Pages hoặc khi mở `index.html` trên máy.
+* Chưa có phần cho học sinh (đã hoãn theo yêu cầu); kho thiết kế sẵn để sau này làm một trang chỉ đọc đề và hình.
