@@ -95,6 +95,8 @@ code { font: 12px var(--mono); background: var(--chrome); border: 1px solid var(
 .dtab.active { background: var(--paper); border-color: var(--line); color: var(--ink); box-shadow: var(--shadow-1); }
 .dt-name { overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
 .dtab.active .dt-name { font-weight: 550; }
+.dt-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); flex: none; margin: 0 1px 0 3px; }
+.dtab:hover .dt-dot, .dtab.active .dt-dot { margin-right: 0; }
 .dt-x { width: 20px; height: 20px; padding: 0; font-size: 11px; line-height: 20px; text-align: center; color: var(--faint); border-radius: 5px; visibility: hidden; }
 .dtab:hover .dt-x, .dtab.active .dt-x { visibility: visible; }
 .dt-x:hover { color: var(--danger); background: var(--danger-soft); }
@@ -384,3 +386,10 @@ body.projector .tb-title { font-size: 13px; }
 
 /* chữ đơn cách: không ghép "=>" thành mũi tên – thầy/cô cần thấy đúng ký tự đã gõ */
 body code, body .modal-text, body .tb-editor .cm-editor, body .cm-tooltip { font-variant-ligatures: none; }
+
+/* ---------- danh sách chọn trong hộp thoại (khôi phục bản nháp, kho bài) ---------- */
+.pick-list { display: flex; flex-direction: column; gap: 4px; max-height: 55vh; overflow-y: auto; margin: 4px -4px; padding: 0 4px; }
+.pick { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 8px 11px; border: 1px solid var(--line); border-radius: var(--r); }
+.pick:hover:not(:disabled) { border-color: var(--accent-ring); background: var(--accent-soft); }
+.pick span { font-size: 12.5px; color: var(--muted); }
+.modal-actions.wrap { flex-wrap: wrap; }

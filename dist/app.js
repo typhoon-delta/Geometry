@@ -12,7 +12,9 @@
   // src/ui/dialog.js
   var dialog_exports = {};
   __export(dialog_exports, {
+    choiceDialog: () => choiceDialog,
     confirmDialog: () => confirmDialog,
+    modal: () => modal,
     promptDialog: () => promptDialog,
     textDialog: () => textDialog,
     textDialogEditable: () => textDialogEditable,
@@ -113,6 +115,19 @@
       box.querySelector(".primary").onclick = () => close2(ta.value);
       const ex = box.querySelector(".extra");
       if (ex) ex.onclick = () => close2("\0default");
+    });
+  }
+  function choiceDialog(title, messageHTML, choices) {
+    return modal((box, close2) => {
+      box.innerHTML = `<h3>${esc(title)}</h3><div class="modal-body">${messageHTML}</div><div class="modal-actions wrap"></div>`;
+      const bar = box.querySelector(".modal-actions");
+      for (const c of choices) {
+        const b = document.createElement("button");
+        b.textContent = c.label;
+        if (c.primary) b.className = "primary";
+        b.onclick = () => close2(c.value);
+        bar.appendChild(b);
+      }
     });
   }
   var esc, toastTimer;
@@ -18105,6 +18120,454 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{6pt}`;
 
+  // src/io/codec.js
+  var codec_exports = {};
+  __export(codec_exports, {
+    compactDoc: () => compactDoc,
+    decodeDoc: () => decodeDoc,
+    encodeDoc: () => encodeDoc,
+    parseDocJSON: () => parseDocJSON
+  });
+  function toB64url(bytes) {
+    let bin2 = "";
+    for (let i = 0; i < bytes.length; i += 32768) bin2 += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    return btoa(bin2).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function fromB64url(s) {
+    const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
+    const bin2 = atob(b64);
+    const out = new Uint8Array(bin2.length);
+    for (let i = 0; i < bin2.length; i++) out[i] = bin2.charCodeAt(i);
+    return out;
+  }
+  async function pipe(bytes, stream) {
+    const res = new Response(new Blob([bytes]).stream().pipeThrough(stream));
+    return new Uint8Array(await res.arrayBuffer());
+  }
+  function compactDoc(doc2) {
+    const out = { format: doc2.format, version: doc2.version };
+    if (doc2.title) out.title = doc2.title;
+    if (doc2.view) out.view = doc2.view;
+    if (doc2.images && doc2.images.length) out.images = doc2.images;
+    if (doc2.boxes && doc2.boxes.length) out.boxes = doc2.boxes;
+    if (doc2.imageData && Object.keys(doc2.imageData).length) out.imageData = doc2.imageData;
+    out.steps = doc2.steps.map((s) => {
+      const t2 = { id: s.id, type: s.type, args: s.args };
+      for (const k of ["params", "name", "style", "hidden", "joinPrev"]) {
+        const v = s[k];
+        if (v === void 0 || v === false || typeof v === "object" && v && !Array.isArray(v) && !Object.keys(v).length) continue;
+        t2[k] = v;
+      }
+      return t2;
+    });
+    return out;
+  }
+  async function encodeDoc(doc2) {
+    const json = JSON.stringify(compactDoc(doc2));
+    const bytes = new TextEncoder().encode(json);
+    if (typeof CompressionStream !== "undefined") {
+      try {
+        return "z" + toB64url(await pipe(bytes, new CompressionStream("deflate-raw")));
+      } catch {
+      }
+    }
+    return "j" + toB64url(bytes);
+  }
+  async function decodeDoc(code) {
+    let bytes;
+    try {
+      if (code[0] === "z") bytes = await pipe(fromB64url(code.slice(1)), new DecompressionStream("deflate-raw"));
+      else if (code[0] === "j") bytes = fromB64url(code.slice(1));
+      else throw new Error();
+    } catch {
+      throw new Error("Link h\xECnh b\u1ECB h\u1ECFng ho\u1EB7c b\u1ECB c\u1EAFt c\u1EE5t.");
+    }
+    return parseDocJSON(new TextDecoder().decode(bytes));
+  }
+  function parseDocJSON(text2) {
+    let doc2;
+    try {
+      doc2 = JSON.parse(text2);
+    } catch {
+      throw new Error("T\u1EC7p kh\xF4ng ph\u1EA3i JSON h\u1EE3p l\u1EC7.");
+    }
+    const errs = validate(doc2);
+    if (errs.length) throw new Error("H\xECnh kh\xF4ng h\u1EE3p l\u1EC7:\n" + errs.slice(0, 6).join("\n"));
+    return doc2;
+  }
+
+  // src/io/idb.js
+  var DB = "hinh-hoc-dong";
+  var STORE = "kv";
+  var dbp = null;
+  function open2() {
+    if (dbp) return dbp;
+    dbp = new Promise((resolve) => {
+      try {
+        const req = indexedDB.open(DB, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+        req.onblocked = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+    return dbp;
+  }
+  function run2(mode, fn) {
+    return open2().then((db) => new Promise((resolve) => {
+      if (!db) return resolve(void 0);
+      try {
+        const tx = db.transaction(STORE, mode);
+        const req = fn(tx.objectStore(STORE));
+        tx.oncomplete = () => resolve(mode === "readonly" ? req.result : true);
+        tx.onerror = tx.onabort = () => resolve(mode === "readonly" ? void 0 : false);
+      } catch {
+        resolve(mode === "readonly" ? void 0 : false);
+      }
+    }));
+  }
+  var idbGet = (key) => run2("readonly", (s) => s.get(key));
+  var idbSet = (key, value) => run2("readwrite", (s) => s.put(value, key));
+
+  // src/ui/share.js
+  init_dialog();
+
+  // src/ui/download.js
+  init_dialog();
+  var dlp = null;
+  function initDownloads() {
+    if (dlp) return dlp;
+    const c = typeof window !== "undefined" ? window.claude : null;
+    dlp = c && typeof c.use === "function" ? Promise.resolve().then(() => c.use("downloads")).catch(() => null) : Promise.resolve(null);
+    return dlp;
+  }
+  function dataURLToBlob(url) {
+    const [head, b64] = url.split(",");
+    const mime = /data:([^;]+)/.exec(head)?.[1] || "application/octet-stream";
+    const bin2 = atob(b64);
+    const buf = new Uint8Array(bin2.length);
+    for (let i = 0; i < bin2.length; i++) buf[i] = bin2.charCodeAt(i);
+    return new Blob([buf], { type: mime });
+  }
+  async function downloadFile(filename, data, mime = "application/octet-stream") {
+    const blob = data instanceof Blob ? data : typeof data === "string" && data.startsWith("data:") ? dataURLToBlob(data) : new Blob([data], { type: mime });
+    const dl = await initDownloads();
+    if (dl) {
+      try {
+        await dl.save({ filename, data: blob });
+        return true;
+      } catch (e) {
+        const code = e && e.code;
+        if (code === "declined") return false;
+        if (code === "rate_limited") {
+          toast("\u0110ang c\xF3 m\u1ED9t h\u1ED9p h\u1ECFi l\u01B0u t\u1EC7p \u2013 tr\u1EA3 l\u1EDDi h\u1ED9p \u0111\xF3 tr\u01B0\u1EDBc");
+          return false;
+        }
+        if (code === "rejected_extension") {
+          toast(`Trang n\xE0y kh\xF4ng cho t\u1EA3i t\u1EC7p d\u1EA1ng ${filename.split(".").pop()} \u2013 m\u1EDF ch\u01B0\u01A1ng tr\xECnh t\u1EEB GitHub Pages ho\u1EB7c index.html`, 6e3);
+          return false;
+        }
+      }
+    }
+    const a = document.createElement("a");
+    a.download = filename;
+    a.href = URL.createObjectURL(blob);
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 1500);
+    return true;
+  }
+
+  // src/ui/share.js
+  var DRAFT_KEY = "hinh-hoc-dong:nhap";
+  var TABS_KEY = "hinh-hoc-dong:nhap-tab";
+  var IDB_DRAFT = "nhap";
+  var IDB_HIST = "lich-su-nhap";
+  var HIST_EVERY = 5 * 6e4;
+  var HIST_MAX = 12;
+  var BUNDLE = "hinh-hoc-dong-bo";
+  var roundBox = (bb) => bb.map((v) => Math.round(v * 1e3) / 1e3);
+  function tabDoc(app, i, withImages = true) {
+    const cur2 = i === app.tabIdx;
+    const t2 = app.tabs[i];
+    const bb = cur2 ? app.view.getBoundingBox() : t2.bbox;
+    const base2 = cur2 ? app.doc : t2.doc;
+    const doc2 = { ...base2, ...bb ? { view: { bbox: roundBox(bb) } } : {} };
+    return withImages ? app.withImageData(doc2) : doc2;
+  }
+  function docWithView(app, withImages = true) {
+    return tabDoc(app, app.tabIdx, withImages);
+  }
+  function docSig(doc2) {
+    const s = JSON.stringify([doc2.title || "", doc2.steps, doc2.boxes || null, doc2.images || null]);
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0;
+    return s.length.toString(36) + "." + h.toString(36);
+  }
+  var isEmptyDoc = (d) => !d.steps.length && !(d.images || []).length && !(d.boxes || []).length;
+  var sameContent = (a, b) => JSON.stringify([a.steps, a.boxes || null]) === JSON.stringify([b.steps, b.boxes || null]);
+  function tabDirty(app, i) {
+    const d = i === app.tabIdx ? app.doc : app.tabs[i].doc;
+    return !isEmptyDoc(d) && docSig(d) !== app.tabs[i].savedSig;
+  }
+  var draftWarned = false;
+  var lastHist = 0;
+  function draftPayload(app) {
+    app.stashTab();
+    return {
+      t: Date.now(),
+      active: app.tabIdx,
+      tabs: app.tabs.map((_, i) => tabDoc(app, i)),
+      meta: app.tabs.map((t2) => ({ kho: t2.kho || null, savedSig: t2.savedSig || null }))
+    };
+  }
+  async function saveDraft(app, { unloading = false } = {}) {
+    let d;
+    try {
+      d = draftPayload(app);
+    } catch {
+      return;
+    }
+    let lsOK = false;
+    try {
+      localStorage.setItem(TABS_KEY, JSON.stringify(d));
+      lsOK = true;
+    } catch {
+      try {
+        localStorage.setItem(TABS_KEY, JSON.stringify({ t: d.t, inIdb: true }));
+      } catch {
+      }
+    }
+    if (unloading) return;
+    const ok = await idbSet(IDB_DRAFT, d);
+    if (!lsOK && !ok && !draftWarned) {
+      draftWarned = true;
+      toast("Kh\xF4ng l\u01B0u nh\xE1p \u0111\u01B0\u1EE3c trong tr\xECnh duy\u1EC7t (tr\xECnh duy\u1EC7t ch\u1EB7n l\u01B0u ho\u1EB7c h\u1EBFt ch\u1ED7) \u2013 h\xE3y l\u01B0u t\u1EC7p (Ctrl+S)", 6e3);
+    }
+    if (ok && Date.now() - lastHist > HIST_EVERY && d.tabs.some((x) => !isEmptyDoc(x))) {
+      const h = await idbGet(IDB_HIST) || [];
+      const sig = d.tabs.map(docSig).join();
+      if (!h[0] || h[0].tabs.map(docSig).join() !== sig) {
+        h.unshift(d);
+        await idbSet(IDB_HIST, h.slice(0, HIST_MAX));
+      }
+      lastHist = Date.now();
+    }
+  }
+  function normalizeDraft(d) {
+    if (!d || !Array.isArray(d.tabs)) return null;
+    const tabs = [], meta2 = [];
+    d.tabs.forEach((x, i) => {
+      try {
+        tabs.push(parseDocJSON(JSON.stringify(x)));
+        meta2.push(d.meta && d.meta[i] || {});
+      } catch {
+      }
+    });
+    return tabs.length ? { tabs, meta: meta2, active: Math.min(Math.max(0, d.active | 0), tabs.length - 1), t: d.t || 0 } : null;
+  }
+  async function loadDraft() {
+    let a = null;
+    try {
+      const t2 = localStorage.getItem(TABS_KEY);
+      if (t2) a = JSON.parse(t2);
+    } catch {
+    }
+    const b = await idbGet(IDB_DRAFT);
+    let d = a && Array.isArray(a.tabs) ? a : null;
+    if (b && Array.isArray(b.tabs) && (!d || (b.t || 0) > (d.t || 0))) d = b;
+    const n = normalizeDraft(d);
+    if (n) return n;
+    try {
+      const old = localStorage.getItem(DRAFT_KEY);
+      return old ? { tabs: [parseDocJSON(old)], meta: [{}], active: 0 } : null;
+    } catch {
+      return null;
+    }
+  }
+  async function shareLink(app) {
+    const code = await encodeDoc(docWithView(app, false));
+    if ((app.doc.images || []).length) toast("Link kh\xF4ng ch\u1EE9a \u1EA3nh \u0111\xE3 d\xE1n v\xE0o h\xECnh \u2013 mu\u1ED1n g\u1EEDi c\u1EA3 \u1EA3nh th\xEC l\u01B0u t\u1EC7p (Ctrl+S)", 6e3);
+    const base2 = location.href.split("#")[0];
+    const url = `${base2}#h=${code}`;
+    try {
+      history.replaceState(null, "", "#h=" + code);
+    } catch {
+    }
+    const warn = location.protocol === "file:" ? '<div class="modal-body">\u26A0 Trang \u0111ang m\u1EDF t\u1EEB t\u1EC7p tr\xEAn m\xE1y (file://). Link ch\u1EC9 d\xF9ng \u0111\u01B0\u1EE3c tr\xEAn m\xE1y n\xE0y; h\xE3y d\xF9ng b\u1EA3n tr\xEAn GitHub Pages \u0111\u1EC3 g\u1EEDi cho ng\u01B0\u1EDDi kh\xE1c.</div>' : "";
+    await textDialog("Link chia s\u1EBB h\xECnh", url, `<div class="modal-body">G\u1EEDi link n\xE0y: ng\u01B0\u1EDDi nh\u1EADn m\u1EDF ra s\u1EBD th\u1EA5y \u0111\xFAng h\xECnh (to\xE0n b\u1ED9 h\xECnh n\u1EB1m trong link, kh\xF4ng c\u1EA7n m\xE1y ch\u1EE7). \u0110\u1ED9 d\xE0i: ${url.length} k\xFD t\u1EF1.</div>${warn}`);
+  }
+  async function ensureTitle(app, what = "t\xEAn t\u1EC7p") {
+    if (app.doc.title) return true;
+    const v = await promptDialog("\u0110\u1EB7t t\xEAn h\xECnh", "", `T\xEAn d\xF9ng l\xE0m ${what} v\xE0 t\xEAn tab, vd "VMO 2016 \u2013 B\xE0i 4".`);
+    if (v == null) return false;
+    if (v.trim()) app.commit((doc2) => {
+      doc2.title = v.trim();
+    });
+    return true;
+  }
+  var pad2 = (n) => String(n).padStart(2, "0");
+  var today = () => {
+    const d = /* @__PURE__ */ new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+  async function saveFile(app) {
+    if (!await ensureTitle(app)) return;
+    const doc2 = compactDoc(docWithView(app));
+    const name2 = `${fileSafeName(app.doc.title || "hinh")}.json`;
+    if (await downloadFile(name2, JSON.stringify(doc2, null, 1), "application/json")) {
+      app.tabs[app.tabIdx].savedSig = docSig(app.doc);
+      app.emit("saved");
+    }
+  }
+  async function saveAllFiles(app) {
+    app.stashTab();
+    const idx = app.tabs.map((_, i) => i).filter((i) => !isEmptyDoc(i === app.tabIdx ? app.doc : app.tabs[i].doc));
+    if (!idx.length) return toast("Ch\u01B0a c\xF3 h\xECnh n\xE0o \u0111\u1EC3 l\u01B0u");
+    const tabs = idx.map((i) => compactDoc(tabDoc(app, i)));
+    const data = { format: BUNDLE, version: 1, title: `C\xE1c h\xECnh ng\xE0y ${today()}`, active: Math.max(0, idx.indexOf(app.tabIdx)), tabs };
+    if (await downloadFile(`cac-hinh-${today()}.json`, JSON.stringify(data, null, 1), "application/json")) {
+      for (const i of idx) app.tabs[i].savedSig = docSig(i === app.tabIdx ? app.doc : app.tabs[i].doc);
+      app.emit("saved");
+      toast(`\u0110\xE3 l\u01B0u ${idx.length} h\xECnh v\xE0o m\u1ED9t t\u1EC7p \u2013 m\u1EDF l\u1EA1i b\u1EB1ng Ctrl+O`, 4e3);
+    }
+  }
+  function parseFileText(text2) {
+    let data;
+    try {
+      data = JSON.parse(text2);
+    } catch {
+      throw new Error("T\u1EC7p kh\xF4ng ph\u1EA3i JSON h\u1EE3p l\u1EC7.");
+    }
+    if (data && data.format === BUNDLE) {
+      if (!Array.isArray(data.tabs)) throw new Error('T\u1EC7p b\u1ED9 h\xECnh thi\u1EBFu danh s\xE1ch "tabs".');
+      return { docs: data.tabs.map((x, i) => {
+        try {
+          return parseDocJSON(JSON.stringify(x));
+        } catch (e) {
+          throw new Error(`H\xECnh ${i + 1}: ${e.message}`);
+        }
+      }), active: data.active | 0 };
+    }
+    return { docs: [parseDocJSON(text2)], active: 0 };
+  }
+  async function openFiles(app, files) {
+    let opened = 0, dup = 0, focus = -1;
+    for (const f of files) {
+      try {
+        const { docs, active } = parseFileText(await f.text());
+        docs.forEach((doc2, k) => {
+          if (!doc2.title && docs.length === 1) doc2.title = f.name.replace(/\.json$/i, "");
+          const same = app.tabs.findIndex((t2, i) => sameContent(i === app.tabIdx ? app.doc : t2.doc, doc2));
+          if (same >= 0) {
+            dup++;
+            if (k === active) focus = same;
+            return;
+          }
+          app.openDoc(doc2, { savedSig: null });
+          app.tabs[app.tabIdx].savedSig = docSig(app.doc);
+          if (!doc2.view) app.zoomFit();
+          if (k === active) focus = app.tabIdx;
+          opened++;
+        });
+      } catch (e) {
+        await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c t\u1EC7p", `<b>${escapeBr(f.name)}</b><br>${escapeBr(e.message)}`, "OK");
+      }
+    }
+    if (focus >= 0) app.switchTab(focus);
+    app.emit("saved");
+    if (opened || dup) toast(`\u0110\xE3 m\u1EDF ${opened} h\xECnh` + (dup ? ` (${dup} h\xECnh \u0111\xE3 \u0111ang m\u1EDF \u2013 kh\xF4ng m\u1EDF tr\xF9ng)` : ""));
+  }
+  function openFile(app) {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = ".json,application/json";
+    inp.multiple = true;
+    inp.onchange = () => {
+      if (inp.files.length) openFiles(app, [...inp.files]);
+    };
+    inp.click();
+  }
+  function fileSafeName(title) {
+    const t2 = title.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    return t2 || "hinh";
+  }
+  var escapeBr = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
+  var timeLabel = (t2) => {
+    const d = new Date(t2);
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())} \u2013 ${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+  };
+  async function restoreDialog(app) {
+    const h = await idbGet(IDB_HIST) || [];
+    if (!h.length) return confirmDialog("Kh\xF4i ph\u1EE5c b\u1EA3n nh\xE1p c\u0169", "Ch\u01B0a c\xF3 b\u1EA3n ch\u1EE5p n\xE0o. Ch\u01B0\u01A1ng tr\xECnh t\u1EF1 ch\u1EE5p l\u1EA1i c\xE1c h\xECnh \u0111ang m\u1EDF <b>5 ph\xFAt m\u1ED9t l\u1EA7n</b> khi c\xF3 thay \u0111\u1ED5i (gi\u1EEF 12 b\u1EA3n g\u1EA7n nh\u1EA5t) \u2013 sau n\xE0y l\u1EE1 \u0111\xF3ng hay xo\xE1 nh\u1EA7m th\xEC v\xE0o \u0111\xE2y.", "OK");
+    const pick = await modal((box, close2) => {
+      box.classList.add("wide");
+      box.innerHTML = `<h3>Kh\xF4i ph\u1EE5c b\u1EA3n nh\xE1p c\u0169</h3><div class="modal-body">Ch\u1ECDn m\u1ED9t m\u1ED1c: c\xE1c h\xECnh l\xFAc \u0111\xF3 \u0111\u01B0\u1EE3c m\u1EDF th\xE0nh <b>tab m\u1EDBi</b> (h\xECnh \u0111ang m\u1EDF kh\xF4ng b\u1ECB thay).</div>
+      <div class="pick-list">${h.map((d2, i) => {
+        const names = d2.tabs.filter((x) => !isEmptyDoc(x)).map((x, k) => escapeBr(x.title || `H\xECnh ${k + 1}`));
+        return `<button class="pick" data-i="${i}"><b>${timeLabel(d2.t)}</b><span>${names.length} h\xECnh: ${names.slice(0, 8).join(" \xB7 ")}${names.length > 8 ? " \u2026" : ""}</span></button>`;
+      }).join("")}</div><div class="modal-actions"><button class="cancel">\u0110\xF3ng</button></div>`;
+      box.querySelector(".cancel").onclick = () => close2(null);
+      box.querySelectorAll(".pick").forEach((b) => {
+        b.onclick = () => close2(+b.dataset.i);
+      });
+    });
+    if (pick == null) return;
+    const d = normalizeDraft(h[pick]);
+    if (!d) return toast("B\u1EA3n ch\u1EE5p n\xE0y b\u1ECB h\u1ECFng");
+    let n = 0;
+    d.tabs.forEach((doc2) => {
+      if (isEmptyDoc(doc2) || app.tabs.some((t2, i) => sameContent(i === app.tabIdx ? app.doc : t2.doc, doc2))) return;
+      app.openDoc(doc2);
+      n++;
+    });
+    toast(n ? `\u0110\xE3 m\u1EDF l\u1EA1i ${n} h\xECnh c\u1EE7a l\xFAc ${timeLabel(d.t)}` : "C\xE1c h\xECnh c\u1EE7a m\u1ED1c n\xE0y \u0111\u1EC1u \u0111ang m\u1EDF");
+  }
+  async function initShare(app) {
+    const m = /[#&]h=([A-Za-z0-9_-]+)/.exec(location.hash);
+    const d = await loadDraft();
+    if (d && d.tabs.some((x) => !isEmptyDoc(x))) {
+      app.loadDoc(d.tabs[0]);
+      for (const x of d.tabs.slice(1)) app.newTab(x);
+      d.meta.forEach((mt, i) => {
+        if (app.tabs[i]) Object.assign(app.tabs[i], { kho: mt.kho || null, savedSig: mt.savedSig || null });
+      });
+      app.switchTab(d.active);
+      app.emit("saved");
+      if (!m) toast("\u0110\xE3 kh\xF4i ph\u1EE5c " + (d.tabs.length > 1 ? `${d.tabs.length} h\xECnh \u0111ang m\u1EDF l\u1EA7n tr\u01B0\u1EDBc` : "b\u1EA3n nh\xE1p l\u1EA7n tr\u01B0\u1EDBc"));
+    }
+    if (m) {
+      try {
+        const doc2 = await decodeDoc(m[1]);
+        const same = app.tabs.findIndex((t2, i) => JSON.stringify((i === app.tabIdx ? app.doc : t2.doc).steps) === JSON.stringify(doc2.steps));
+        if (same >= 0) app.switchTab(same);
+        else {
+          app.openDoc(doc2);
+          if (!doc2.view) app.zoomFit();
+        }
+        toast("\u0110\xE3 m\u1EDF h\xECnh t\u1EEB link");
+      } catch (e) {
+        toast(e.message, 5e3);
+      }
+    }
+    let timer = null;
+    const later = (ms) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => saveDraft(app), ms);
+    };
+    app.on("change", () => later(300));
+    app.on("saved", () => later(300));
+    app.view.onViewChange(() => later(600));
+    window.addEventListener("beforeunload", () => saveDraft(app, { unloading: true }));
+    app.saveDraftNow = () => saveDraft(app);
+    later(500);
+  }
+
   // src/ui/app.js
   var HISTORY_MAX = 200;
   var App = class {
@@ -18164,6 +18627,7 @@
       }
       this.doc = clone(doc2);
       this.takeImages(this.doc);
+      if (this.tabs && this.tabs[this.tabIdx] && !keepHistory) Object.assign(this.tabs[this.tabIdx], { kho: null, savedSig: null });
       this.imageSel = null;
       this.selection.clear();
       this.highlight.clear();
@@ -18277,7 +18741,8 @@
     // Mỗi tab giữ hình, lịch sử hoàn tác/làm lại và khung nhìn riêng. Tab đang mở dùng trực tiếp this.doc,
     // this.undoStack… (như trước); khi đổi tab thì cất vào this.tabs[i] rồi lấy tab kia ra.
     initTabs() {
-      this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null }];
+      this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null, kho: null, savedSig: null }];
+      this.closedTabs = [];
       this.tabIdx = 0;
     }
     stashTab() {
@@ -18309,29 +18774,42 @@
       this.stashTab();
       this.showTab(i);
     }
-    /** Mở một hình ở tab mới (doc = null: hình trống). */
-    newTab(doc2 = null) {
+    /** Mở một hình ở tab mới (doc = null: hình trống). meta: {kho, savedSig} – bài trong kho mà tab gắn với, chữ ký lần lưu cuối. */
+    newTab(doc2 = null, meta2 = {}) {
       this.stashTab();
       const d = doc2 ? clone(doc2) : emptyDoc();
       this.takeImages(d);
-      this.tabs.push({ doc: d, undo: [], redo: [], bbox: null });
+      this.tabs.push({ doc: d, undo: [], redo: [], bbox: null, kho: meta2.kho || null, savedSig: meta2.savedSig || null });
       this.showTab(this.tabs.length - 1);
     }
     async closeTab(i) {
-      const t2 = i === this.tabIdx ? { doc: this.doc } : this.tabs[i];
-      const n = t2.doc.steps.length + (t2.doc.images?.length || 0);
-      if (n && !await confirmDialog("\u0110\xF3ng h\xECnh", `\u0110\xF3ng h\xECnh <b>${escapeHTML(t2.doc.title || "ch\u01B0a \u0111\u1EB7t t\xEAn")}</b>? H\xECnh ch\u01B0a l\u01B0u t\u1EC7p s\u1EBD m\u1EA5t.`, "\u0110\xF3ng")) return;
+      const t2 = i === this.tabIdx ? { ...this.tabs[i], doc: this.doc } : this.tabs[i];
+      if (tabDirty(this, i) && !await confirmDialog("\u0110\xF3ng h\xECnh", `H\xECnh <b>${escapeHTML(t2.doc.title || "ch\u01B0a \u0111\u1EB7t t\xEAn")}</b> c\xF3 thay \u0111\u1ED5i ch\u01B0a l\u01B0u ra t\u1EC7p hay kho. \u0110\xF3ng?<br><span class="note">L\u1EE1 \u0111\xF3ng th\xEC v\xE0o <i>T\u1EC7p \u203A M\u1EDF l\u1EA1i h\xECnh v\u1EEBa \u0111\xF3ng</i>.</span>`, "\u0110\xF3ng")) return;
       this.stashTab();
+      if (!isEmptyDoc(t2.doc)) {
+        this.closedTabs.push({ doc: tabDoc(this, i), kho: t2.kho || null, savedSig: t2.savedSig || null });
+        if (this.closedTabs.length > 10) this.closedTabs.shift();
+      }
       const cur2 = this.tabIdx;
       this.tabs.splice(i, 1);
-      if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null });
+      if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null, kho: null, savedSig: null });
       const next = i < cur2 ? cur2 - 1 : i === cur2 ? Math.min(i, this.tabs.length - 1) : cur2;
       this.showTab(next);
     }
-    /** Mở hình (tệp, ví dụ, link): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. */
-    openDoc(doc2) {
-      if (!this.doc.steps.length && !(this.doc.images || []).length) this.loadDoc(doc2);
-      else this.newTab(doc2);
+    /** Tệp › Mở lại hình vừa đóng. */
+    reopenTab() {
+      const c = this.closedTabs.pop();
+      if (!c) return toast("Ch\u01B0a \u0111\xF3ng h\xECnh n\xE0o trong l\u1EA7n m\u1EDF trang n\xE0y");
+      this.newTab(c.doc, c);
+      toast(`\u0110\xE3 m\u1EDF l\u1EA1i "${c.doc.title || "h\xECnh v\u1EEBa \u0111\xF3ng"}"`);
+    }
+    /** Mở hình (tệp, ví dụ, link, kho): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. meta như newTab. */
+    openDoc(doc2, meta2 = {}) {
+      if (isEmptyDoc(this.doc)) {
+        this.loadDoc(doc2);
+        Object.assign(this.tabs[this.tabIdx], { kho: meta2.kho || null, savedSig: meta2.savedSig || null });
+        this.emit("saved");
+      } else this.newTab(doc2, meta2);
     }
     pushUndo(snapshot) {
       this.undoStack.push(snapshot);
@@ -19348,16 +19826,7 @@
         this.saveUserTools();
       } else if (action === "export") {
         if (!this.userTools.length) return toast("Ch\u01B0a c\xF3 c\xF4ng c\u1EE5 t\u1EF1 t\u1EA1o n\xE0o");
-        const blob = new Blob([JSON.stringify({ format: "hinh-hoc-dong-cong-cu", version: 1, tools: this.userTools }, null, 1)], { type: "application/json" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "cong-cu-cua-toi.json";
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          URL.revokeObjectURL(a.href);
-          a.remove();
-        }, 1e3);
+        downloadFile("cong-cu-cua-toi.json", JSON.stringify({ format: "hinh-hoc-dong-cong-cu", version: 1, tools: this.userTools }, null, 1), "application/json");
       } else if (action === "import") {
         const inp = document.createElement("input");
         inp.type = "file";
@@ -19518,9 +19987,9 @@
       for (const m of menus) {
         m.querySelector(".menu-btn").addEventListener("click", (e) => {
           e.stopPropagation();
-          const open2 = m.classList.contains("open");
+          const open3 = m.classList.contains("open");
           closeMenus();
-          if (!open2) m.classList.add("open");
+          if (!open3) m.classList.add("open");
         });
         m.querySelector(".menu-pop").addEventListener("click", (e) => {
           if (e.target.closest("button")) closeMenus();
@@ -19813,209 +20282,6 @@
     stepById: () => stepById,
     validate: () => validate
   });
-
-  // src/io/codec.js
-  var codec_exports = {};
-  __export(codec_exports, {
-    compactDoc: () => compactDoc,
-    decodeDoc: () => decodeDoc,
-    encodeDoc: () => encodeDoc,
-    parseDocJSON: () => parseDocJSON
-  });
-  function toB64url(bytes) {
-    let bin2 = "";
-    for (let i = 0; i < bytes.length; i += 32768) bin2 += String.fromCharCode(...bytes.subarray(i, i + 32768));
-    return btoa(bin2).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  }
-  function fromB64url(s) {
-    const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
-    const bin2 = atob(b64);
-    const out = new Uint8Array(bin2.length);
-    for (let i = 0; i < bin2.length; i++) out[i] = bin2.charCodeAt(i);
-    return out;
-  }
-  async function pipe(bytes, stream) {
-    const res = new Response(new Blob([bytes]).stream().pipeThrough(stream));
-    return new Uint8Array(await res.arrayBuffer());
-  }
-  function compactDoc(doc2) {
-    const out = { format: doc2.format, version: doc2.version };
-    if (doc2.title) out.title = doc2.title;
-    if (doc2.view) out.view = doc2.view;
-    if (doc2.images && doc2.images.length) out.images = doc2.images;
-    if (doc2.boxes && doc2.boxes.length) out.boxes = doc2.boxes;
-    if (doc2.imageData && Object.keys(doc2.imageData).length) out.imageData = doc2.imageData;
-    out.steps = doc2.steps.map((s) => {
-      const t2 = { id: s.id, type: s.type, args: s.args };
-      for (const k of ["params", "name", "style", "hidden", "joinPrev"]) {
-        const v = s[k];
-        if (v === void 0 || v === false || typeof v === "object" && v && !Array.isArray(v) && !Object.keys(v).length) continue;
-        t2[k] = v;
-      }
-      return t2;
-    });
-    return out;
-  }
-  async function encodeDoc(doc2) {
-    const json = JSON.stringify(compactDoc(doc2));
-    const bytes = new TextEncoder().encode(json);
-    if (typeof CompressionStream !== "undefined") {
-      try {
-        return "z" + toB64url(await pipe(bytes, new CompressionStream("deflate-raw")));
-      } catch {
-      }
-    }
-    return "j" + toB64url(bytes);
-  }
-  async function decodeDoc(code) {
-    let bytes;
-    try {
-      if (code[0] === "z") bytes = await pipe(fromB64url(code.slice(1)), new DecompressionStream("deflate-raw"));
-      else if (code[0] === "j") bytes = fromB64url(code.slice(1));
-      else throw new Error();
-    } catch {
-      throw new Error("Link h\xECnh b\u1ECB h\u1ECFng ho\u1EB7c b\u1ECB c\u1EAFt c\u1EE5t.");
-    }
-    return parseDocJSON(new TextDecoder().decode(bytes));
-  }
-  function parseDocJSON(text2) {
-    let doc2;
-    try {
-      doc2 = JSON.parse(text2);
-    } catch {
-      throw new Error("T\u1EC7p kh\xF4ng ph\u1EA3i JSON h\u1EE3p l\u1EC7.");
-    }
-    const errs = validate(doc2);
-    if (errs.length) throw new Error("H\xECnh kh\xF4ng h\u1EE3p l\u1EC7:\n" + errs.slice(0, 6).join("\n"));
-    return doc2;
-  }
-
-  // src/ui/share.js
-  init_dialog();
-  var DRAFT_KEY = "hinh-hoc-dong:nhap";
-  var TABS_KEY = "hinh-hoc-dong:nhap-tab";
-  var roundBox = (bb) => bb.map((v) => Math.round(v * 1e3) / 1e3);
-  function docWithView(app, withImages = true) {
-    const doc2 = { ...app.doc, view: { bbox: roundBox(app.view.getBoundingBox()) } };
-    return withImages ? app.withImageData(doc2) : doc2;
-  }
-  var draftWarned = false;
-  function saveDraft(app) {
-    try {
-      app.stashTab();
-      const tabs = app.tabs.map((t2, i) => app.withImageData(i === app.tabIdx ? docWithView(app, false) : { ...t2.doc, ...t2.bbox ? { view: { bbox: roundBox(t2.bbox) } } : {} }));
-      localStorage.setItem(TABS_KEY, JSON.stringify({ active: app.tabIdx, tabs }));
-    } catch {
-      if (!draftWarned) {
-        draftWarned = true;
-        toast("Kh\xF4ng l\u01B0u nh\xE1p \u0111\u01B0\u1EE3c trong tr\xECnh duy\u1EC7t (\u1EA3nh qu\xE1 l\u1EDBn ho\u1EB7c tr\xECnh duy\u1EC7t ch\u1EB7n l\u01B0u) \u2013 h\xE3y l\u01B0u t\u1EC7p (Ctrl+S)", 6e3);
-      }
-    }
-  }
-  function loadDraft() {
-    try {
-      const t2 = localStorage.getItem(TABS_KEY);
-      if (t2) {
-        const d = JSON.parse(t2);
-        const tabs = (d.tabs || []).map((x) => {
-          try {
-            return parseDocJSON(JSON.stringify(x));
-          } catch {
-            return null;
-          }
-        }).filter(Boolean);
-        if (tabs.length) return { tabs, active: Math.min(Math.max(0, d.active | 0), tabs.length - 1) };
-      }
-      const old = localStorage.getItem(DRAFT_KEY);
-      return old ? { tabs: [parseDocJSON(old)], active: 0 } : null;
-    } catch {
-      return null;
-    }
-  }
-  async function shareLink(app) {
-    const code = await encodeDoc(docWithView(app, false));
-    if ((app.doc.images || []).length) toast("Link kh\xF4ng ch\u1EE9a \u1EA3nh \u0111\xE3 d\xE1n v\xE0o h\xECnh \u2013 mu\u1ED1n g\u1EEDi c\u1EA3 \u1EA3nh th\xEC l\u01B0u t\u1EC7p (Ctrl+S)", 6e3);
-    const base2 = location.href.split("#")[0];
-    const url = `${base2}#h=${code}`;
-    try {
-      history.replaceState(null, "", "#h=" + code);
-    } catch {
-    }
-    const warn = location.protocol === "file:" ? '<div class="modal-body">\u26A0 Trang \u0111ang m\u1EDF t\u1EEB t\u1EC7p tr\xEAn m\xE1y (file://). Link ch\u1EC9 d\xF9ng \u0111\u01B0\u1EE3c tr\xEAn m\xE1y n\xE0y; h\xE3y d\xF9ng b\u1EA3n tr\xEAn GitHub Pages \u0111\u1EC3 g\u1EEDi cho ng\u01B0\u1EDDi kh\xE1c.</div>' : "";
-    await textDialog("Link chia s\u1EBB h\xECnh", url, `<div class="modal-body">G\u1EEDi link n\xE0y: ng\u01B0\u1EDDi nh\u1EADn m\u1EDF ra s\u1EBD th\u1EA5y \u0111\xFAng h\xECnh (to\xE0n b\u1ED9 h\xECnh n\u1EB1m trong link, kh\xF4ng c\u1EA7n m\xE1y ch\u1EE7). \u0110\u1ED9 d\xE0i: ${url.length} k\xFD t\u1EF1.</div>${warn}`);
-  }
-  function saveFile(app) {
-    const doc2 = compactDoc(docWithView(app));
-    const text2 = JSON.stringify(doc2, null, 1);
-    const blob = new Blob([text2], { type: "application/json" });
-    const a = document.createElement("a");
-    a.download = `${fileSafeName(app.doc.title || "hinh")}.json`;
-    a.href = URL.createObjectURL(blob);
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(a.href);
-      a.remove();
-    }, 1e3);
-  }
-  function openFile(app) {
-    const inp = document.createElement("input");
-    inp.type = "file";
-    inp.accept = ".json,application/json";
-    inp.onchange = async () => {
-      const f = inp.files[0];
-      if (!f) return;
-      try {
-        const doc2 = parseDocJSON(await f.text());
-        if (!doc2.title) doc2.title = f.name.replace(/\.json$/i, "");
-        app.openDoc(doc2);
-        if (!doc2.view) app.zoomFit();
-        toast(`\u0110\xE3 m\u1EDF "${f.name}"`);
-      } catch (e) {
-        await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c t\u1EC7p", escapeBr(e.message), "OK");
-      }
-    };
-    inp.click();
-  }
-  function fileSafeName(title) {
-    const t2 = title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-    return t2 || "hinh";
-  }
-  var escapeBr = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
-  async function initShare(app) {
-    const m = /[#&]h=([A-Za-z0-9_-]+)/.exec(location.hash);
-    const d = loadDraft();
-    if (d && d.tabs.some((x) => x.steps.length || (x.images || []).length)) {
-      app.loadDoc(d.tabs[0]);
-      for (const x of d.tabs.slice(1)) app.newTab(x);
-      app.switchTab(d.active);
-      if (!m) toast("\u0110\xE3 kh\xF4i ph\u1EE5c " + (d.tabs.length > 1 ? `${d.tabs.length} h\xECnh \u0111ang m\u1EDF l\u1EA7n tr\u01B0\u1EDBc` : "b\u1EA3n nh\xE1p l\u1EA7n tr\u01B0\u1EDBc"));
-    }
-    if (m) {
-      try {
-        const doc2 = await decodeDoc(m[1]);
-        const same = app.tabs.findIndex((t2, i) => JSON.stringify((i === app.tabIdx ? app.doc : t2.doc).steps) === JSON.stringify(doc2.steps));
-        if (same >= 0) app.switchTab(same);
-        else {
-          app.openDoc(doc2);
-          if (!doc2.view) app.zoomFit();
-        }
-        toast("\u0110\xE3 m\u1EDF h\xECnh t\u1EEB link");
-      } catch (e) {
-        toast(e.message, 5e3);
-      }
-    }
-    let timer = null;
-    app.on("change", () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => saveDraft(app), 300);
-    });
-    app.view.onViewChange(() => {
-      clearTimeout(timer);
-      timer = setTimeout(() => saveDraft(app), 600);
-    });
-    window.addEventListener("beforeunload", () => saveDraft(app));
-  }
 
   // src/explore/knowledge.js
   var UF = class {
@@ -20810,10 +21076,10 @@
         </div>`).join("") + "</div>";
       }
       pane.innerHTML = html;
-      pane.querySelector("#btn-run-explore").onclick = run2;
+      pane.querySelector("#btn-run-explore").onclick = run3;
       pane.querySelectorAll(".rel").forEach((el) => el.onclick = () => select(+el.dataset.i));
     };
-    const run2 = () => {
+    const run3 = () => {
       const btn = pane.querySelector("#btn-run-explore");
       if (btn) {
         btn.disabled = true;
@@ -20852,7 +21118,7 @@
       }
     });
     const top2 = document.getElementById("btn-explore");
-    if (top2) top2.onclick = run2;
+    if (top2) top2.onclick = run3;
     render3();
   }
   function drawRelationOverlay(app) {
@@ -26151,13 +26417,14 @@
       host.innerHTML = app.tabs.map((t2, i) => {
         const doc2 = i === app.tabIdx ? app.doc : t2.doc;
         return `<div class="dtab${i === app.tabIdx ? " active" : ""}" data-tab="${i}" title="${escapeHTML(label(doc2, i))}${i === app.tabIdx ? " \u2013 nh\xE1y \u0111\xFAp \u0111\u1EC3 \u0111\u1EB7t t\xEAn" : i < 9 ? ` (Alt+${i + 1})` : ""}">
-        <span class="dt-name">${escapeHTML(label(doc2, i))}</span><button class="dt-x" data-close="${i}" title="\u0110\xF3ng h\xECnh">\u2715</button></div>`;
+        <span class="dt-name">${escapeHTML(label(doc2, i))}</span>${tabDirty(app, i) ? '<span class="dt-dot" title="C\xF3 thay \u0111\u1ED5i ch\u01B0a l\u01B0u ra t\u1EC7p hay kho"></span>' : ""}<button class="dt-x" data-close="${i}" title="\u0110\xF3ng h\xECnh">\u2715</button></div>`;
       }).join("") + '<button id="tab-new" class="dt-new" title="H\xECnh m\u1EDBi (tab m\u1EDBi)">\uFF0B</button>';
       host.querySelector(".dtab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
     };
     app.renderTabs = render3;
     app.on("change", render3);
     app.on("load", render3);
+    app.on("saved", render3);
     host.addEventListener("click", (e) => {
       const x = e.target.closest("[data-close]");
       if (x) {
@@ -26221,9 +26488,12 @@
       if ([...e.dataTransfer?.items || []].some((it) => it.kind === "file")) e.preventDefault();
     });
     stage.addEventListener("drop", (e) => {
-      const files = [...e.dataTransfer?.files || []].filter((f) => f.type.startsWith("image/"));
+      const all = [...e.dataTransfer?.files || []];
+      if (all.length) e.preventDefault();
+      const json = all.filter((f) => /\.json$/i.test(f.name) || f.type === "application/json");
+      if (json.length) openFiles(app, json);
+      const files = all.filter((f) => f.type.startsWith("image/"));
       if (!files.length) return;
-      e.preventDefault();
       const r = app.view.canvas.getBoundingClientRect();
       files.forEach((f, i) => insertImageFile(app, f, { sx: e.clientX - r.left + 24 * i, sy: e.clientY - r.top + 24 * i }, app.textBoxes ? "box" : "background"));
     });
@@ -26546,9 +26816,9 @@
         line2++;
       }
     }
-    decompose(from, to, target, open2) {
+    decompose(from, to, target, open3) {
       let text2 = from <= 0 && to >= this.length ? this : new _TextLeaf(sliceText(this.text, from, to), Math.min(to, this.length) - Math.max(0, from));
-      if (open2 & 1) {
+      if (open3 & 1) {
         let prev = target.pop();
         let joined = appendText(text2.text, prev.text.slice(), 0, text2.length);
         if (joined.length <= 32) {
@@ -26625,11 +26895,11 @@
         line2 = endLine + 1;
       }
     }
-    decompose(from, to, target, open2) {
+    decompose(from, to, target, open3) {
       for (let i = 0, pos = 0; pos <= to && i < this.children.length; i++) {
         let child = this.children[i], end = pos + child.length;
         if (from <= end && to >= pos) {
-          let childOpen = open2 & ((pos <= from ? 1 : 0) | (end >= to ? 2 : 0));
+          let childOpen = open3 & ((pos <= from ? 1 : 0) | (end >= to ? 2 : 0));
           if (pos >= from && end <= to && !childOpen)
             target.push(child);
           else
@@ -27460,14 +27730,14 @@
     let sections = [];
     let insert2 = mkSet ? [] : null;
     let a = new SectionIter(setA), b = new SectionIter(setB);
-    for (let open2 = false; ; ) {
+    for (let open3 = false; ; ) {
       if (a.done && b.done) {
         return insert2 ? ChangeSet.createSet(sections, insert2) : ChangeDesc.create(sections);
       } else if (a.ins == 0) {
-        addSection(sections, a.len, 0, open2);
+        addSection(sections, a.len, 0, open3);
         a.next();
       } else if (b.len == 0 && !b.done) {
-        addSection(sections, 0, b.ins, open2);
+        addSection(sections, 0, b.ins, open3);
         if (insert2)
           addInsert(insert2, sections, b.text);
         b.next();
@@ -27477,19 +27747,19 @@
         let len = Math.min(a.len2, b.len), sectionLen = sections.length;
         if (a.ins == -1) {
           let insB = b.ins == -1 ? -1 : b.off ? 0 : b.ins;
-          addSection(sections, len, insB, open2);
+          addSection(sections, len, insB, open3);
           if (insert2 && insB)
             addInsert(insert2, sections, b.text);
         } else if (b.ins == -1) {
-          addSection(sections, a.off ? 0 : a.len, len, open2);
+          addSection(sections, a.off ? 0 : a.len, len, open3);
           if (insert2)
             addInsert(insert2, sections, a.textBit(len));
         } else {
-          addSection(sections, a.off ? 0 : a.len, b.off ? 0 : b.ins, open2);
+          addSection(sections, a.off ? 0 : a.len, b.off ? 0 : b.ins, open3);
           if (insert2 && !b.off)
             addInsert(insert2, sections, b.text);
         }
-        open2 = (a.ins > len || b.ins >= 0 && b.len > len) && (open2 || sections.length > sectionLen);
+        open3 = (a.ins > len || b.ins >= 0 && b.len > len) && (open3 || sections.length > sectionLen);
         a.forward2(len);
         b.forward(len);
       }
@@ -29696,10 +29966,10 @@
       return active.reverse();
     }
     openEnd(to) {
-      let open2 = 0;
+      let open3 = 0;
       for (let i = this.activeTo.length - 1; i >= 0 && this.activeTo[i] > to; i--)
-        open2++;
-      return open2;
+        open3++;
+      return open3;
     }
   };
   function compare(a, startA, b, startB, length, comparator) {
@@ -31328,12 +31598,12 @@
     RangeSet.spans(sets, line2.from, line2.to, {
       point() {
       },
-      span(fromDoc, toDoc, active, open2) {
+      span(fromDoc, toDoc, active, open3) {
         let from = fromDoc - line2.from, to = toDoc - line2.from;
         let level = result;
-        for (let i = active.length - 1; i >= 0; i--, open2--) {
+        for (let i = active.length - 1; i >= 0; i--, open3--) {
           let direction = active[i].spec.bidiIsolate, update;
-          if (open2 > 0 && level.length && (update = level[level.length - 1]).to == from && update.direction == direction) {
+          if (open3 > 0 && level.length && (update = level[level.length - 1]).to == from && update.direction == direction) {
             update.to = to;
             level = update.inner;
           } else {
@@ -42907,12 +43177,12 @@
     return data.length ? data[0] : {};
   }
   var SearchMargin = 50;
-  function findBlockComment(state, { open: open2, close: close2 }, from, to) {
+  function findBlockComment(state, { open: open3, close: close2 }, from, to) {
     let textBefore = state.sliceDoc(from - SearchMargin, from);
     let textAfter = state.sliceDoc(to, to + SearchMargin);
     let spaceBefore = /\s*$/.exec(textBefore)[0].length, spaceAfter = /^\s*/.exec(textAfter)[0].length;
     let beforeOff = textBefore.length - spaceBefore;
-    if (textBefore.slice(beforeOff - open2.length, beforeOff) == open2 && textAfter.slice(spaceAfter, spaceAfter + close2.length) == close2) {
+    if (textBefore.slice(beforeOff - open3.length, beforeOff) == open3 && textAfter.slice(spaceAfter, spaceAfter + close2.length) == close2) {
       return {
         open: { pos: from - spaceBefore, margin: spaceBefore && 1 },
         close: { pos: to + spaceAfter, margin: spaceAfter && 1 }
@@ -42927,11 +43197,11 @@
     }
     let startSpace = /^\s*/.exec(startText)[0].length, endSpace = /\s*$/.exec(endText)[0].length;
     let endOff = endText.length - endSpace - close2.length;
-    if (startText.slice(startSpace, startSpace + open2.length) == open2 && endText.slice(endOff, endOff + close2.length) == close2) {
+    if (startText.slice(startSpace, startSpace + open3.length) == open3 && endText.slice(endOff, endOff + close2.length) == close2) {
       return {
         open: {
-          pos: from + startSpace + open2.length,
-          margin: /\s/.test(startText.charAt(startSpace + open2.length)) ? 1 : 0
+          pos: from + startSpace + open3.length,
+          margin: /\s/.test(startText.charAt(startSpace + open3.length)) ? 1 : 0
         },
         close: {
           pos: to - endSpace - close2.length,
@@ -42971,8 +43241,8 @@
       let changes = [];
       for (let i = 0, comment2; i < comments.length; i++)
         if (comment2 = comments[i]) {
-          let token = tokens[i], { open: open2, close: close2 } = comment2;
-          changes.push({ from: open2.pos - token.open.length, to: open2.pos + open2.margin }, { from: close2.pos - close2.margin, to: close2.pos + token.close.length });
+          let token = tokens[i], { open: open3, close: close2 } = comment2;
+          changes.push({ from: open3.pos - token.open.length, to: open3.pos + open3.margin }, { from: close2.pos - close2.margin, to: close2.pos + token.close.length });
         }
       return { changes };
     }
@@ -44693,15 +44963,15 @@
         this.view.requestMeasure(this.placeInfoReq);
     }
     updateSel() {
-      let cState = this.view.state.field(this.stateField), open2 = cState.open;
-      if (open2.selected > -1 && open2.selected < this.range.from || open2.selected >= this.range.to) {
-        this.range = rangeAroundSelected(open2.options.length, open2.selected, this.view.state.facet(completionConfig).maxRenderedOptions);
-        this.showOptions(open2.options, cState.id);
+      let cState = this.view.state.field(this.stateField), open3 = cState.open;
+      if (open3.selected > -1 && open3.selected < this.range.from || open3.selected >= this.range.to) {
+        this.range = rangeAroundSelected(open3.options.length, open3.selected, this.view.state.facet(completionConfig).maxRenderedOptions);
+        this.showOptions(open3.options, cState.id);
       }
-      let newSel = this.updateSelectedOption(open2.selected);
+      let newSel = this.updateSelectedOption(open3.selected);
       if (newSel) {
         this.destroyInfo();
-        let { completion } = open2.options[open2.selected];
+        let { completion } = open3.options[open3.selected];
         let { info } = completion;
         if (!info)
           return;
@@ -44960,10 +45230,10 @@
     }
   };
   var CompletionState = class _CompletionState {
-    constructor(active, id, open2) {
+    constructor(active, id, open3) {
       this.active = active;
       this.id = id;
-      this.open = open2;
+      this.open = open3;
     }
     static start() {
       return new _CompletionState(none3, "cm-ac-" + Math.floor(Math.random() * 2e6).toString(36), null);
@@ -44984,14 +45254,14 @@
       });
       if (active.length == this.active.length && active.every((a, i) => a == this.active[i]))
         active = this.active;
-      let open2 = this.open, didSet = tr.effects.some((e) => e.is(setActiveEffect));
-      if (open2 && tr.docChanged)
-        open2 = open2.map(tr.changes);
+      let open3 = this.open, didSet = tr.effects.some((e) => e.is(setActiveEffect));
+      if (open3 && tr.docChanged)
+        open3 = open3.map(tr.changes);
       if (tr.selection || active.some((a) => a.hasResult() && tr.changes.touchesRange(a.from, a.to)) || !sameResults(active, this.active) || didSet)
-        open2 = CompletionDialog.build(active, state, this.id, open2, conf, didSet);
-      else if (open2 && open2.disabled && !active.some((a) => a.isPending))
-        open2 = null;
-      if (!open2 && active.every((a) => !a.isPending) && active.some((a) => a.hasResult()))
+        open3 = CompletionDialog.build(active, state, this.id, open3, conf, didSet);
+      else if (open3 && open3.disabled && !active.some((a) => a.isPending))
+        open3 = null;
+      if (!open3 && active.every((a) => !a.isPending) && active.some((a) => a.hasResult()))
         active = active.map((a) => a.hasResult() ? new ActiveSource(
           a.source,
           0
@@ -44999,8 +45269,8 @@
         ) : a);
       for (let effect of tr.effects)
         if (effect.is(setSelectedEffect))
-          open2 = open2 && open2.setSelected(effect.value, this.id);
-      return active == this.active && open2 == this.open ? this : new _CompletionState(active, this.id, open2);
+          open3 = open3 && open3.setSelected(effect.value, this.id);
+      return active == this.active && open3 == this.open ? this : new _CompletionState(active, this.id, open3);
     }
     get tooltip() {
       return this.open ? this.open.tooltip : null;
@@ -45855,20 +46125,20 @@
     let prev = doc2.sliceString(pos - 2, pos);
     return codePointSize2(codePointAt2(prev, 0)) == prev.length ? prev : prev.slice(1);
   }
-  function handleOpen(state, open2, close2, closeBefore) {
+  function handleOpen(state, open3, close2, closeBefore) {
     let dont = null, changes = state.changeByRange((range) => {
       if (!range.empty)
         return {
-          changes: [{ insert: open2, from: range.from }, { insert: close2, from: range.to }],
-          effects: closeBracketEffect.of(range.to + open2.length),
-          range: EditorSelection.range(range.anchor + open2.length, range.head + open2.length)
+          changes: [{ insert: open3, from: range.from }, { insert: close2, from: range.to }],
+          effects: closeBracketEffect.of(range.to + open3.length),
+          range: EditorSelection.range(range.anchor + open3.length, range.head + open3.length)
         };
       let next = nextChar(state.doc, range.head);
       if (!next || /\s/.test(next) || closeBefore.indexOf(next) > -1)
         return {
-          changes: { insert: open2 + close2, from: range.head },
-          effects: closeBracketEffect.of(range.head + open2.length),
-          range: EditorSelection.cursor(range.head + open2.length)
+          changes: { insert: open3 + close2, from: range.head },
+          effects: closeBracketEffect.of(range.head + open3.length),
+          range: EditorSelection.cursor(range.head + open3.length)
         };
       return { range: dont = range };
     });
@@ -46207,10 +46477,10 @@
       applyTemplate(view2, hit.rep, end - hit.len, end);
       return true;
     });
-    const wrap = (open2, close2) => (view2) => {
+    const wrap = (open3, close2) => (view2) => {
       const r = view2.state.selection.main;
       const sel = view2.state.sliceDoc(r.from, r.to);
-      view2.dispatch({ changes: { from: r.from, to: r.to, insert: open2 + sel + close2 }, selection: { anchor: r.from + open2.length + sel.length } });
+      view2.dispatch({ changes: { from: r.from, to: r.to, insert: open3 + sel + close2 }, selection: { anchor: r.from + open3.length + sel.length } });
       return true;
     };
     const keys = keymap.of([
@@ -46813,6 +47083,9 @@
     };
     document.getElementById("btn-share").onclick = () => shareLink(app);
     document.getElementById("btn-save").onclick = () => saveFile(app);
+    document.getElementById("btn-save-all").onclick = () => saveAllFiles(app);
+    document.getElementById("btn-reopen").onclick = () => app.reopenTab();
+    document.getElementById("btn-restore").onclick = () => restoreDialog(app);
     document.getElementById("btn-open").onclick = () => openFile(app);
     setupTabBar(app);
     setupImages(app);
@@ -46833,35 +47106,32 @@
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        saveFile(app);
+        if (e.shiftKey) saveAllFiles(app);
+        else saveFile(app);
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
         e.preventDefault();
         openFile(app);
       }
     });
+    initDownloads();
     initShare(app).then(() => app.renderTabs());
     window.__app = app;
     window.GeoCore = { ...core_exports, Builder, EXAMPLES, THU_VIEN, codec: codec_exports, explore, toTikZ };
     return app;
   }
-  function exportLatex(app) {
+  async function exportLatex(app) {
     const vis = app.visibleSet();
     const doc2 = vis ? { ...app.doc, steps: app.doc.steps.map((s) => vis.has(s.id) ? s : { ...s, hidden: true }) } : app.doc;
     const { tex, files } = toLatexHandout(doc2, { values: app.values, theme: app.theme, trimLines: app.renderer.trimLines, imageSrc: (id) => app.images.get(id)?.src });
-    const base2 = fileSafeName(app.doc.title || "phieu");
-    const download = (name2, href) => {
-      const a = document.createElement("a");
-      a.download = name2;
-      a.href = href;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => a.remove(), 500);
-    };
-    const url = URL.createObjectURL(new Blob([tex], { type: "application/x-tex" }));
-    download(base2 + ".tex", url);
-    setTimeout(() => URL.revokeObjectURL(url), 2e3);
-    files.forEach((f, i) => setTimeout(() => download(f.name, f.dataURL), 300 * (i + 1)));
+    await downloadTex(fileSafeName(app.doc.title || "phieu"), tex, files);
+  }
+  async function downloadTex(base2, tex, files) {
+    if (!await downloadFile(base2 + ".tex", tex, "application/x-tex")) return;
+    for (const f of files) {
+      await new Promise((r) => setTimeout(r, 300));
+      await downloadFile(f.name, f.dataURL);
+    }
     toast(files.length ? `\u0110\xE3 t\u1EA3i ${base2}.tex v\xE0 ${files.length} \u1EA3nh (\u0111\u1EC3 c\xF9ng th\u01B0 m\u1EE5c r\u1ED3i bi\xEAn d\u1ECBch b\u1EB1ng pdflatex)` : `\u0110\xE3 t\u1EA3i ${base2}.tex (bi\xEAn d\u1ECBch b\u1EB1ng pdflatex)`, 6e3);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

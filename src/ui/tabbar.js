@@ -1,5 +1,6 @@
 // Dải tab hình trên thanh trên (bản 1.3): bấm để đổi hình, nháy đúp vào tab đang mở để đặt tên, ✕ để đóng, ＋ hình mới.
 import { escapeHTML } from './app.js';
+import { tabDirty } from './share.js';
 
 export function setupTabBar(app) {
   const host = document.getElementById('tabbar');
@@ -10,13 +11,14 @@ export function setupTabBar(app) {
     host.innerHTML = app.tabs.map((t, i) => {
       const doc = i === app.tabIdx ? app.doc : t.doc;
       return `<div class="dtab${i === app.tabIdx ? ' active' : ''}" data-tab="${i}" title="${escapeHTML(label(doc, i))}${i === app.tabIdx ? ' – nháy đúp để đặt tên' : i < 9 ? ` (Alt+${i + 1})` : ''}">
-        <span class="dt-name">${escapeHTML(label(doc, i))}</span><button class="dt-x" data-close="${i}" title="Đóng hình">✕</button></div>`;
+        <span class="dt-name">${escapeHTML(label(doc, i))}</span>${tabDirty(app, i) ? '<span class="dt-dot" title="Có thay đổi chưa lưu ra tệp hay kho"></span>' : ''}<button class="dt-x" data-close="${i}" title="Đóng hình">✕</button></div>`;
     }).join('') + '<button id="tab-new" class="dt-new" title="Hình mới (tab mới)">＋</button>';
     host.querySelector('.dtab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
   app.renderTabs = render;
   app.on('change', render);
   app.on('load', render);
+  app.on('saved', render);
   host.addEventListener('click', (e) => {
     const x = e.target.closest('[data-close]');
     if (x) { e.stopPropagation(); app.closeTab(+x.dataset.close); return; }

@@ -14,6 +14,8 @@ import { isDraggableType, PALETTE, setTheme } from '../core/styles.js';
 import { confirmDialog, promptDialog, toast } from './dialog.js';
 import { renderStepList, renderProps, renderToolOptions } from './panels.js';
 import { renameInText } from '../text/markup.js';
+import { tabDirty, tabDoc, isEmptyDoc } from './share.js';
+import { downloadFile } from './download.js';
 
 const HISTORY_MAX = 200;
 
@@ -74,6 +76,8 @@ export class App {
     else { this.undoStack = []; this.redoStack = []; }
     this.doc = clone(doc);
     this.takeImages(this.doc);
+    // hình mới nạp vào tab: chưa gắn với bài nào trong kho, chưa lưu
+    if (this.tabs && this.tabs[this.tabIdx] && !keepHistory) Object.assign(this.tabs[this.tabIdx], { kho: null, savedSig: null });
     this.imageSel = null;
     this.selection.clear();
     this.highlight.clear();
@@ -181,7 +185,8 @@ export class App {
   // Mỗi tab giữ hình, lịch sử hoàn tác/làm lại và khung nhìn riêng. Tab đang mở dùng trực tiếp this.doc,
   // this.undoStack… (như trước); khi đổi tab thì cất vào this.tabs[i] rồi lấy tab kia ra.
   initTabs() {
-    this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null }];
+    this.tabs = [{ doc: this.doc, undo: this.undoStack, redo: this.redoStack, bbox: null, kho: null, savedSig: null }];
+    this.closedTabs = []; // hình vừa đóng (để mở lại), tối đa 10
     this.tabIdx = 0;
   }
 
@@ -217,31 +222,46 @@ export class App {
     this.showTab(i);
   }
 
-  /** Mở một hình ở tab mới (doc = null: hình trống). */
-  newTab(doc = null) {
+  /** Mở một hình ở tab mới (doc = null: hình trống). meta: {kho, savedSig} – bài trong kho mà tab gắn với, chữ ký lần lưu cuối. */
+  newTab(doc = null, meta = {}) {
     this.stashTab();
     const d = doc ? clone(doc) : emptyDoc();
     this.takeImages(d);
-    this.tabs.push({ doc: d, undo: [], redo: [], bbox: null });
+    this.tabs.push({ doc: d, undo: [], redo: [], bbox: null, kho: meta.kho || null, savedSig: meta.savedSig || null });
     this.showTab(this.tabs.length - 1);
   }
 
   async closeTab(i) {
-    const t = i === this.tabIdx ? { doc: this.doc } : this.tabs[i];
-    const n = t.doc.steps.length + (t.doc.images?.length || 0);
-    if (n && !(await confirmDialog('Đóng hình', `Đóng hình <b>${escapeHTML(t.doc.title || 'chưa đặt tên')}</b>? Hình chưa lưu tệp sẽ mất.`, 'Đóng'))) return;
+    const t = i === this.tabIdx ? { ...this.tabs[i], doc: this.doc } : this.tabs[i];
+    // hình đã lưu (tệp/kho) và chưa sửa gì thêm thì đóng luôn; chưa lưu thì hỏi – dù sao vẫn mở lại được
+    if (tabDirty(this, i) && !(await confirmDialog('Đóng hình', `Hình <b>${escapeHTML(t.doc.title || 'chưa đặt tên')}</b> có thay đổi chưa lưu ra tệp hay kho. Đóng?<br><span class="note">Lỡ đóng thì vào <i>Tệp › Mở lại hình vừa đóng</i>.</span>`, 'Đóng'))) return;
     this.stashTab();
+    if (!isEmptyDoc(t.doc)) {
+      this.closedTabs.push({ doc: tabDoc(this, i), kho: t.kho || null, savedSig: t.savedSig || null });
+      if (this.closedTabs.length > 10) this.closedTabs.shift();
+    }
     const cur = this.tabIdx;
     this.tabs.splice(i, 1);
-    if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null });
+    if (!this.tabs.length) this.tabs.push({ doc: emptyDoc(), undo: [], redo: [], bbox: null, kho: null, savedSig: null });
     const next = i < cur ? cur - 1 : i === cur ? Math.min(i, this.tabs.length - 1) : cur;
     this.showTab(next);
   }
 
-  /** Mở hình (tệp, ví dụ, link): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. */
-  openDoc(doc) {
-    if (!this.doc.steps.length && !(this.doc.images || []).length) this.loadDoc(doc);
-    else this.newTab(doc);
+  /** Tệp › Mở lại hình vừa đóng. */
+  reopenTab() {
+    const c = this.closedTabs.pop();
+    if (!c) return toast('Chưa đóng hình nào trong lần mở trang này');
+    this.newTab(c.doc, c);
+    toast(`Đã mở lại "${c.doc.title || 'hình vừa đóng'}"`);
+  }
+
+  /** Mở hình (tệp, ví dụ, link, kho): dùng tab đang mở nếu nó trống, nếu không thì mở tab mới. meta như newTab. */
+  openDoc(doc, meta = {}) {
+    if (isEmptyDoc(this.doc)) {
+      this.loadDoc(doc);
+      Object.assign(this.tabs[this.tabIdx], { kho: meta.kho || null, savedSig: meta.savedSig || null });
+      this.emit('saved');
+    } else this.newTab(doc, meta);
   }
 
   pushUndo(snapshot) {
@@ -1274,13 +1294,7 @@ export class App {
       this.saveUserTools();
     } else if (action === 'export') {
       if (!this.userTools.length) return toast('Chưa có công cụ tự tạo nào');
-      const blob = new Blob([JSON.stringify({ format: 'hinh-hoc-dong-cong-cu', version: 1, tools: this.userTools }, null, 1)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'cong-cu-cua-toi.json';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      downloadFile('cong-cu-cua-toi.json', JSON.stringify({ format: 'hinh-hoc-dong-cong-cu', version: 1, tools: this.userTools }, null, 1), 'application/json');
     } else if (action === 'import') {
       const inp = document.createElement('input');
       inp.type = 'file';

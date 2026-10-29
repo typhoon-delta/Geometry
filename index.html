@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hình học động</title>
-<link rel="stylesheet" href="css/katex.css?v=1.4.2">
-<link rel="stylesheet" href="css/style.css?v=1.4.2">
+<link rel="stylesheet" href="css/katex.css?v=1.5">
+<link rel="stylesheet" href="css/style.css?v=1.5">
 </head>
 <body>
 <header id="topbar">
@@ -15,8 +15,12 @@
       <button class="menu-btn">Tệp</button>
       <div class="menu-pop">
         <button id="btn-new">Hình mới (tab mới)</button>
-        <button id="btn-open">Mở tệp… <kbd>Ctrl+O</kbd></button>
-        <button id="btn-save">Lưu tệp <kbd>Ctrl+S</kbd></button>
+        <button id="btn-open">Mở tệp (một hoặc nhiều)… <kbd>Ctrl+O</kbd></button>
+        <button id="btn-save">Lưu hình này ra tệp <kbd>Ctrl+S</kbd></button>
+        <button id="btn-save-all">Lưu tất cả các tab (một tệp) <kbd>Ctrl+Shift+S</kbd></button>
+        <button id="btn-reopen">Mở lại hình vừa đóng</button>
+        <button id="btn-restore">Khôi phục bản nháp cũ…</button>
+        <div class="menu-sep"></div>
         <button id="btn-share">Chia sẻ bằng link…</button>
         <button id="btn-tikz">Xuất TikZ…</button>
         <button id="btn-latex">Xuất phiếu LaTeX (.tex)…</button>
@@ -101,6 +105,6 @@
     <div id="tab-explore" class="tabpane"></div>
   </aside>
 </main>
-<script src="dist/app.js?v=1.4.2"></script>
+<script src="dist/app.js?v=1.5"></script>
 </body>
 </html>

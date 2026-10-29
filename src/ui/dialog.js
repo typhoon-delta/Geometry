@@ -1,6 +1,7 @@
 // Hộp thoại đơn giản (thay window.confirm/prompt để to, rõ trên máy chiếu và chạy được khi test tự động).
 
-function modal(build) {
+/** Hộp thoại tuỳ biến: build(box, close) dựng nội dung; trả về giá trị truyền cho close (Esc → null). */
+export function modal(build) {
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'modal-back';
@@ -93,5 +94,20 @@ export function textDialogEditable(title, text, hintHTML = '', extraLabel = '') 
     box.querySelector('.primary').onclick = () => close(ta.value);
     const ex = box.querySelector('.extra');
     if (ex) ex.onclick = () => close('\u0000default');
+  });
+}
+
+/** Hộp chọn một trong nhiều cách: choices = [{label, value, primary?}]. Trả về value đã chọn, null nếu Esc. */
+export function choiceDialog(title, messageHTML, choices) {
+  return modal((box, close) => {
+    box.innerHTML = `<h3>${esc(title)}</h3><div class="modal-body">${messageHTML}</div><div class="modal-actions wrap"></div>`;
+    const bar = box.querySelector('.modal-actions');
+    for (const c of choices) {
+      const b = document.createElement('button');
+      b.textContent = c.label;
+      if (c.primary) b.className = 'primary';
+      b.onclick = () => close(c.value);
+      bar.appendChild(b);
+    }
   });
 }
