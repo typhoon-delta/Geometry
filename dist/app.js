@@ -19906,9 +19906,9 @@
       const tabs = app.tabs.map((t2, i) => app.withImageData(i === app.tabIdx ? docWithView(app, false) : { ...t2.doc, ...t2.bbox ? { view: { bbox: roundBox(t2.bbox) } } : {} }));
       localStorage.setItem(TABS_KEY, JSON.stringify({ active: app.tabIdx, tabs }));
     } catch {
-      if (!draftWarned && app.tabs.some((t2) => (t2.doc.images || []).length)) {
+      if (!draftWarned) {
         draftWarned = true;
-        toast("Kh\xF4ng l\u01B0u nh\xE1p \u0111\u01B0\u1EE3c (\u1EA3nh qu\xE1 l\u1EDBn) \u2013 h\xE3y l\u01B0u t\u1EC7p (Ctrl+S)", 5e3);
+        toast("Kh\xF4ng l\u01B0u nh\xE1p \u0111\u01B0\u1EE3c trong tr\xECnh duy\u1EC7t (\u1EA3nh qu\xE1 l\u1EDBn ho\u1EB7c tr\xECnh duy\u1EC7t ch\u1EB7n l\u01B0u) \u2013 h\xE3y l\u01B0u t\u1EC7p (Ctrl+S)", 6e3);
       }
     }
   }

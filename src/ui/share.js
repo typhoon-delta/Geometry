@@ -22,7 +22,8 @@ function saveDraft(app) {
     localStorage.setItem(TABS_KEY, JSON.stringify({ active: app.tabIdx, tabs }));
   } catch {
     // chế độ riêng tư / bị chặn lưu trữ / ảnh quá lớn so với dung lượng lưu nháp
-    if (!draftWarned && app.tabs.some((t) => (t.doc.images || []).length)) { draftWarned = true; toast('Không lưu nháp được (ảnh quá lớn) – hãy lưu tệp (Ctrl+S)', 5000); }
+    // (ảnh nền hay ảnh đề trong khung chữ đều có thể làm vượt dung lượng – báo một lần, dù lỗi vì lý do gì)
+    if (!draftWarned) { draftWarned = true; toast('Không lưu nháp được trong trình duyệt (ảnh quá lớn hoặc trình duyệt chặn lưu) – hãy lưu tệp (Ctrl+S)', 6000); }
   }
 }
 
