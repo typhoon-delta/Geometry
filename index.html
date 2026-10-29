@@ -13,11 +13,13 @@
     <div class="menu">
       <button class="menu-btn">Tệp</button>
       <div class="menu-pop">
-        <button id="btn-new">Hình mới</button>
+        <button id="btn-new">Hình mới (tab mới)</button>
         <button id="btn-open">Mở tệp… <kbd>Ctrl+O</kbd></button>
         <button id="btn-save">Lưu tệp <kbd>Ctrl+S</kbd></button>
         <button id="btn-share">Chia sẻ bằng link…</button>
         <button id="btn-tikz">Xuất TikZ…</button>
+        <div class="menu-sep"></div>
+        <button id="btn-image">Chèn ảnh… <kbd>Ctrl+V</kbd></button>
       </div>
     </div>
     <div class="menu">
@@ -26,6 +28,7 @@
         <button id="menu-undo">Hoàn tác <kbd>Ctrl+Z</kbd></button>
         <button id="menu-redo">Làm lại <kbd>Ctrl+Y</kbd></button>
         <button id="btn-delete">Xoá đối tượng đang chọn <kbd>Delete</kbd></button>
+        <button id="btn-unlock-images">Mở khoá các ảnh nền</button>
       </div>
     </div>
     <div class="menu">
@@ -46,7 +49,7 @@
       <div class="menu-pop examples-pop" id="example-menu"></div>
     </div>
   </nav>
-  <input id="doc-title" type="text" placeholder="Tên hình…" title="Tên hình (dùng làm tên tệp)">
+  <div id="tabbar" title="Các hình đang mở"></div>
   <div class="spacer"></div>
   <button id="btn-undo" class="icon" title="Hoàn tác (Ctrl+Z)"></button>
   <button id="btn-redo" class="icon" title="Làm lại (Ctrl+Y)"></button>

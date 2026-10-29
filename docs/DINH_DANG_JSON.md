@@ -32,6 +32,8 @@ khám phá, xuất TikZ, và các công cụ dòng lệnh trong `scripts/`.
 | `format`, `version` | Luôn là `"hinh-hoc-dong"`, `1`. |
 | `title` | Tên hình (tuỳ chọn). |
 | `view.bbox` | Khung nhìn `[xTrái, yTrên, xPhải, yDưới]` (tuỳ chọn, chỉ để hiển thị). |
+| `images` | *(bản 1.3, tuỳ chọn)* Ảnh dán vào hình: `[{id, x, y, w, h, opacity?, locked?}]` – (x, y) là góc trên-trái theo toạ độ hình (y hướng lên), w × h theo đơn vị hình. Chỉ để hiển thị, không tham gia tính toán. |
+| `imageData` | *(bản 1.3, tuỳ chọn)* Dữ liệu ảnh `{id: "data:image/…;base64,…"}`. Có trong tệp `.json` và bản nháp, không có trong link chia sẻ. |
 | `steps[].id` | Mã định danh **bất biến** (không đổi khi đổi tên). Ứng dụng sinh dạng `s1, s2, …`. |
 | `steps[].type` | Loại bước (bảng dưới). |
 | `steps[].args` | Danh sách `id` của các bước trước, đúng kiểu yêu cầu. |

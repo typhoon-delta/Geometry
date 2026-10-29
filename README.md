@@ -14,7 +14,9 @@ mạng: bộ vẽ canvas tự viết, toàn bộ mã nằm trong `dist/app.js`).
   biến hình, mô hình – và **tự tạo công cụ** từ hình đã dựng.
 * Tua từng bước dựng khi giảng, chế độ trình chiếu nét đậm chữ to.
 * Đánh dấu kiểu sách giáo khoa (cung góc, vạch đoạn bằng nhau, tô nền).
-* Chia sẻ bằng link, lưu/mở tệp `.json`, tự lưu nháp.
+* **Nhiều tab hình** cùng lúc (mỗi tab có lịch sử hoàn tác riêng); **dán ảnh** (Ctrl+V, kéo thả) – vd ảnh đề bài,
+  hình gốc để đồ lại.
+* Chia sẻ bằng link, lưu/mở tệp `.json`, tự lưu nháp (mọi tab).
 * **Khám phá**: tự tìm các quan hệ ẩn (thẳng hàng, đồng viên, đồng quy, tiếp xúc…).
 * Xuất mã **TikZ** để dán vào LaTeX.
 * **Phòng thí nghiệm** (`lab/`, Python, chạy trên máy cá nhân): tự khám phá qua đêm các sự kiện hình học "lạ"
@@ -37,9 +39,11 @@ Trình duyệt khuyên dùng: Chrome, Edge, Firefox hoặc Safari bản mới.
 
 ### Giao diện
 
-* Thanh menu mỏng trên cùng: **Tệp** (mới, mở, lưu, chia sẻ link, xuất TikZ), **Sửa** (hoàn tác,
-  làm lại, xoá), **Hiển thị** (bộ kiểu *Đơn sắc* / *Sách giáo khoa*, lưới, đường thẳng vừa đủ, thu phóng vừa hình,
-  bảng các bước), **Ví dụ** (thư viện bài dựng sẵn theo nhóm và các hình mẫu).
+* Thanh menu mỏng trên cùng: **Tệp** (hình mới, mở, lưu, chia sẻ link, xuất TikZ, chèn ảnh), **Sửa** (hoàn tác,
+  làm lại, xoá, mở khoá ảnh nền), **Hiển thị** (bộ kiểu *Đơn sắc* / *Sách giáo khoa*, lưới, đường thẳng vừa đủ, thu phóng vừa hình,
+  bảng các bước), **Ví dụ** (thư viện bài dựng sẵn theo nhóm và các hình mẫu). Bên cạnh là **dải tab** các hình
+  đang mở: bấm để đổi hình, nháy đúp vào tab đang mở để đặt tên hình, ✕ để đóng, ＋ để mở hình mới. *Hình mới*, mở
+  tệp, mở ví dụ, mở link đều mở ở tab mới (nếu tab đang mở còn trống thì dùng luôn tab đó).
   Các nút biểu tượng bên phải: hoàn tác, làm lại, 🔍 khám phá, ▶ trình bày, ⛶ trình chiếu, ◫ bảng các bước.
 * **Thanh công cụ dọc** bên trái: mỗi biểu tượng là một nhóm (chọn/kéo, điểm, đường tròn, đoạn/tia/đường thẳng,
   dựng, đánh dấu, **Công cụ**). Bấm biểu tượng để dùng công cụ đang chọn của nhóm, đồng thời danh sách công cụ
@@ -52,7 +56,9 @@ Trình duyệt khuyên dùng: Chrome, Edge, Firefox hoặc Safari bản mới.
 
 Chọn công cụ rồi bấm lên bảng vẽ; thanh trạng thái cho biết cần chọn gì tiếp.
 
-* **Bấm vào chỗ trống** khi công cụ cần một điểm: tạo **điểm tự do**.
+* **Bấm vào chỗ trống** khi công cụ cần một điểm: tạo **điểm tự do**. Giữ **`Shift`** khi bấm thì hướng từ điểm vừa
+  chọn tới điểm mới được bắt về bội số của 15° – vd dựng tam giác: chọn B, giữ Shift chọn C → cạnh BC nằm ngang
+  thật chính xác (hình xem trước cũng được căn theo).
 * **Bấm lên một đường thẳng/đường tròn**: tạo **điểm trên đối tượng** (kéo được nhưng chỉ chạy trên đối tượng đó).
 * **Bấm gần chỗ hai đường cắt nhau**: tạo **giao điểm**.
 * Công cụ *Giao điểm*: bấm thẳng vào chỗ cắt, hoặc chọn lần lượt hai đường (tạo mọi giao điểm còn thiếu).
@@ -63,6 +69,8 @@ Chọn công cụ rồi bấm lên bảng vẽ; thanh trạng thái cho biết c
 * Mọi công cụ vẽ đường tròn đều **dựng kèm tâm** (không tạo thêm nếu tâm đã có). Tâm tự đặt tên O, O₁, O₂…
   (đường tròn ngoại tiếp/nội tiếp/Euler/bàng tiếp: O, I, N, I_A) để không chiếm các chữ cái của đề.
 * **Đặt tên ngay**: điểm vừa dựng được chọn sẵn – cứ gõ tên (vd `M_a` rồi Enter) mà không cần đổi công cụ.
+* Ảnh của một điểm qua **phép biến hình** (đối xứng, quay, vị tự, tịnh tiến, nghịch đảo, đồng dạng) tự lấy tên điểm
+  tạo ảnh thêm dấu phẩy: A → A′, ảnh của A′ → A″. Các công cụ dựng hình (tam giác đều, hình vuông…) vẫn đặt C, D.
 * Bấm vào chỗ nhiều đường cùng đi qua: giao điểm dựng từ hai đường **dựng sau cùng**. Hai điểm trùng chỗ: bấm chọn
   điểm dựng sau (nằm trên).
 * Điểm vừa dựng nằm ngoài khung nhìn: chương trình nhắc; phím `Home` thu phóng vừa hình.
@@ -92,7 +100,8 @@ lưu trong trình duyệt; *Xuất/Nhập* để mang sang máy khác. Nút ✕ 
 
 ### Kéo thả, chọn, sửa
 
-* Công cụ **Chọn / kéo**: kéo điểm tự do hoặc điểm trên đối tượng; kéo **nhãn** để dời nhãn; kéo nền để dời cả
+* Công cụ **Chọn / kéo**: kéo điểm tự do hoặc điểm trên đối tượng (giữ **`Shift`** khi kéo điểm tự do: đoạn/đường
+  nối với điểm đó được bắt về nằm ngang, thẳng đứng hoặc bội số của 15°); kéo **nhãn** để dời nhãn; kéo nền để dời cả
   hình; lăn chuột (hoặc chụm hai ngón trên màn hình cảm ứng) để phóng to/thu nhỏ.
 * Bấm vào đối tượng (trên hình hoặc trong bảng các bước) để chọn; giữ `Shift` để chọn nhiều. Thẻ thuộc tính
   cho đổi **tên**, **màu**, nét đứt, độ dày, tô nền nhạt, số cung/số vạch của dấu, ẩn đối tượng…
@@ -132,11 +141,21 @@ trên máy chiếu. Thoát: `Esc` hoặc nút ✕ ở góc trên.
 
 * *Tệp › Chia sẻ bằng link*: toàn bộ hình được nén vào chính đường link – gửi link là người nhận mở ra đúng hình.
 * *Tệp › Lưu tệp* (`Ctrl+S`): tải về tệp `.json`. *Tệp › Mở tệp* (`Ctrl+O`): mở lại tệp đó.
-* Hình đang làm được **tự lưu nháp** trong trình duyệt và khôi phục khi mở lại trang.
+* Các hình đang mở (mọi tab, kèm ảnh) được **tự lưu nháp** trong trình duyệt và khôi phục khi mở lại trang. Ảnh rất
+  lớn có thể vượt dung lượng lưu nháp – khi đó chương trình nhắc lưu tệp.
 * Menu **Ví dụ**: 13 bài IMO (2008–2025), 2 bài VMO, 7 cấu hình hay gặp (bổ đề tâm nội tiếp – bàng tiếp, Feuerbach,
   mixtilinear, nghịch đảo √(bc), Brocard, Monge, đồng dạng xoắn), một hình dày với I_A, I_B, I_C; cùng các hình mẫu
   cũ. Rê chuột lên tên bài để xem đề tóm tắt. Các hình được dựng qua giao diện trong đợt dùng thử bản 1.2 và đã kiểm
   chứng kết luận bằng số; tệp JSON ở `examples/thu-vien/`.
+
+### Dán ảnh
+
+Dán ảnh bằng `Ctrl+V` (ảnh chụp màn hình đề bài, hình trong tệp PDF…), kéo thả tệp ảnh vào bảng vẽ, hoặc *Tệp › Chèn
+ảnh…*. Ảnh nằm dưới mọi đối tượng hình học và đi theo hình khi phóng to/dời hình. Với công cụ Chọn: kéo ảnh để dời,
+kéo ô vuông góc dưới phải để đổi cỡ (giữ tỉ lệ), `Delete` để xoá; thẻ thuộc tính có *Độ đậm* và *Khoá làm nền* (ảnh
+khoá không bị chọn hay kéo nhầm khi đồ hình lên trên; mở lại ở *Sửa › Mở khoá các ảnh nền*). Ảnh được lưu trong tệp
+`.json` và bản nháp, nhưng **không** nằm trong link chia sẻ (link sẽ quá dài) và không xuất sang TikZ. Ảnh lớn hơn
+1600 px được thu nhỏ khi dán.
 
 ### Hiển thị
 
@@ -168,6 +187,8 @@ LaTeX. Chỉ cần `\usepackage{tikz}`. Đổi kích thước bằng cách sửa
 |---|---|
 | `Ctrl+Z` / `Ctrl+Y` | Hoàn tác / làm lại |
 | gõ chữ / `F2` | Đặt tên điểm đang chọn (vd điểm vừa dựng) |
+| `Ctrl+V` | Dán ảnh vào hình |
+| giữ `Shift` khi bấm / kéo điểm | Căn hướng: đường nằm ngang, thẳng đứng, bước 15° |
 | `Home` | Thu phóng vừa hình |
 | `Delete` | Xoá đối tượng đang chọn |
 | `Esc` | Huỷ thao tác / bỏ chọn / thoát trình chiếu |
