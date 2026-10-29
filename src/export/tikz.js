@@ -148,7 +148,9 @@ export function toTikZ(doc, opts = {}) {
       if (sub === 'segment' && s.type === 'segment') out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
       else if (sub === 'segment') out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(G.add(v.p, v.d))};`);
       else {
-        const seg = clipLine(v, box, sub === 'ray' ? 0 : -Infinity);
+        // kiểu "vừa đủ" (như trên màn hình): chỉ qua các điểm nằm trên đường, nhô ra 0,35–1,1 cm
+        const rg = opts.trimLines ? G.trimmedRange(v, sub, visible.filter((x) => k.get(x.id) === 'point').map((x) => vals.get(x.id)), 1e-9 * (box.x2 - box.x1), cm(0.35), cm(1.1)) : null;
+        const seg = rg ? [G.add(v.p, G.mul(v.d, rg[0])), G.add(v.p, G.mul(v.d, rg[1]))] : clipLine(v, box, sub === 'ray' ? 0 : -Infinity);
         if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub === 'ray' && s.type === 'ray' ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub === 'ray' ? 'tia' : 'đường thẳng'} ${desc}`);
         if (seg && st.showLabel && s.name) {
           const P = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };

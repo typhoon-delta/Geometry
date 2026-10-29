@@ -268,6 +268,52 @@ export function invertPoint(P, c) {
   return pt(c.c.x + k * dx, c.c.y + k * dy);
 }
 
+// ---- Nghịch đảo đường thẳng / đường tròn (bản 1.2) ----
+// Ảnh của đường tròn qua TÂM nghịch đảo là đường thẳng, của đường tròn không qua tâm là đường tròn; đường thẳng
+// qua tâm biến thành chính nó, không qua tâm thành đường tròn qua tâm. Loại đối tượng của ảnh phải cố định theo
+// cách dựng nên có hai hàm (hai loại bước): ảnh là đường thẳng / ảnh là đường tròn; cấu hình "sai loại" → null.
+const passesThrough = (X, O) => (X.kind === 'line' ? distPointLine(O, X) : Math.abs(dist(O, X.c) - X.r)) <= 1e-7 * (X.kind === 'line' ? Math.max(norm(X.d), dist(O, X.p)) : X.r);
+
+/** Ảnh qua phép nghịch đảo (đường tròn c) của đường thẳng/đường tròn X ĐI QUA tâm của c: một đường thẳng. */
+export function invertToLine(X, c) {
+  if (!X || !c) return null;
+  const O = c.c;
+  if (!passesThrough(X, O)) return null;
+  if (X.kind === 'line') return line(X.p, X.d);
+  // điểm đối tâm của O trên X → ảnh của nó nằm trên ảnh cần tìm, ảnh vuông góc với đường nối O với tâm X
+  const P = invertPoint(pt(2 * X.c.x - O.x, 2 * X.c.y - O.y), c);
+  return P ? line(P, perp(sub(X.c, O))) : null;
+}
+
+/** Ảnh qua phép nghịch đảo (đường tròn c) của đường thẳng/đường tròn X KHÔNG đi qua tâm của c: một đường tròn. */
+export function invertToCircle(X, c) {
+  if (!X || !c) return null;
+  const O = c.c, k2 = c.r * c.r;
+  if (passesThrough(X, O)) return null;
+  if (X.kind === 'line') {
+    const F = invertPoint(project(O, X), c);
+    return F ? circle(mid(O, F), dist(O, F) / 2) : null;
+  }
+  const v = sub(X.c, O), s = k2 / (dot(v, v) - X.r * X.r);
+  return circle(pt(O.x + s * v.x, O.y + s * v.y), Math.abs(s) * X.r);
+}
+
+/** Góc có hướng ∠ABC (từ tia BA sang tia BC, ngược chiều kim đồng hồ), độ, trong (−180°, 180°]. */
+export function directedAngle(A, B, C) {
+  const u = sub(A, B), v = sub(C, B);
+  if (norm(u) < EPS || norm(v) < EPS) return null;
+  return (Math.atan2(cross(u, v), dot(u, v)) * 180) / Math.PI;
+}
+
+/** Phép đồng dạng thuận tâm O biến A thành B (quay góc ∠AOB, vị tự tỉ số OB/OA). */
+export function spiralPoint(P, O, A, B) {
+  const a = sub(A, O), b = sub(B, O), a2 = dot(a, a);
+  if (a2 < EPS * EPS) return null;
+  const re = dot(a, b) / a2, im = cross(a, b) / a2; // (B−O)/(A−O) dạng số phức
+  const x = P.x - O.x, y = P.y - O.y;
+  return pt(O.x + re * x - im * y, O.y + im * x + re * y);
+}
+
 /** Áp một phép biến đổi điểm f cho điểm / đường thẳng / đường tròn (phép đồng dạng). */
 export function mapObject(X, f) {
   if (!X) return null;
@@ -434,4 +480,29 @@ export function mixtilinear(A, B, C, external = false) {
   const t = (-2 * (dot(u, AO) + (external ? -1 : 1) * circ.r * s)) / c2;
   if (!(t > 0)) return null;
   return circle(pt(A.x + t * u.x, A.y + t * u.y), t * s);
+}
+
+/**
+ * Đoạn cần vẽ của một đường thẳng/tia kiểu sách (bản 1.2): từ điểm ngoài cùng tới điểm ngoài cùng trong số các
+ * điểm NẰM TRÊN đường, nhô ra mỗi đầu `ext` = kẹp(15% độ dài, minExt, maxExt). Dùng chung cho màn hình (toạ độ
+ * px) và TikZ (toạ độ hình). Ít hơn 2 điểm nằm trên đường → null (để bên gọi cắt theo khung hình như cũ).
+ * Trả về [t0, t1] theo tham số p + t·d của đường.
+ */
+export function trimmedRange(l, sub, pts, tol, minExt, maxExt) {
+  const dd = Math.hypot(l.d.x, l.d.y);
+  if (!(dd > 0)) return null;
+  let t0 = Infinity, t1 = -Infinity, n = 0;
+  for (const P of pts) {
+    const ex = P.x - l.p.x, ey = P.y - l.p.y;
+    if (Math.abs(l.d.x * ey - l.d.y * ex) / dd > tol) continue;
+    const t = (ex * l.d.x + ey * l.d.y) / (dd * dd);
+    if (sub === 'ray' && t < -1e-9) continue;
+    if (t < t0) t0 = t;
+    if (t > t1) t1 = t;
+    n++;
+  }
+  if (sub === 'ray') { t0 = 0; if (n < 1) return null; } else if (n < 2) return null;
+  const len = (t1 - t0) * dd;
+  const ext = Math.min(maxExt, Math.max(minExt, 0.15 * len)) / dd;
+  return [sub === 'ray' ? 0 : t0 - ext, t1 + ext];
 }

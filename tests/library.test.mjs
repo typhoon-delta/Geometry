@@ -488,6 +488,55 @@ const CHECKS = {
     const r = apply('invert', (f) => [f.X, f.c1]);
     const Y = r.of('invert')[0];
     r.check((v) => { const c = v(r.c1); near(G.dist(c.c, v(r.X)) * G.dist(c.c, v(Y)), c.r * c.r, 'OX·OY ≠ r²'); col(c.c, v(r.X), v(Y)); });
+    // bản 1.2: ảnh của đường tròn / đường thẳng – mọi điểm của X có ảnh nằm trên ảnh của X
+    const onImage = (rr, X, img) => rr.check((v) => {
+      const k = v(rr.c1), x = v(X), y = v(img);
+      for (const t of [0.3, 1.7, 2.9, 4.4]) {
+        const P = G.invertPoint(x.kind === 'circle' ? G.pointOn(x, t) : G.pointOn(x, t - 2), k);
+        if (y.kind === 'circle') onC(P, y, 'ảnh của một điểm không nằm trên đường tròn ảnh'); else onL(P, y, 'ảnh của một điểm không nằm trên đường thẳng ảnh');
+      }
+    });
+    const r2 = apply('invert', (f) => [f.c2, f.c1]);
+    assert.equal(r2.of('invert_circle').length, 1, 'đường tròn không qua tâm → ảnh là đường tròn');
+    onImage(r2, r2.c2, r2.of('invert_circle')[0]);
+    const r3 = apply('invert', (f) => [f.d, f.c1]);
+    onImage(r3, r3.d, r3.of('invert_circle')[0]);
+    // đường tròn qua tâm nghịch đảo → đường thẳng
+    const f4 = fixture();
+    const thr = new Builder(f4.doc).add('circle', [f4.X, f4.doc.steps.find((x) => x.name === 'O_1').id]);
+    runTool(f4.doc, LIBRARY.find((t) => t.id === 'invert'), [thr, f4.c1]);
+    const img = f4.doc.steps.find((x) => x.type === 'invert_line');
+    assert.ok(img, 'đường tròn qua tâm → ảnh là đường thẳng');
+    for (const v of samples(f4.doc)) {
+      const k = v.get(f4.c1), x = v.get(thr), y = v.get(img.id);
+      for (const t of [0.5, 2, 4]) { const P = G.pointOn(x, t); if (G.dist(P, k.c) > 1e-3) onL(G.invertPoint(P, k), y); }
+    }
+  },
+  rotate_by: () => {
+    // quay P quanh A một góc bằng ∠BCQ (lấy trên hình) – đổi theo khi kéo
+    const r = apply('rotate_by', (f) => [f.P, f.A, f.B, f.C, f.Q]);
+    const X = r.of('rotate_by')[0];
+    r.check((v) => { near(G.dist(v(r.A), v(X)), G.dist(v(r.A), v(r.P))); near(ang(G.sub(v(r.P), v(r.A)), G.sub(v(X), v(r.A))), ang(G.sub(v(r.B), v(r.C)), G.sub(v(r.Q), v(r.C))), 'góc quay ≠ ∠BCQ'); });
+  },
+  homothety_by: () => {
+    const r = apply('homothety_by', (f) => [f.P, f.A, f.B, f.C, f.X, f.Q], { k: -1 });
+    const X = r.of('homothety_by')[0];
+    r.check((v) => nearP(G.sub(v(X), v(r.A)), G.mul(G.sub(v(r.P), v(r.A)), -G.dist(v(r.B), v(r.C)) / G.dist(v(r.X), v(r.Q)))));
+    const r2 = apply('homothety_by', (f) => [f.c1, f.A, f.B, f.C, f.X, f.Q]);
+    const c = r2.of('homothety_by')[0];
+    r2.check((v) => near(v(c).r, (v(r2.c1).r * G.dist(v(r2.B), v(r2.C))) / G.dist(v(r2.X), v(r2.Q))));
+  },
+  spiral: () => {
+    // đồng dạng tâm P biến A thành B: biến B thành điểm Y với tam giác PAB ∼ PBY (cùng hướng)
+    const r = apply('spiral', (f) => [f.B, f.P, f.A, f.B]);
+    const Y = r.of('spiral')[0];
+    r.check((v) => {
+      const [P, A, B, y] = [v(r.P), v(r.A), v(r.B), v(Y)];
+      near(G.dist(P, y) / G.dist(P, B), G.dist(P, B) / G.dist(P, A), 'tỉ số');
+      near(ang(G.sub(B, P), G.sub(y, P)), ang(G.sub(A, P), G.sub(B, P)), 'góc quay');
+    });
+    const r2 = apply('spiral', (f) => [f.A, f.P, f.A, f.B]);
+    r2.check((v) => nearP(v(r2.of('spiral')[0]), v(r2.B), 'ảnh của A phải là B'));
   },
   projection: () => {
     const r = apply('projection', (f) => [f.P, f.d]);

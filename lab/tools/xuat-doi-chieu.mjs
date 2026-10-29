@@ -49,6 +49,7 @@ function picksFor(tool, f) {
     reflect_point: [f.P, f.A], rotate: [f.P, f.A], homothety: [f.P, f.A], translate: [f.P, f.B, f.C],
     isogonal_line: [f.B, f.A, f.C, f.P], ext_bisector: [f.B, f.A, f.C], int_ext_bisector: [f.B, f.A, f.C],
     radical_center: [f.c1, f.c2, f.c3],
+    rotate_by: [f.P, f.A, f.B, f.C, f.Q], homothety_by: [f.P, f.A, f.B, f.C, f.X, f.Q], spiral: [f.B, f.P, f.A, f.B],
   };
   if (special[tool.id]) return special[tool.id];
   const pts = [f.A, f.B, f.C, f.P];
@@ -108,9 +109,10 @@ for (const tool of LIBRARY) {
   cases.push(caseOf('cong-cu:' + tool.id, f.doc, false));
 }
 // biến thể: biến hình áp cho đường tròn / đường thẳng
-for (const [id, picks, opts] of [['reflect_point', (f) => [f.c1, f.A], {}], ['rotate', (f) => [f.d, f.A], { angle: 90 }], ['homothety', (f) => [f.c1, f.A], { k: 3 }], ['reflect_line', (f) => [f.c2, f.d], {}]]) {
+for (const [id, picks, opts] of [['reflect_point', (f) => [f.c1, f.A], {}], ['rotate', (f) => [f.d, f.A], { angle: 90 }], ['homothety', (f) => [f.c1, f.A], { k: 3 }], ['reflect_line', (f) => [f.c2, f.d], {}],
+  ['invert', (f) => [f.c2, f.c1], {}], ['invert', (f) => [f.d, f.c1], {}], ['homothety_by', (f) => [f.c1, f.A, f.B, f.C, f.X, f.Q], { k: -1 }], ['spiral', (f) => [f.c2, f.P, f.A, f.B], {}]]) {
   const f = fixture();
   runTool(f.doc, LIBRARY.find((t) => t.id === id), picks(f), opts);
-  cases.push(caseOf(`cong-cu:${id}:bien-the`, f.doc, false));
+  cases.push(caseOf(`cong-cu:${id}:bien-the${cases.filter((c) => c.name.startsWith(`cong-cu:${id}:bien-the`)).length || ''}`, f.doc, false));
 }
 console.log(JSON.stringify({ format: 'doi-chieu-js', cases }));

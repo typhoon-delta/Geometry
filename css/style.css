@@ -65,6 +65,9 @@ body.panel-open #side { display: flex; }
 .tb-group { position: relative; }
 .tb-btn { width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; color: #27272a; position: relative; border-radius: 6px; }
 .tb-group.active > .tb-btn { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px #bfd2ff; }
+.tb-recent { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; align-items: center; }
+.tb-rc { width: 36px; height: 28px; padding: 0; font: 600 12px 'Times New Roman', 'Liberation Serif', serif; color: #52525b; overflow: hidden; white-space: nowrap; border-radius: 5px; }
+.tb-rc.active { background: var(--accent-soft); color: var(--accent); }
 .tb-more { position: absolute; right: 3px; bottom: 3px; width: 0; height: 0; border-left: 4px solid transparent; border-bottom: 4px solid currentColor; opacity: .6; }
 .flyout {
   display: none; position: absolute; left: 40px; top: 0; z-index: 60; background: #fff; border: 1px solid var(--line); border-radius: 7px;
@@ -104,6 +107,11 @@ body.panel-open #side { display: flex; }
   box-shadow: 0 6px 18px rgba(0, 0, 0, .10); padding: 8px 10px; font-size: 13px;
 }
 #props { right: 10px; top: 10px; width: 260px; max-height: calc(100% - 50px); overflow-y: auto; }
+#props.alt { top: auto; bottom: 40px; }
+.inline-name {
+  position: absolute; z-index: 40; width: 86px; font: italic 16px 'Times New Roman', 'Liberation Serif', Times, serif; padding: 2px 5px;
+  border: 1px solid var(--accent); border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); outline: none;
+}
 #props.show, #tool-options.show { display: block; }
 #tool-options { left: 10px; top: 10px; width: 230px; }
 .prop-title { font-weight: 600; margin-bottom: 6px; }

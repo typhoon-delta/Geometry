@@ -45,7 +45,7 @@ function start() {
   document.getElementById('btn-tikz').onclick = () => {
     const vis = app.visibleSet();
     const doc = vis ? { ...app.doc, steps: app.doc.steps.map((s) => (vis.has(s.id) ? s : { ...s, hidden: true })) } : app.doc;
-    textDialog('Mã TikZ', toTikZ(doc, { values: app.values, theme: app.theme }),
+    textDialog('Mã TikZ', toTikZ(doc, { values: app.values, theme: app.theme, trimLines: app.renderer.trimLines }),
       `<div class="modal-body">Theo bộ kiểu đang chọn (<b>${app.theme === 'mono' ? 'Đơn sắc' : 'Sách giáo khoa'}</b>). Dán vào tài liệu LaTeX (chỉ cần <code>\\usepackage{tikz}</code>). Đổi kích thước bằng cách sửa <code>x=…, y=…</code>.</div>`);
   };
 

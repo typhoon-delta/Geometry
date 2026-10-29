@@ -261,6 +261,37 @@ export const STEP_TYPES = {
     kind: 'point', args: ['point', 'circle'], label: 'Phép nghịch đảo',
     compute: ([P, c]) => G.invertPoint(P, c),
   },
+  invert_line: {
+    // Ảnh của đường thẳng/đường tròn đi qua tâm nghịch đảo (bản 1.2).
+    kind: 'line', args: ['curve', 'circle'], label: 'Nghịch đảo (ảnh là đường thẳng)',
+    compute: ([X, c]) => G.invertToLine(X, c),
+  },
+  invert_circle: {
+    // Ảnh của đường thẳng/đường tròn không qua tâm nghịch đảo (bản 1.2).
+    kind: 'circle', args: ['curve', 'circle'], label: 'Nghịch đảo (ảnh là đường tròn)',
+    compute: ([X, c]) => G.invertToCircle(X, c),
+  },
+  rotate_by: {
+    // Quay X quanh O một góc bằng góc có hướng ∠ABC LẤY TRÊN HÌNH (args: X, O, A, B, C) – kéo hình góc đổi theo.
+    kind: 'same', args: ['obj', 'point', 'point', 'point', 'point'], label: 'Phép quay theo góc trên hình',
+    compute: ([X, O, A, B, C]) => { const a = G.directedAngle(A, B, C); return a == null ? null : G.mapObject(X, (P) => G.rotatePoint(P, O, a)); },
+  },
+  homothety_by: {
+    // Vị tự X tâm O, tỉ số AB/CD LẤY TRÊN HÌNH (args: X, O, A, B, C, D); params.negative: tỉ số âm.
+    kind: 'same', args: ['obj', 'point', 'point', 'point', 'point', 'point'], params: { negative: false }, label: 'Phép vị tự theo tỉ số trên hình',
+    compute: ([X, O, A, B, C, D], p) => {
+      const cd = G.dist(C, D);
+      if (cd < G.EPS) return null;
+      const k = ((p.negative ? -1 : 1) * G.dist(A, B)) / cd;
+      return G.mapObject(X, (P) => G.homothetyPoint(P, O, k));
+    },
+    facts: (s, kinds) => (kinds[0] === 'point' ? [{ col: [s.args[1], s.args[0], s.id] }] : []),
+  },
+  spiral: {
+    // Phép đồng dạng (quay + vị tự) tâm O biến A thành B, áp cho X (args: X, O, A, B).
+    kind: 'same', args: ['obj', 'point', 'point', 'point'], label: 'Phép đồng dạng tâm O biến A thành B',
+    compute: ([X, O, A, B]) => (G.dist(A, O) < G.EPS ? null : G.mapObject(X, (P) => G.spiralPoint(P, O, A, B))),
+  },
   tangent_at: {
     kind: 'line', args: ['circle', 'point'], label: 'Tiếp tuyến tại một điểm',
     compute: ([c, P]) => G.tangentAt(c, P),

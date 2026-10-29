@@ -68,7 +68,7 @@ window.__T = (() => {
       let clear = 30;
       for (const h of others) clear = Math.min(clear, h.d);
       // khoảng cách tới điểm gần nhất
-      for (const s of A().doc.steps) { const w = val(s.id); if (!s.hidden && w && w.kind === 'point') clear = Math.min(clear, Math.hypot(scr(w).x - q.x, scr(w).y - q.y) / 1.6); }
+      for (const s of A().doc.steps) { const w = val(s.id); if (!s.hidden && w && w.kind === 'point') clear = Math.min(clear, Math.hypot(scr(w).x - q.x, scr(w).y - q.y) - 10); }
       let score = clear;
       if (near) { const nq = scr(near); score = Math.min(clear, 12) * 4 - Math.hypot(nq.x - q.x, nq.y - q.y) * 0.05; }
       if (clear >= 6 && (!best || score > best.score)) best = { score, x: q.x, y: q.y, clear };
@@ -282,6 +282,12 @@ export class NguoiDung {
     if (key) {
       await page.keyboard.press(key);
       this.keys++;
+      if ((await this.currentTool()) === id) return;
+    }
+    // công cụ vừa dùng: một lần bấm ở cuối thanh dọc
+    if (await this.ev((id) => !!document.querySelector(`#tools [data-recent="${id}"]`), id)) {
+      this.clicks++;
+      await page.click(`#tools [data-recent="${id}"]`);
       if ((await this.currentTool()) === id) return;
     }
     const info = await this.ev((id) => {

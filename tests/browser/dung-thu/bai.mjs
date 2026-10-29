@@ -514,7 +514,7 @@ export const BAI = [
       const tp = pointsMade(u)[0];
       await u.rename(tp.id, 'T');
       await u.use('circle', 'A', 'T'); u.refs.k = circleId(u);
-      const canCircle = await u.ev(() => window.GeoCore.STEP_TYPES.invert.args[0] !== 'point');
+      const canCircle = await u.ev(() => !!window.GeoCore.STEP_TYPES.invert_circle);
       if (canCircle) {
         await u.use('invert', { id: u.refs.w }, { id: u.refs.k }); u.refs.wi = lineId(u);
         await u.use('reflect', { id: u.refs.wi }, { id: u.refs.d }); u.refs.wr = lineId(u);
@@ -609,7 +609,8 @@ export const BAI = [
         await u.use('segment', 'S', 'B'); await u.use('segment', 'S', 'D');
       }
     },
-    check: (V, H) => { const S = V('S'), A = V('A'), B = V('B'), C = V('C'), D = V('D'); const k = H.d(S, C) / H.d(S, A); const R = H.G().rotatePoint(B, S, (H.G().cross(H.G().sub(A, S), H.G().sub(C, S)) >= 0 ? 1 : -1) * H.angle(A, S, C) * 180 / Math.PI); const D2 = H.G().homothetyPoint(R, S, k); return H.d(D2, D) / H.d(S, D); },
+    // bản có công cụ góc/tỉ số trên hình: D' (ảnh của B) phải trùng D; bản cũ: kiểm bằng công thức
+    check: (V, H) => { let D2 = null; try { D2 = V("D'"); } catch (e) { if (e.message === 'undef') throw e; } if (D2) return H.d(D2, V('D')) / H.d(V('S'), V('D')); const S = V('S'), A = V('A'), B = V('B'), C = V('C'), D = V('D'); const k = H.d(S, C) / H.d(S, A); const R = H.G().rotatePoint(B, S, (H.G().cross(H.G().sub(A, S), H.G().sub(C, S)) >= 0 ? 1 : -1) * H.angle(A, S, C) * 180 / Math.PI); const D3 = H.G().homothetyPoint(R, S, k); return H.d(D3, D) / H.d(S, D); },
   },
   {
     id: 'hinh-day', nhom: 'Hình dày', ten: 'Tam giác với ba tâm bàng tiếp (hình dày)',
