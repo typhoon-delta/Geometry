@@ -751,6 +751,10 @@ Viết lại `css/style.css` thành một hệ thống thống nhất dựa trê
   biểu tượng SVG chỉ hiện khi rê chuột, thân khung chữ có chân; bộ soạn chữ đơn cách **không ghép ký tự** (`=>` hiện đúng
   hai ký tự đã gõ).
 * Menu *Ví dụ* nhiều cột không còn tràn khỏi màn hình; menu không bị xuống dòng khi mở nhiều tab.
+* **Chuyển tab bằng phím**: `Alt+1`…`Alt+9`, `Alt+PageUp`/`Alt+PageDown` (bù hạn chế của bản 1.3: `Ctrl+Tab` bị trình duyệt
+  giữ). Rê chuột lên tab thấy phím tắt.
+* `index.html` gắn số phiên bản vào đường dẫn (`dist/app.js?v=1.4`…): khi dùng thử, trình duyệt từng giữ `app.js`/`style.css`
+  cũ trong bộ nhớ đệm trong khi `index.html` đã mới → mất dải tab, giao diện lẫn cũ mới. Mỗi bản sau cần tăng số này.
 
 ## 4. Kiểm thử
 

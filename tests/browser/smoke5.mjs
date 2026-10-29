@@ -130,5 +130,15 @@ export async function run({ page, ok, shot, state, clickAt, errors }) {
   ok((await page.evaluate(() => __app.doc.boxes.length)) === 1, 'xoá khung (có hỏi lại)');
   await page.keyboard.press('Control+z');
   ok((await page.evaluate(() => __app.doc.boxes.length)) === 2, 'hoàn tác xoá khung');
+
+  // ---- chuyển tab bằng bàn phím ----
+  await page.mouse.click(300, 700);
+  const n = await page.evaluate(() => __app.tabs.length);
+  await page.keyboard.press('Alt+1');
+  ok((await page.evaluate(() => __app.tabIdx)) === 0, 'Alt+1: sang tab đầu');
+  await page.keyboard.press('Alt+PageUp');
+  ok((await page.evaluate(() => __app.tabIdx)) === n - 1, 'Alt+PageUp: vòng về tab cuối');
+  await page.keyboard.press('Alt+PageDown');
+  ok((await page.evaluate(() => __app.tabIdx)) === 0, 'Alt+PageDown: tab sau');
   ok(errors.length === 0, 'không có lỗi JS: ' + errors.join(' | '));
 }

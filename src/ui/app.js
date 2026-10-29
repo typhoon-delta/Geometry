@@ -1160,6 +1160,13 @@ export class App {
       const ctrl = e.ctrlKey || e.metaKey;
       // Ctrl+Enter: soạn lời giải (khung chữ), con trỏ ở cuối
       if (ctrl && e.key === 'Enter' && this.mode === 'edit' && this.textBoxes) { e.preventDefault(); this.textBoxes.editSolution(); return; }
+      // chuyển tab hình: Alt+1…9 (tab thứ n), Alt+PageUp/PageDown (tab trước/sau) – Ctrl+Tab bị trình duyệt giữ
+      if (e.altKey && !ctrl && this.tabs.length > 1) {
+        const d = /^Digit([1-9])$/.exec(e.code);
+        const n = this.tabs.length;
+        if (d) { e.preventDefault(); this.switchTab(Math.min(+d[1], n) - 1); return; }
+        if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); this.switchTab((this.tabIdx + (e.key === 'PageDown' ? 1 : n - 1)) % n); return; }
+      }
       if (ctrl && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) { e.preventDefault(); this.undo(); return; }
       if (ctrl && (e.key === 'y' || e.key === 'Y' || ((e.key === 'z' || e.key === 'Z') && e.shiftKey))) { e.preventDefault(); this.redo(); return; }
       if (this.mode === 'present') {

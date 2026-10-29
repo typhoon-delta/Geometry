@@ -45,7 +45,7 @@ Trình duyệt khuyên dùng: Chrome, Edge, Firefox hoặc Safari bản mới.
 * Thanh menu trên cùng: **Tệp** (hình mới, mở, lưu, chia sẻ link, xuất TikZ, xuất phiếu LaTeX), **Sửa** (hoàn tác,
   làm lại, xoá, mở khoá ảnh nền), **Hiển thị** (bộ kiểu *Đơn sắc* / *Sách giáo khoa*, lưới, đường thẳng vừa đủ, thu phóng vừa hình,
   bảng các bước), **Chèn** (khung lời giải, khung đề bài, khung ghi chú, ảnh đề bài, ảnh nền để đồ hình, bộ gõ tắt), **Ví dụ** (thư viện bài dựng sẵn theo nhóm và các hình mẫu). Bên cạnh là **dải tab** các hình
-  đang mở: bấm để đổi hình, nháy đúp vào tab đang mở để đặt tên hình, ✕ để đóng, ＋ để mở hình mới. *Hình mới*, mở
+  đang mở: bấm để đổi hình (hoặc `Alt+1`…`Alt+9`, `Alt+PageUp`/`Alt+PageDown`), nháy đúp vào tab đang mở để đặt tên hình, ✕ để đóng, ＋ để mở hình mới. *Hình mới*, mở
   tệp, mở ví dụ, mở link đều mở ở tab mới (nếu tab đang mở còn trống thì dùng luôn tab đó).
   Các nút biểu tượng bên phải: hoàn tác, làm lại, 🔍 khám phá, ▶ trình bày, ⛶ trình chiếu, ◫ bảng các bước.
 * **Thanh công cụ dọc** bên trái: mỗi biểu tượng là một nhóm (chọn/kéo, điểm, đường tròn, đoạn/tia/đường thẳng,
@@ -229,6 +229,7 @@ LaTeX. Chỉ cần `\usepackage{tikz}`. Đổi kích thước bằng cách sửa
 | `Ctrl+Z` / `Ctrl+Y` | Hoàn tác / làm lại |
 | gõ chữ / `F2` | Đặt tên điểm đang chọn (vd điểm vừa dựng) |
 | `Ctrl+V` | Dán ảnh: thành khung Đề bài (đang soạn chữ: chèn vào chữ) |
+| `Alt+1`…`Alt+9`, `Alt+PageUp`/`PageDown` | Sang tab hình thứ n / tab trước, tab sau |
 | `Ctrl+Enter` | Soạn lời giải; trong bộ soạn: sang bước mới |
 | trong bộ soạn: `Tab`, `Ctrl+M`, `Ctrl+Space`, `Esc` | Gõ tắt / nhảy ô; bọc `$…$`; gợi ý tên điểm; xong |
 | giữ `Shift` khi bấm / kéo điểm | Căn hướng: đường nằm ngang, thẳng đứng, bước 15° |

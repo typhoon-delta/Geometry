@@ -9,7 +9,7 @@ export function setupTabBar(app) {
     if (host.querySelector('input')) return; // đang đặt tên
     host.innerHTML = app.tabs.map((t, i) => {
       const doc = i === app.tabIdx ? app.doc : t.doc;
-      return `<div class="dtab${i === app.tabIdx ? ' active' : ''}" data-tab="${i}" title="${escapeHTML(label(doc, i))}${i === app.tabIdx ? ' – nháy đúp để đặt tên' : ''}">
+      return `<div class="dtab${i === app.tabIdx ? ' active' : ''}" data-tab="${i}" title="${escapeHTML(label(doc, i))}${i === app.tabIdx ? ' – nháy đúp để đặt tên' : i < 9 ? ` (Alt+${i + 1})` : ''}">
         <span class="dt-name">${escapeHTML(label(doc, i))}</span><button class="dt-x" data-close="${i}" title="Đóng hình">✕</button></div>`;
     }).join('') + '<button id="tab-new" class="dt-new" title="Hình mới (tab mới)">＋</button>';
     host.querySelector('.dtab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });

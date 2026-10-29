@@ -4498,6 +4498,20 @@
           this.textBoxes.editSolution();
           return;
         }
+        if (e.altKey && !ctrl && this.tabs.length > 1) {
+          const d = /^Digit([1-9])$/.exec(e.code);
+          const n = this.tabs.length;
+          if (d) {
+            e.preventDefault();
+            this.switchTab(Math.min(+d[1], n) - 1);
+            return;
+          }
+          if (e.key === "PageDown" || e.key === "PageUp") {
+            e.preventDefault();
+            this.switchTab((this.tabIdx + (e.key === "PageDown" ? 1 : n - 1)) % n);
+            return;
+          }
+        }
         if (ctrl && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
           e.preventDefault();
           this.undo();
@@ -11393,7 +11407,7 @@
       if (host.querySelector("input")) return;
       host.innerHTML = app.tabs.map((t2, i) => {
         const doc2 = i === app.tabIdx ? app.doc : t2.doc;
-        return `<div class="dtab${i === app.tabIdx ? " active" : ""}" data-tab="${i}" title="${escapeHTML(label(doc2, i))}${i === app.tabIdx ? " \u2013 nh\xE1y \u0111\xFAp \u0111\u1EC3 \u0111\u1EB7t t\xEAn" : ""}">
+        return `<div class="dtab${i === app.tabIdx ? " active" : ""}" data-tab="${i}" title="${escapeHTML(label(doc2, i))}${i === app.tabIdx ? " \u2013 nh\xE1y \u0111\xFAp \u0111\u1EC3 \u0111\u1EB7t t\xEAn" : i < 9 ? ` (Alt+${i + 1})` : ""}">
         <span class="dt-name">${escapeHTML(label(doc2, i))}</span><button class="dt-x" data-close="${i}" title="\u0110\xF3ng h\xECnh">\u2715</button></div>`;
       }).join("") + '<button id="tab-new" class="dt-new" title="H\xECnh m\u1EDBi (tab m\u1EDBi)">\uFF0B</button>';
       host.querySelector(".dtab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
