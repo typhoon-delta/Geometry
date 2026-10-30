@@ -31,6 +31,7 @@ class StepType:
     params: dict = field(default_factory=dict)
     facts: Callable | None = None
     tag: str | None = None
+    sampler: bool = False  # bản 1.7: bước "dời thử" (điểm cố định, quỹ tích) – tính trong model.py
 
 
 def _tri(f):
@@ -85,6 +86,31 @@ def _homothety_by(a, p):
         return None
     k = (-1 if p.get("negative") else 1) * G.dist(A, B) / cd
     return G.map_object(X, lambda P: G.homothety_point(P, O, k))
+
+
+def _angle_line(O, X, A, B, C, flip):
+    """Đường qua O tạo với tia OX góc bằng ∠ABC (cùng hướng góc mẫu; flip: phía bên kia)."""
+    a = G.directed_angle(A, B, C)
+    if a is None or G.dist(O, X) < G.EPS:
+        return None
+    return G.line_through(O, G.rotate_point(X, O, -a if flip else a))
+
+
+def _angle_point(a, p):
+    m = _angle_line(a[0], a[1], a[2], a[3], a[4], p.get("flip"))
+    return None if m is None else G.intersect_ll(m, a[5])
+
+
+def _measure_angle(a, p):
+    ang = G.directed_angle(a[0], a[1], a[2])
+    return None if ang is None else {"kind": "measure", "m": "angle", "value": abs(ang), "at": {"x": a[1].x, "y": a[1].y}}
+
+
+def _measure_ratio(a, p):
+    cd = G.dist(a[2], a[3])
+    if cd < G.EPS:
+        return None
+    return {"kind": "measure", "m": "ratio", "value": G.dist(a[0], a[1]) / cd, "at": {"x": (a[0].x + a[1].x) / 2, "y": (a[0].y + a[1].y) / 2}}
 
 
 def _reflect_facts(s, kinds, doc=None):
@@ -367,6 +393,34 @@ STEP_TYPES: dict[str, StepType] = {
         "Đường tròn đường kính", {},
         lambda s, k=None, d=None: [{"on": [s["args"][0], s["id"]]}, {"on": [s["args"][1], s["id"]]}],
     ),
+    # ---------- BẢN 1.7: góc bằng góc, điểm trong tam giác, điểm cố định, quỹ tích, đo đạc ----------
+    "angle_line": StepType(
+        "line", ["point"] * 5, lambda a, p: _angle_line(a[0], a[1], a[2], a[3], a[4], p.get("flip")),
+        "Đường tạo góc bằng góc cho trước", {"flip": False}, lambda s, k, d=None: [{"on": [s["args"][0], s["id"]]}],
+    ),
+    "angle_point": StepType(
+        "point", ["point"] * 5 + ["line"], _angle_point, "Điểm trên đường tạo góc bằng góc cho trước", {"flip": False},
+        lambda s, k, d=None: [{"on": [s["id"], s["args"][5]]}],
+    ),
+    "point_in": StepType(
+        "point", PT3,
+        lambda a, p: G.pt(a[0].x + p["u"] * (a[1].x - a[0].x) + p["v"] * (a[2].x - a[0].x),
+                          a[0].y + p["u"] * (a[1].y - a[0].y) + p["v"] * (a[2].y - a[0].y)),
+        "Điểm trong tam giác", {"u": 1 / 3, "v": 1 / 3},
+    ),
+    "fixed_point": StepType(
+        "point", ["curve", "point"], lambda a, p: None, "Điểm cố định", {"which": 0},
+        lambda s, k, d=None: [{"on": [s["id"], s["args"][0]]}], sampler=True,
+    ),
+    "locus": StepType("mark", ["point", "point"], lambda a, p: None, "Quỹ tích", {"n": 160}, sampler=True),
+    "measure_len": StepType(
+        "mark", ["point", "point"],
+        lambda a, p: {"kind": "measure", "m": "len", "value": G.dist(a[0], a[1]), "at": {"x": (a[0].x + a[1].x) / 2, "y": (a[0].y + a[1].y) / 2}},
+        "Đo độ dài", {"dx": 0, "dy": 0},
+    ),
+    "measure_angle": StepType("mark", PT3, _measure_angle, "Đo góc", {"dx": 0, "dy": 0}),
+    "measure_ratio": StepType("mark", ["point"] * 4, _measure_ratio, "Đo tỉ số", {"dx": 0, "dy": 0}),
+
     # ---------- ĐÁNH DẤU (không tham gia khám phá) ----------
     "polygon": StepType("mark", ["...point"], lambda a, p: {"kind": "polygon", "pts": [_P(x) for x in a]}, "Miền đa giác"),
     "angle_mark": StepType(

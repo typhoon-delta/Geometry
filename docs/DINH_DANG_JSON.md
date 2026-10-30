@@ -128,6 +128,23 @@ cho mỗi bài, ảnh tách tệp) – xem [`KHO_BAI.md`](KHO_BAI.md).
 | `mixtilinear` | A, B, C | `external` | Đường tròn mixtilinear nội (tiếp xúc trong với (O)) / ngoại (tiếp xúc ngoài) ứng với A. |
 | `circle_diameter` | A, B | – | Đường tròn đường kính AB. |
 
+### Bổ sung bản 1.7
+
+| `type` | `args` | `params` | Ý nghĩa |
+|---|---|---|---|
+| `angle_line` | O, X, A, B, C | `flip` | Đường qua O tạo với tia OX góc bằng ∠ABC: quay X quanh O một góc bằng góc có hướng ∠ABC (`flip: true`: góc ngược dấu – phía bên kia OX). |
+| `angle_point` | O, X, A, B, C, `line` l | `flip` | Giao của đường `angle_line` (O, X, A, B, C) với l. |
+| `point_in` | A, B, C | `u`, `v` | Điểm A + u·AB + v·AC (**bậc tự do**, như `free_point`); giao diện giữ u, v ≥ 0, u + v ≤ 1 (ở trong tam giác). |
+| `fixed_point` | `curve` X, M | `which` | Điểm cố định của họ đường X khi điểm M (bậc tự do: `free_point`, `point_on`, `point_in`) thay đổi. Cách tính: dời thử M tới các vị trí cố định (bảng `FIX_*` trong `model.js`), tính lại X ở mỗi vị trí, giao vị trí hiện tại với hai vị trí đầu, giữ nghiệm nằm trên mọi vị trí; xếp theo x tăng, lấy nghiệm thứ `which`. Không có → không xác định. |
+| `locus` | P, D | `n` (mặc định 160) | *(dấu trang trí)* Quỹ tích của P khi D chạy trên đường của nó (D phải là `point_on`): giá trị `{kind: "locus", pts: [{x, y} \| null…], closed}` – `n + 1` mẫu đều theo tham số (đường tròn: một vòng, `closed: true`; đoạn [0, 1]; tia [0, max(4, 3t₀)]; đường thẳng [t₀ − 3, t₀ + 3]). |
+| `measure_len` | A, B | `dx`, `dy` | *(dấu trang trí)* Số đo AB: `{kind: "measure", m: "len", value, at}`; `dx`, `dy` dời chữ (px). |
+| `measure_angle` | A, B, C | `dx`, `dy` | *(dấu trang trí)* Số đo góc ABC theo độ (0–180). |
+| `measure_ratio` | A, B, C, D | `dx`, `dy` | *(dấu trang trí)* Tỉ số AB/CD. |
+
+Trường mới: `steps[].aux: true` – **đường phụ** (vẽ nét đứt, nhạt); `doc.hideAux: true` – đang tắt mọi đường phụ (không vẽ,
+không chọn được, không xuất TikZ; vẫn tính, vẫn dùng làm đối số). `fixed_point` và `locus` được tính bằng cách lấy mẫu
+cả hình (`SAMPLERS` trong `src/core/model.js`, `lab/core/model.py` – hai bản cho cùng một kết quả số).
+
 ### Dấu trang trí (không tham gia khám phá, không cần khi dịch sang hệ khác)
 
 | `type` | `args` | `style` |
@@ -135,6 +152,7 @@ cho mỗi bài, ảnh tách tệp) – xem [`KHO_BAI.md`](KHO_BAI.md).
 | `polygon` | ≥ 3 điểm | `color`, `fill`, `border` |
 | `angle_mark` | A, B, C (đỉnh B) | `color`, `arcs` (1–3); góc vuông tự vẽ ô vuông |
 | `segment_mark` | A, B | `color`, `ticks` (1–3) |
+| `locus`, `measure_*` | xem *Bổ sung bản 1.7* | `color`, `width`, `dash` |
 
 ## Quy ước toán học quan trọng
 

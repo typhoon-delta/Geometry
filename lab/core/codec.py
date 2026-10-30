@@ -21,10 +21,12 @@ def compact_doc(doc) -> dict:
         out["title"] = doc["title"]
     if doc.get("view"):
         out["view"] = doc["view"]
+    if doc.get("hideAux"):
+        out["hideAux"] = True  # bản 1.7: đang tắt các đường phụ
     steps = []
     for s in doc["steps"]:
         t = {"id": s["id"], "type": s["type"], "args": s["args"]}
-        for k in ("params", "name", "style", "hidden", "joinPrev"):
+        for k in ("params", "name", "style", "hidden", "aux", "joinPrev"):
             v = s.get(k)
             if v is None or v is False or (isinstance(v, dict) and not v):
                 continue

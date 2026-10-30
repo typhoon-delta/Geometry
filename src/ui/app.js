@@ -10,7 +10,7 @@ import { CanvasView } from './view.js';
 import { TOOL_BY_ID, TOOLBAR } from './tools.js';
 import { ICONS } from './icons.js';
 import { createMacro, macroTool, validMacro, USER_MENU } from '../core/macro.js';
-import { isDraggableType, PALETTE, setTheme } from '../core/styles.js';
+import { isDraggableType, isShown, PALETTE, setTheme } from '../core/styles.js';
 import { confirmDialog, promptDialog, toast } from './dialog.js';
 import { renderStepList, renderProps, renderToolOptions } from './panels.js';
 import { renameInText } from '../text/markup.js';
@@ -19,6 +19,7 @@ import { downloadFile } from './download.js';
 import { keyOf } from './shortcuts.js';
 
 const HISTORY_MAX = 200;
+const AUX_TOOLS = new Set(['perpendicular', 'parallel', 'perp_bisector', 'angle_bisector', 'ext_bisector', 'angle_line']);
 
 export class App {
   constructor() {
@@ -44,6 +45,8 @@ export class App {
     this.imageSel = null; // id ảnh đang chọn
     this.typeToRename = true; // gõ chữ khi đang chọn một điểm → đặt tên ngay (xem inlineRename)
     this.fitKey = 'Home'; // phím thu phóng vừa hình
+    this.traceIds = new Set(); // đối tượng để lại vết khi kéo (bản 1.7; không lưu vào hình)
+    this.clipboard = null; // đối tượng đã chép (Ctrl+C) – dán được sang tab khác
   }
 
   // ================= khởi tạo =================
@@ -84,6 +87,7 @@ export class App {
     this.highlight.clear();
     this.relation = null;
     this.cancelTool();
+    this.clearTraces(true);
     if (doc.view && Array.isArray(doc.view.bbox)) this.view.setBoundingBox(doc.view.bbox);
     this.refresh();
     this.emit('load');
@@ -360,6 +364,7 @@ export class App {
     });
     this.renderer.clearExtra();
     this.drawRelationOverlay?.();
+    document.getElementById('btn-aux')?.classList.toggle('on', !this.doc.hideAux);
     this.renderPanels();
     this.emit('refresh');
   }
@@ -379,7 +384,45 @@ export class App {
   quickUpdate() {
     if (this.dragUpdater) this.dragUpdater(this.values);
     else this.values = evaluate(this.doc);
+    if (this.traceIds.size) this.recordTraces();
     this.renderer.update(this.values);
+  }
+
+  // ================= vết (bản 1.7) =================
+  /** Bật/tắt để lại vết khi kéo cho đối tượng id (điểm, đường thẳng, đường tròn). */
+  toggleTrace(id, on = !this.traceIds.has(id)) {
+    if (on) this.traceIds.add(id);
+    else { this.traceIds.delete(id); this.renderer.traces?.delete(id); }
+    if (on) toast('Kéo một điểm tự do để thấy vết. Xoá vết: Hiển thị › Xoá vết');
+    this.renderPanels();
+    this.view.requestDraw();
+  }
+
+  recordTraces() {
+    const tr = this.renderer.traces || (this.renderer.traces = new Map());
+    const k = kinds(this.doc);
+    for (const id of this.traceIds) {
+      const v = this.values.get(id);
+      if (!v) continue;
+      let rec = tr.get(id);
+      if (!rec) tr.set(id, (rec = { kind: k.get(id), items: [] }));
+      const last = rec.items[rec.items.length - 1];
+      if (rec.kind === 'point') {
+        if (last && G.dist(last, v) * this.view.scale < 1.5) continue;
+        rec.items.push({ x: v.x, y: v.y });
+        if (rec.items.length > 4000) rec.items.shift();
+      } else {
+        rec.items.push(JSON.parse(JSON.stringify(v)));
+        if (rec.items.length > 400) rec.items.shift();
+      }
+    }
+  }
+
+  /** Xoá các vết đã vẽ; all = true: tắt luôn chế độ để lại vết. */
+  clearTraces(all = false) {
+    if (this.renderer) this.renderer.traces = null;
+    if (all) this.traceIds.clear();
+    this.view?.requestDraw();
   }
 
   renderPanels() {
@@ -416,7 +459,7 @@ export class App {
     let order = 0;
     for (const s of this.doc.steps) {
       order++;
-      if (s.hidden || (vis && !vis.has(s.id))) continue;
+      if (!isShown(this.doc, s) || (vis && !vis.has(s.id))) continue;
       const v = this.values.get(s.id);
       const kind = k.get(s.id);
       if (!v || kind === 'mark') continue;
@@ -429,9 +472,14 @@ export class App {
     }
     // đánh dấu (góc, đoạn, miền) – chọn được bằng cách bấm gần
     for (const s of this.doc.steps) {
-      if (s.hidden || (vis && !vis.has(s.id)) || k.get(s.id) !== 'mark') continue;
+      if (!isShown(this.doc, s) || (vis && !vis.has(s.id)) || k.get(s.id) !== 'mark') continue;
       const v = this.values.get(s.id);
       if (!v) continue;
+      if (v.kind === 'measure') {
+        const b = this.renderer.measureBoxes.get(s.id);
+        if (b && sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) out.push({ id: s.id, kind: 'mark', d: 0, pri: -1, measure: true });
+        continue;
+      }
       const d = markDistance(v, P, px * f) / px;
       if (d <= 9 * f) out.push({ id: s.id, kind: 'mark', d, pri: 2 });
     }
@@ -649,7 +697,7 @@ export class App {
     if (tool.segmentShortcut && sel.length === 1 && stepById(this.doc, sel[0]).type === 'segment') {
       this.beginTx();
       this.picks = [...stepById(this.doc, sel[0]).args];
-      return this.completeTool(tool);
+      return this.picksDone(tool);
     }
     if (tool.inputs[0] === '...point') {
       const pts = sel.filter((x) => k.get(x) === 'point');
@@ -668,7 +716,7 @@ export class App {
     if (rest.length || !picks.length) return;
     this.beginTx();
     this.picks = picks;
-    if (picks.length === tool.inputs.length) return this.completeTool(tool);
+    if (picks.length === tool.inputs.length) return this.picksDone(tool);
     this.selection = new Set(picks);
     this.refresh();
     this.startPreview(tool);
@@ -677,6 +725,7 @@ export class App {
 
   cancelTool() {
     this.picks = [];
+    this.awaitExtra = false;
     this.renderer?.clearExtra();
     if (this.tx) {
       this.endTx();
@@ -690,6 +739,7 @@ export class App {
     if (!el) return;
     if (this.mode === 'present') { el.textContent = 'Chế độ trình bày: ← → (hoặc PageUp/PageDown) để chuyển khung. Vẫn kéo được điểm tự do.'; return; }
     const t = TOOL_BY_ID[this.toolId];
+    if (!msg && this.awaitExtra && t.extraClick) { el.textContent = `${t.label}: ${t.extraClick} · Esc: huỷ`; return; }
     const i = Math.min(this.picks.length, t.hints.length - 1);
     const sel = this.selection.size === 1 && !this.picks.length ? stepById(this.doc, [...this.selection][0]) : null;
     const tip = sel && sel.name && kinds(this.doc).get(sel.id) === 'point' ? ` · Gõ chữ để đặt tên ${sel.name}` : '';
@@ -714,6 +764,13 @@ export class App {
     const tool = TOOL_BY_ID[this.toolId];
     const hits = this.hitTest(sx, sy).filter((h) => h.kind !== 'mark');
     this.beginTx();
+
+    // lần bấm thêm sau khi đã chọn đủ (chọn phía của góc, chỗ đặt điểm trong tam giác)
+    if (this.awaitExtra) {
+      this.extraPos = this.toUser(sx, sy);
+      this.awaitExtra = false;
+      return this.completeTool(tool);
+    }
 
     if (tool.id === 'point') {
       const id = this.resolvePoint(sx, sy, hits);
@@ -751,7 +808,7 @@ export class App {
       const s = stepById(this.doc, hits[0].id);
       if (s.type === 'segment') {
         this.picks = [...s.args];
-        return this.completeTool(tool);
+        return this.picksDone(tool);
       }
     }
 
@@ -762,7 +819,7 @@ export class App {
     if (!id) return this.showHint(`Hãy chọn ${need.map(typeName).join(' hoặc ')}`);
 
     if (tool.inputs[0] === '...point') {
-      if (this.picks.length >= 3 && id === this.picks[0]) return this.completeTool(tool);
+      if (this.picks.length >= 3 && id === this.picks[0]) return this.picksDone(tool);
       if (this.picks.includes(id)) return;
       this.picks.push(id);
     } else {
@@ -780,7 +837,7 @@ export class App {
         }
         this.picks = ordered;
       }
-      if (this.picks.length === tool.inputs.length) return this.completeTool(tool);
+      if (this.picks.length === tool.inputs.length) return this.picksDone(tool);
     }
     this.selection = new Set(this.picks);
     this.refresh();
@@ -800,9 +857,24 @@ export class App {
     if (out) toast('Điểm vừa dựng nằm ngoài khung nhìn – nhấn Home (hoặc Hiển thị › Thu phóng vừa hình) để thấy cả hình', 4200);
   }
 
+  /** Đã chọn đủ đối số: dựng ngay, hoặc (công cụ có extraClick) chờ thêm một lần bấm để chọn phía / vị trí. */
+  picksDone(tool) {
+    if (!tool.extraClick) return this.completeTool(tool);
+    this.awaitExtra = true;
+    this.extraPos = null;
+    this.selection = new Set(this.picks);
+    this.refresh();
+    this.startExtraPreview(tool);
+    this.showHint();
+  }
+
   completeTool(tool) {
+    this.awaitExtra = false;
     const specs = tool.make(this.picks, this);
-    const ids = this.addSteps(specs);
+    let ids = this.addSteps(specs);
+    if (tool.after) ids = this.afterTool(tool.after, ids);
+    // đường dựng thêm (vuông góc, song song, trung trực, phân giác, góc bằng góc) là đường phụ: nét đứt, ẩn cùng lúc được
+    if (AUX_TOOLS.has(tool.id)) for (const id of ids) { const st = stepById(this.doc, id); if (kinds(this.doc).get(id) === 'line') st.aux = true; }
     // chọn sẵn kết quả chính – điểm mới duy nhất nếu có – để gõ tên ngay (không phải đổi công cụ rồi nháy đúp)
     const k = kinds(this.doc);
     const pts = ids.filter((id) => k.get(id) === 'point' && !stepById(this.doc, id).hidden);
@@ -817,6 +889,7 @@ export class App {
 
   finishTool() {
     this.picks = [];
+    this.awaitExtra = false;
     this.renderer.clearExtra();
     this.endTx();
     if (this.toolId === 'intersect') this.selection = new Set(this.lastCreatedPoints && this.lastCreatedPoints.length === 1 ? this.lastCreatedPoints : []);
@@ -832,6 +905,65 @@ export class App {
     if (kind === 'angle') return { ...c(m.color), arcs: m.arcs };
     if (kind === 'segment') return { ...c(m.color), ticks: m.ticks };
     return { ...c(m.polyColor) };
+  }
+
+  /**
+   * Việc làm thêm sau khi công cụ thêm bước (bản 1.7). fixedPoint: bỏ các điểm cố định không tìm được; locus: bỏ nếu
+   * điểm chạy không phải điểm trên đường. Trả về danh sách id còn lại.
+   */
+  afterTool(kind, ids) {
+    const vals = evaluate(this.doc);
+    const bad = ids.filter((id) => !vals.get(id));
+    if (bad.length) this.doc.steps = removeSteps(this.doc, bad).doc.steps;
+    const left = ids.filter((id) => !bad.includes(id));
+    if (kind === 'fixedPoint') {
+      if (!left.length) toast('Không tìm thấy điểm cố định: đường này không đi qua điểm cố định nào khi điểm đã chọn thay đổi (hoặc điểm đó không đổi được)', 5000);
+      else toast(left.length === 1 ? `Điểm cố định: ${this.name(left[0])}` : `Có hai điểm cố định: ${left.map((id) => this.name(id)).join(', ')}`);
+    } else if (kind === 'locus' && !left.length) {
+      toast('Điểm chạy phải là điểm nằm trên một đường (dựng bằng công cụ Điểm bấm lên đường thẳng/đường tròn), và điểm cần vẽ quỹ tích phải phụ thuộc vào nó', 5500);
+    }
+    return left;
+  }
+
+  /** Phía của đường tạo góc theo chỗ chuột (extraPos): cùng phía với chuột so với đường OX. */
+  extraFlip(O, X, A, B, C) {
+    const [o, x] = [O, X].map((id) => this.values.get(id));
+    const P = this.extraPos || this.mouse;
+    const a = G.directedAngle(...[A, B, C].map((id) => this.values.get(id))); // độ
+    if (!o || !x || a == null) return false;
+    const side = (x.x - o.x) * (P.y - o.y) - (x.y - o.y) * (P.x - o.x);
+    const sn = Math.sin((a * Math.PI) / 180);
+    return Math.abs(sn) > 1e-12 && Math.sign(side) !== Math.sign(sn);
+  }
+
+  /** Toạ độ (u, v) của điểm P trong tam giác (A, B, C là id), kẹp vào trong tam giác: u, v ≥ 0, u + v ≤ 1. */
+  uvInTriangle([A, B, C], P) {
+    const [a, b, c] = [A, B, C].map((id) => this.values.get(id));
+    return clampUV(a, b, c, P);
+  }
+
+  startExtraPreview(tool) {
+    this.renderer.clearExtra();
+    const r = this.renderer;
+    const v = (id) => () => this.values.get(id);
+    if (tool.extraPreview === 'angle_line') {
+      const [A, B, C, O, X] = this.picks;
+      const dirPt = () => {
+        const flip = this.extraFlip(O, X, A, B, C);
+        const [o, x, a, b, c] = [O, X, A, B, C].map((id) => this.values.get(id));
+        const ang = G.directedAngle(a, b, c);
+        return ang == null ? null : G.rotatePoint(x, o, flip ? -ang : ang);
+      };
+      r.addExtra({ type: 'ray', pts: [v(O), dirPt], style: { color: '#2563eb' } });
+    } else if (tool.id === 'point_in') {
+      const [A, B, C] = this.picks;
+      r.addExtra({ type: 'polyline', pts: [v(A), v(B), v(C), v(A)], style: { color: '#2563eb' } });
+      r.addExtra({ type: 'point', pts: [() => {
+        const [a, b, c] = [A, B, C].map((id) => this.values.get(id));
+        const uv = clampUV(a, b, c, this.mouse);
+        return { x: a.x + uv.u * (b.x - a.x) + uv.v * (c.x - a.x), y: a.y + uv.u * (b.y - a.y) + uv.v * (c.y - a.y) };
+      }], style: { size: 4 } });
+    }
   }
 
   startPreview(tool) {
@@ -870,7 +1002,7 @@ export class App {
         this.mouse = this.toUser(sx, sy);
         // giữ Shift khi đang dựng: hình xem trước cũng được căn hướng
         if (ev.shiftKey && this.picks.length && this.toolId !== 'move') { const an = this.pickAnchors(); if (an.length) this.mouse = this.angleSnap(this.mouse, an); }
-        if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
+        if ((this.picks.length || this.awaitExtra) && this.renderer.extra.length) this.view.requestDraw();
         const hits = this.hitTest(sx, sy);
         let cursor = '';
         const cross = this.toolId === 'move' && this.mode === 'edit' && !ev.shiftKey ? this.crossingAt(sx, sy, hits) : null;
@@ -964,6 +1096,24 @@ export class App {
       }
     }
 
+    if (this.redefine) {
+      e.stopPropagation();
+      e.preventDefault();
+      const { id, i, t } = this.redefine;
+      let h = this.hitTest(sx, sy).find((x) => x.kind !== 'mark' && argAccepts(t, x.kind) && x.id !== id);
+      let nid = h?.id;
+      if (!nid && argAccepts(t, 'point')) { this.beginTx(); nid = this.resolvePoint(sx, sy, this.hitTest(sx, sy)); }
+      this.redefine = null;
+      this.stage.classList.toggle('tool-active', this.toolId !== 'move');
+      if (!nid) { this.endTx(); this.refresh(); return this.showHint(); }
+      const ok = this.redefineArg(id, i, nid);
+      if (this.tx) { if (!ok) this.doc = JSON.parse(this.tx); this.endTx(); }
+      this.selection = new Set([id]);
+      this.afterChange();
+      this.showHint();
+      return;
+    }
+
     if (this.toolId !== 'move' && this.mode === 'edit') {
       e.stopPropagation();
       e.preventDefault();
@@ -986,6 +1136,15 @@ export class App {
     }
     const h = hits[0];
     const step = h ? stepById(this.doc, h.id) : null;
+    // số đo: kéo để dời chữ
+    if (h && h.measure && this.mode === 'edit') {
+      e.stopPropagation();
+      e.preventDefault();
+      const p = step.params || {};
+      this.select(h.id, e.shiftKey, false);
+      this.startDrag(e, { kind: 'measure', id: h.id, start: JSON.stringify(this.doc), sx, sy, off: [p.dx || 0, p.dy || 0] });
+      return;
+    }
     if (h && h.kind === 'point' && isDraggableType(step.type)) {
       e.stopPropagation();
       e.preventDefault();
@@ -1021,6 +1180,12 @@ export class App {
       this.startImageDrag(e, imh.id, imh.handle);
       return;
     }
+    // Ctrl + kéo chỗ trống: chọn vùng (thêm Shift: chọn thêm)
+    if ((e.ctrlKey || e.metaKey) && this.mode === 'edit') {
+      e.preventDefault();
+      this.startMarquee(e, e.shiftKey);
+      return;
+    }
     // chỗ trống: bỏ chọn, dời hình
     e.preventDefault();
     if (this.mode === 'edit' && (this.selection.size || this.imageSel) && !e.shiftKey) {
@@ -1049,6 +1214,12 @@ export class App {
       const { sx, sy, shift } = pending;
       pending = null;
       this.mouse = this.toUser(sx, sy);
+      if (info.kind === 'measure') {
+        const sc = this.projector ? 1.9 : 1;
+        step.params = { ...(step.params || {}), dx: round1(info.off[0] + (sx - info.sx) / sc), dy: round1(info.off[1] + (sy - info.sy) / sc) };
+        this.view.requestDraw();
+        return;
+      }
       if (info.kind === 'label') {
         const sc = this.projector ? 1.9 : 1;
         const off = [round1(info.off[0] + (sx - info.sx) / sc), round1(info.off[1] - (sy - info.sy) / sc)];
@@ -1063,6 +1234,8 @@ export class App {
       } else if (step.type === 'point_on') {
         const c = this.values.get(step.args[0]);
         if (c) step.params = { ...(step.params || {}), t: round9(G.paramOf(c, target)) };
+      } else if (step.type === 'point_in') {
+        step.params = { ...(step.params || {}), ...this.uvInTriangle(step.args, target) };
       }
       this.quickUpdate();
     };
@@ -1087,6 +1260,136 @@ export class App {
     window.addEventListener('pointermove', move, true);
     window.addEventListener('pointerup', up, true);
     window.addEventListener('pointercancel', up, true);
+  }
+
+  /**
+   * Ctrl + kéo: chọn mọi điểm trong khung, cùng các đối tượng dựng hoàn toàn từ những thứ đã chọn (đoạn AB khi A, B
+   * trong khung; đường tròn (ABC); đường vuông góc từ A xuống BC…).
+   */
+  startMarquee(e, additive) {
+    const a = this.eventPos(e);
+    let b = a;
+    const box = () => ({ x1: Math.min(a.sx, b.sx), x2: Math.max(a.sx, b.sx), y1: Math.min(a.sy, b.sy), y2: Math.max(a.sy, b.sy) });
+    const P = (f) => () => this.toUser(f().sx, f().sy);
+    const corners = [P(() => ({ sx: box().x1, sy: box().y1 })), P(() => ({ sx: box().x2, sy: box().y1 })), P(() => ({ sx: box().x2, sy: box().y2 })), P(() => ({ sx: box().x1, sy: box().y2 }))];
+    this.renderer.clearExtra();
+    this.renderer.addExtra({ type: 'polyline', pts: [...corners, corners[0]], style: { color: '#2563eb', width: 1 } });
+    const move = (ev) => { b = this.eventPos(ev); this.view.requestDraw(); };
+    const up = () => {
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+      this.renderer.clearExtra();
+      const r = box();
+      const sel = additive ? new Set(this.selection) : new Set();
+      if (r.x2 - r.x1 > 3 || r.y2 - r.y1 > 3) for (const id of this.objectsInBox(r)) sel.add(id);
+      this.selection = sel;
+      this.refresh();
+      if (sel.size) this.showHint(`Đã chọn ${sel.size} đối tượng · Ctrl+H: ẩn · Delete: xoá · Ctrl+C: chép · hoặc gọi một công cụ để dựng trên chúng`);
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  }
+
+  objectsInBox(r) {
+    const k = kinds(this.doc);
+    const out = new Set();
+    for (const s of this.doc.steps) {
+      if (!isShown(this.doc, s)) continue;
+      const v = this.values.get(s.id);
+      if (!v) continue;
+      if (k.get(s.id) === 'point') {
+        const q = this.toScreen(v);
+        if (q.x >= r.x1 && q.x <= r.x2 && q.y >= r.y1 && q.y <= r.y2) out.add(s.id);
+      } else if (s.args.length && s.args.every((a) => out.has(a))) out.add(s.id);
+    }
+    return [...out];
+  }
+
+  // ================= chép / dán (bản 1.7) =================
+  /** Các bước cần chép: đối tượng đang chọn cùng mọi đối tượng cha của chúng (theo thứ tự dựng). */
+  copySelection() {
+    const sel = [...this.selection].filter((id) => stepById(this.doc, id));
+    if (!sel.length) return null;
+    const need = new Set(sel);
+    for (let i = this.doc.steps.length - 1; i >= 0; i--) {
+      const s = this.doc.steps[i];
+      if (need.has(s.id)) for (const a of s.args) need.add(a);
+    }
+    const steps = clone({ steps: this.doc.steps.filter((s) => need.has(s.id)) }).steps;
+    for (const s of steps) delete s.joinPrev;
+    this.clipboard = { format: 'hinh-hoc-dong-chep', version: 1, steps, selected: sel, from: this.tabIdx };
+    toast(`Đã chép ${sel.length} đối tượng${steps.length > sel.length ? ` (kèm ${steps.length - sel.length} đối tượng cha)` : ''} – Ctrl+V để dán (cả sang tab khác)`);
+    return this.clipboard;
+  }
+
+  /**
+   * Dán: thêm các bước đã chép với id mới. Tên đã có trên hình thì đặt tên mới. Dán vào chính hình vừa chép thì các
+   * điểm tự do được dời đi một chút (bản sao tách khỏi hình gốc).
+   */
+  pasteClip(clip) {
+    if (!clip || clip.format !== 'hinh-hoc-dong-chep' || !Array.isArray(clip.steps) || !clip.steps.length) return false;
+    const same = clip.from === this.tabIdx && clip.steps.some((s) => stepById(this.doc, s.id)?.type === s.type);
+    const map = new Map();
+    const k = new Map();
+    const before = JSON.stringify(this.doc);
+    const added = [];
+    const off = same ? 0.08 * this.figureScale() : 0;
+    for (const s0 of clip.steps) {
+      const def = STEP_TYPES[s0.type];
+      if (!def) continue;
+      const s = clone(s0);
+      s.id = newId(this.doc);
+      s.args = s.args.map((a) => map.get(a) ?? a);
+      if (s.args.some((a) => !stepById(this.doc, a))) {
+        this.doc = JSON.parse(before);
+        toast('Không dán được: thiếu đối tượng cha');
+        return false;
+      }
+      if (s.type === 'free_point' && off) s.params = { ...s.params, x: round6(s.params.x + off), y: round6(s.params.y - off) };
+      const kind = def.kind === 'same' ? kinds(this.doc).get(s.args[0]) : def.kind;
+      if (s.name && this.nameUsed(s.name)) s.name = nextName(this.doc, kind);
+      this.doc.steps.push(s);
+      map.set(s0.id, s.id);
+      k.set(s.id, kind);
+      added.push(s.id);
+    }
+    if (!added.length) return false;
+    for (const id of added.slice(1)) stepById(this.doc, id).joinPrev = true;
+    this.pushUndo(before);
+    this.selection = new Set((clip.selected || []).map((id) => map.get(id)).filter(Boolean));
+    this.afterChange();
+    toast(`Đã dán ${added.length} đối tượng`);
+    return true;
+  }
+
+  // ================= sửa đối tượng cha (bản 1.7) =================
+  /** Bắt đầu thay đối số thứ i của bước id: lần bấm tiếp theo trên hình chọn đối tượng thay thế. */
+  startRedefine(id, i) {
+    const s = stepById(this.doc, id);
+    if (!s) return;
+    const def = STEP_TYPES[s.type];
+    const t = def.args[0] === '...point' ? 'point' : def.args[i];
+    this.redefine = { id, i, t };
+    this.showHint(`Thay ${this.name(s.args[i]) || 'đối tượng'} của ${s.name || 'đối tượng'}: bấm vào ${typeName(t)} thay thế (Esc: huỷ)`);
+    this.stage.classList.add('tool-active');
+  }
+
+  /** Thay đối số; bước và các bước phụ thuộc được dời xuống sau đối tượng mới nếu cần. */
+  redefineArg(id, i, newArg) {
+    const s = stepById(this.doc, id);
+    if (!s || newArg === id || dependents(this.doc, [id]).has(newArg)) { toast('Không thay được: đối tượng mới phụ thuộc vào chính đối tượng đang sửa'); return false; }
+    const k = kinds(this.doc);
+    const def = STEP_TYPES[s.type];
+    const t = def.args[0] === '...point' ? 'point' : def.args[i];
+    if (!argAccepts(t, k.get(newArg))) { toast(`Cần chọn ${typeName(t)}`); return false; }
+    this.commit((doc) => {
+      stepById(doc, id).args[i] = newArg;
+      doc.steps = topoOrder(doc.steps);
+    });
+    toast(`Đã thay: ${this.name(id) || 'đối tượng'} giờ dựng từ ${this.name(newArg)}`);
+    return true;
   }
 
   select(id, additive = false, rerender = true) {
@@ -1294,9 +1597,19 @@ export class App {
   updateMenuChecks() {
     document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('on', b.dataset.theme === this.theme));
     document.getElementById('btn-grid')?.classList.toggle('on', this.grid);
+    document.getElementById('btn-aux')?.classList.toggle('on', !this.doc.hideAux);
     document.getElementById('btn-trim')?.classList.toggle('on', !!this.renderer?.trimLines);
     document.getElementById('menu-panel')?.classList.toggle('on', document.body.classList.contains('panel-open'));
     document.getElementById('btn-panel')?.classList.toggle('on', document.body.classList.contains('panel-open'));
+  }
+
+  /** Hiện/ẩn mọi đường phụ cùng lúc (lưu trong hình: doc.hideAux). */
+  toggleAux() {
+    const n = this.doc.steps.filter((s) => s.aux).length;
+    const hide = !this.doc.hideAux;
+    this.commit((doc) => { if (hide) doc.hideAux = true; else delete doc.hideAux; });
+    this.updateMenuChecks();
+    toast(hide ? `Đã ẩn ${n} đường phụ (Ctrl+Shift+D để hiện lại)` : n ? `Đã hiện ${n} đường phụ` : 'Chưa có đường phụ nào: đường vuông góc, song song, trung trực, phân giác dựng thêm là đường phụ (bỏ chọn ở thẻ thuộc tính để thành đường chính)', 4000);
   }
 
   toggleGrid() {
@@ -1310,7 +1623,7 @@ export class App {
     const pts = [];
     const vis = this.visibleSet();
     for (const s of this.doc.steps) {
-      if (s.hidden || (vis && !vis.has(s.id))) continue;
+      if (!isShown(this.doc, s) || (vis && !vis.has(s.id))) continue;
       const v = this.values.get(s.id);
       if (!v) continue;
       if (v.kind === 'point') pts.push(v);
@@ -1366,11 +1679,15 @@ export class App {
       }
       if (e.key === 'Home') { e.preventDefault(); this.zoomFit(); return; }
       if (e.key === 'Escape') {
-        if (this.picks.length) this.cancelTool();
+        if (this.redefine) { this.redefine = null; this.stage.classList.toggle('tool-active', this.toolId !== 'move'); this.showHint(); }
+        else if (this.picks.length || this.awaitExtra) this.cancelTool();
         else if (this.toolId !== 'move') this.setTool('move');
         else { this.selection.clear(); this.imageSel = null; this.setRelation(null); }
       } else if (e.key === 'Enter' && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === '...point') {
         this.completeTool(TOOL_BY_ID[this.toolId]);
+      } else if (ctrl && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        this.toggleAux();
       } else if (ctrl && (e.key === 'h' || e.key === 'H') && e.shiftKey) {
         e.preventDefault();
         this.showHidden();
@@ -1384,6 +1701,28 @@ export class App {
         e.preventDefault();
         this.deleteImage(this.imageSel);
       }
+    });
+    // chép / dán đối tượng (bản 1.7): giữ trong bộ nhớ (dán sang tab khác) và ghi JSON vào clipboard (sang cửa sổ khác)
+    const editable = (t) => { const tag = (t.tagName || '').toLowerCase(); return tag === 'input' || tag === 'textarea' || t.isContentEditable || !!t.closest?.('.cm-editor'); };
+    document.addEventListener('copy', (e) => {
+      if (editable(e.target) || document.querySelector('.modal-back') || this.mode !== 'edit' || !this.selection.size) return;
+      if (String(window.getSelection?.() || '').trim()) return; // đang bôi đen chữ (lời giải…): để trình duyệt chép chữ
+      const clip = this.copySelection();
+      if (!clip) return;
+      e.preventDefault();
+      try { e.clipboardData.setData('text/plain', JSON.stringify(clip)); } catch { /* chỉ giữ trong bộ nhớ */ }
+    });
+    document.addEventListener('paste', (e) => {
+      if (editable(e.target) || document.querySelector('.modal-back') || this.mode !== 'edit') return;
+      const items = [...(e.clipboardData?.items || [])];
+      if (items.some((it) => it.kind === 'file')) return; // ảnh: images.js
+      const text = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
+      let clip = null;
+      if (text && text.includes('hinh-hoc-dong-chep')) { try { clip = JSON.parse(text); } catch { clip = null; } }
+      else if (!text) clip = this.clipboard;
+      if (!clip) return;
+      e.preventDefault();
+      this.pasteClip(clip);
     });
     document.addEventListener('fullscreenchange', () => {
       if (!document.fullscreenElement && this.projector) this.setProjector(false);
@@ -1603,6 +1942,8 @@ export class App {
     on('btn-hide', () => this.hideSelected());
     on('btn-show-hidden', () => this.showHidden());
     on('btn-grid', () => this.toggleGrid());
+    on('btn-aux', () => this.toggleAux());
+    on('btn-clear-trace', () => { this.clearTraces(); toast('Đã xoá vết'); });
     on('btn-trim', () => { this.renderer.trimLines = !this.renderer.trimLines; savePref('trim', this.renderer.trimLines ? '1' : '0'); this.updateMenuChecks(); this.refresh(); });
     on('btn-fit', () => this.zoomFit());
     on('btn-present', () => this.setMode(this.mode === 'present' ? 'edit' : 'present'));
@@ -1635,10 +1976,43 @@ function typeName(t) {
   return { point: 'một điểm', line: 'một đường thẳng', circle: 'một đường tròn', curve: 'một đường thẳng/đường tròn', obj: 'một đối tượng', pl: 'một điểm hoặc đường thẳng', '...point': 'một điểm' }[t] || t;
 }
 
+/** (u, v) của P theo tam giác abc (P = a + u·ab + v·ac), kẹp vào trong tam giác; P rỗng → trọng tâm. */
+function clampUV(a, b, c, P) {
+  if (!a || !b || !c || !P) return { u: 1 / 3, v: 1 / 3 };
+  const bx = b.x - a.x, by = b.y - a.y, cx = c.x - a.x, cy = c.y - a.y, px = P.x - a.x, py = P.y - a.y;
+  const det = bx * cy - by * cx;
+  if (Math.abs(det) < 1e-12) return { u: 1 / 3, v: 1 / 3 };
+  let u = (px * cy - py * cx) / det, v = (bx * py - by * px) / det;
+  u = Math.max(0, u); v = Math.max(0, v);
+  if (u + v > 1) { const t = u + v; u /= t; v /= t; }
+  return { u: round9(u), v: round9(v) };
+}
+
+/** Sắp lại các bước theo thứ tự dựng được (đối số đứng trước), giữ thứ tự cũ nhiều nhất có thể. */
+function topoOrder(steps) {
+  const done = new Set(), out = [], rest = [...steps];
+  while (rest.length) {
+    const j = rest.findIndex((s) => s.args.every((a) => done.has(a)));
+    if (j < 0) return steps; // không nên xảy ra (đã chặn vòng phụ thuộc)
+    const [s] = rest.splice(j, 1);
+    done.add(s.id);
+    out.push(s);
+  }
+  return out;
+}
+
 function markDistance(v, P, px) {
   if (v.kind === 'angle') return Math.abs(G.dist(v.B, P) - 20 * px);
   if (v.kind === 'segmark') return G.dist(G.mid(v.A, v.B), P);
   if (v.kind === 'polygon') return pointInPolygon(P, v.pts) ? 0 : Infinity;
+  if (v.kind === 'locus') {
+    let best = Infinity;
+    for (let i = 1; i < v.pts.length; i++) {
+      const a = v.pts[i - 1], b = v.pts[i];
+      if (a && b) best = Math.min(best, G.distToObject({ kind: 'line', sub: 'segment', p: a, d: { x: b.x - a.x, y: b.y - a.y } }, P));
+    }
+    return best;
+  }
   return Infinity;
 }
 

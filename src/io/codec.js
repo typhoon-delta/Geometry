@@ -29,13 +29,14 @@ export function compactDoc(doc) {
   const out = { format: doc.format, version: doc.version };
   if (doc.title) out.title = doc.title;
   if (doc.view) out.view = doc.view;
+  if (doc.hideAux) out.hideAux = true; // bản 1.7: đang tắt các đường phụ
   // bản 1.3: ảnh dán vào hình (vị trí/cỡ theo toạ độ hình) và dữ liệu ảnh (data URL) theo id
   if (doc.images && doc.images.length) out.images = doc.images;
   if (doc.boxes && doc.boxes.length) out.boxes = doc.boxes; // bản 1.4: khung chữ
   if (doc.imageData && Object.keys(doc.imageData).length) out.imageData = doc.imageData;
   out.steps = doc.steps.map((s) => {
     const t = { id: s.id, type: s.type, args: s.args };
-    for (const k of ['params', 'name', 'style', 'hidden', 'joinPrev']) {
+    for (const k of ['params', 'name', 'style', 'hidden', 'aux', 'joinPrev']) {
       const v = s[k];
       if (v === undefined || v === false || (typeof v === 'object' && v && !Array.isArray(v) && !Object.keys(v).length)) continue;
       t[k] = v;

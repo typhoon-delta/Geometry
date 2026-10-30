@@ -37,7 +37,7 @@ export const RESERVED = {
   'Ctrl+Shift+I': 'công cụ nhà phát triển', 'Ctrl+Shift+J': 'công cụ nhà phát triển', 'Ctrl+Shift+C': 'công cụ nhà phát triển',
   'Ctrl+C': 'sao chép', 'Ctrl+V': 'dán', 'Ctrl+X': 'cắt', 'Ctrl+A': 'chọn tất cả',
   'Ctrl+Z': 'hoàn tác', 'Ctrl+Y': 'làm lại', 'Ctrl+Shift+Z': 'làm lại', 'Ctrl+S': 'lưu', 'Ctrl+Shift+S': 'lưu tất cả các tab',
-  'Ctrl+O': 'mở tệp', 'Ctrl+K': 'mở kho bài', 'Ctrl+H': 'ẩn', 'Ctrl+Shift+H': 'hiện lại', 'Ctrl+Enter': 'soạn lời giải', 'Ctrl+/': 'bảng phím tắt',
+  'Ctrl+O': 'mở tệp', 'Ctrl+K': 'mở kho bài', 'Ctrl+H': 'ẩn', 'Ctrl+Shift+H': 'hiện lại', 'Ctrl+Shift+D': 'ẩn/hiện đường phụ', 'Ctrl+Enter': 'soạn lời giải', 'Ctrl+/': 'bảng phím tắt',
 };
 
 let keymap = null; // {tổ hợp: id công cụ}
@@ -164,6 +164,7 @@ export function setupShortcuts(app) {
           'Space': 'tìm công cụ theo tên', 'Esc': 'huỷ / về công cụ Chọn', 'Ctrl+Z / Ctrl+Y': 'hoàn tác / làm lại', 'Delete': 'xoá đối tượng đang chọn',
           'Ctrl+H / Ctrl+Shift+H': 'ẩn đối tượng đang chọn / hiện lại tất cả', 'Alt + bấm': 'ẩn ngay đối tượng được bấm', 'gõ chữ / F2': 'đặt tên điểm đang chọn',
           'Shift + bấm/kéo': 'căn hướng ngang, dọc, bước 15°', 'Home': 'thu phóng vừa hình', 'Ctrl+S': 'lưu (vào kho nếu đã kết nối)', 'Ctrl+Shift+S': 'lưu tất cả các tab ra tệp',
+          'Ctrl + kéo nền': 'chọn vùng (thêm Shift: chọn thêm)', 'Ctrl+C / Ctrl+V': 'chép / dán đối tượng (cả sang tab khác)', 'Ctrl+Shift+D': 'ẩn / hiện mọi đường phụ',
           'Ctrl+O': 'mở tệp', 'Ctrl+K': 'mở kho bài', 'Ctrl+Enter': 'soạn lời giải', 'Alt+1…9': 'sang tab thứ n', 'Ctrl+/': 'bảng này',
         }).map(([k, v]) => `<kbd>${k}</kbd><span>${v}</span>`).join('')}</div></details>
         <div class="k-msg note"></div>

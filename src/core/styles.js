@@ -55,6 +55,12 @@ const BY_TYPE = {
   },
 };
 
+// Đường phụ (bản 1.7): đường dựng thêm để lấy giao điểm, vuông góc… – nét đứt, nhạt hơn đường chính
+const AUX = {
+  mono: { color: '#4b5563', dash: true },
+  textbook: { color: '#8a8f98', dash: true },
+};
+
 let current = 'mono';
 export const getTheme = () => current;
 export function setTheme(id) {
@@ -65,7 +71,8 @@ export function setTheme(id) {
 /** Kiểu đầy đủ của một bước = mặc định theo loại ⊕ mặc định theo kiểu bước ⊕ style riêng. */
 export function styleOf(step, kind, theme = current) {
   const t = BY_KIND[theme] ? theme : 'mono';
-  const st = { ...BY_KIND[t][kind || 'mark'], ...(BY_TYPE[t][step.type] || {}), ...(step.style || {}) };
+  const aux = step.aux && (kind === 'line' || kind === 'circle') ? AUX[t] : null;
+  const st = { ...BY_KIND[t][kind || 'mark'], ...(BY_TYPE[t][step.type] || {}), ...(aux || {}), ...(step.style || {}) };
   // điểm đã đổi màu riêng: ruột lấy theo màu đó (bộ đơn sắc vẫn giữ ruột trắng nếu chưa đổi màu)
   if (kind === 'point' && step.style && step.style.color && !step.style.fillColor) {
     st.fillColor = step.style.color;
@@ -79,4 +86,7 @@ export function defaultMarkColor(theme = current) {
   return theme === 'mono' ? '#000000' : '#c0504d';
 }
 
-export const isDraggableType = (type) => type === 'free_point' || type === 'point_on';
+/** Đối tượng có được vẽ không: không ẩn, và không phải đường phụ khi đang tắt đường phụ (doc.hideAux). */
+export const isShown = (doc, s) => !s.hidden && !(s.aux && doc.hideAux);
+
+export const isDraggableType = (type) => type === 'free_point' || type === 'point_on' || type === 'point_in';

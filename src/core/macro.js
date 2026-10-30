@@ -23,7 +23,7 @@ function ancestors(doc, ids) {
   return out;
 }
 
-const isRoot = (s) => !s.args.length || s.type === 'point_on';
+const isRoot = (s) => !s.args.length || s.type === 'point_on' || s.type === 'point_in';
 
 /**
  * Tạo dữ liệu công cụ từ các đối tượng đang chọn.

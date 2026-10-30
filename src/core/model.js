@@ -2,6 +2,7 @@
 // Module này thuần JS: tính toạ độ từ danh sách bước, quan hệ phụ thuộc, đặt tên, kiểm tra hợp lệ.
 
 import { STEP_TYPES, argAccepts } from './steps.js';
+import * as G from './geom.js';
 
 export const FORMAT = 'hinh-hoc-dong';
 export const VERSION = 1;
@@ -37,12 +38,12 @@ export const paramsOf = (step) => ({ ...(STEP_TYPES[step.type]?.params || {}), .
  */
 export function evaluate(doc, overrides = null) {
   const vals = new Map();
-  for (const s of doc.steps) vals.set(s.id, computeStep(s, vals, overrides));
+  for (const s of doc.steps) vals.set(s.id, computeStep(s, vals, overrides, doc));
   return vals;
 }
 
-/** Tính giá trị một bước từ giá trị các bước trước (vals). */
-export function computeStep(s, vals, overrides = null) {
+/** Tính giá trị một bước từ giá trị các bước trước (vals). doc: cần cho các bước "dời thử" (điểm cố định, quỹ tích). */
+export function computeStep(s, vals, overrides = null, doc = null) {
   const def = STEP_TYPES[s.type];
   if (!def) return null;
   const variadic = def.args[0] === '...point';
@@ -55,7 +56,7 @@ export function computeStep(s, vals, overrides = null) {
   const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
   let v;
   try {
-    v = def.compute(argVals, p) || null;
+    v = def.sampler ? (doc ? SAMPLERS[s.type](s, argVals, p, vals, doc, overrides) : null) : def.compute(argVals, p) || null;
   } catch {
     v = null;
   }
@@ -73,12 +74,106 @@ export function makeUpdater(doc, changedIds) {
   for (const id of changedIds) need.add(id);
   const plan = doc.steps.filter((s) => need.has(s.id));
   const update = (vals) => {
-    for (const s of plan) vals.set(s.id, computeStep(s, vals));
+    for (const s of plan) vals.set(s.id, computeStep(s, vals, null, doc));
     return vals;
   };
   update.size = plan.length;
   return update;
 }
+
+// ======================= DỜI THỬ (bản 1.7): điểm cố định, quỹ tích =======================
+// Các bước này dời thử một điểm thay đổi M rồi tính lại phần hình phụ thuộc vào M. Mọi con số (vị trí dời thử,
+// số mẫu, sai số) cố định để lõi Python (lab/core/model.py) tính ra đúng như vậy.
+const FIX_OFFS = [[0.31, 0.12], [-0.22, 0.27], [0.17, -0.33], [-0.36, -0.08], [0.05, 0.41], [0.26, -0.14]];
+const FIX_UV = [[0.2, 0.2], [0.55, 0.2], [0.2, 0.55], [0.33, 0.33], [0.12, 0.62], [0.6, 0.3]];
+const FIX_DT = [0.37, -0.29, 0.61, -0.53, 0.19, -0.71];
+const FIX_SEG = [0.15, 0.32, 0.5, 0.68, 0.85, 0.25];
+
+/** Giá trị các bước khi điểm moverId nhận tham số params (chỉ tính lại các bước phụ thuộc, dừng trước bước upto). */
+function movedValues(doc, vals, moverId, params, upto, overrides) {
+  const local = new Map(vals);
+  const ov = new Map(overrides || []);
+  ov.set(moverId, params);
+  const changed = new Set([moverId]);
+  for (const s of doc.steps) {
+    if (s.id === upto) break;
+    if (s.id === moverId || s.args.some((a) => changed.has(a))) {
+      local.set(s.id, computeStep(s, local, ov, doc));
+      changed.add(s.id);
+    }
+  }
+  return local;
+}
+
+/** Các bộ tham số dời thử của điểm thay đổi M (điểm tự do, điểm trên đối tượng, điểm trong tam giác). */
+function trialParams(step, vals, doc, upto) {
+  const p = paramsOf(step);
+  if (step.type === 'free_point') {
+    // độ lớn dời thử: 15% khoảng cách trung bình từ M tới các điểm dựng TRƯỚC bước đang tính (không phụ thuộc đơn
+    // vị của hình; chỉ lấy các bước trước để lúc kéo và lúc tính lại toàn bộ cho cùng kết quả)
+    let sum = 0, n = 0;
+    for (const t of doc.steps) {
+      if (t.id === upto) break;
+      const v = vals.get(t.id);
+      if (t.id !== step.id && v && v.kind === 'point') { sum += Math.hypot(v.x - p.x, v.y - p.y); n++; }
+    }
+    const sc = 0.15 * (n ? sum / n : 1) || 0.15;
+    return FIX_OFFS.map(([dx, dy]) => ({ x: p.x + dx * sc, y: p.y + dy * sc }));
+  }
+  if (step.type === 'point_in') return FIX_UV.map(([u, v]) => ({ u, v }));
+  if (step.type === 'point_on') {
+    const host = vals.get(step.args[0]);
+    if (!host) return [];
+    if (host.kind === 'line' && host.sub === 'segment') return FIX_SEG.map((t) => ({ t }));
+    if (host.kind === 'line' && host.sub === 'ray') return FIX_DT.map((d) => ({ t: Math.max(0, p.t) * Math.exp(d) + 0.05 }));
+    return FIX_DT.map((d) => ({ t: p.t + d }));
+  }
+  return [];
+}
+
+const distTo = (P, X) => (X.kind === 'line' ? G.distPointLine(P, X) : Math.abs(G.dist(P, X.c) - X.r));
+
+const SAMPLERS = {
+  /** Điểm cố định của họ X (đường thẳng/đường tròn) khi M thay đổi. */
+  fixed_point(s, [X], p, vals, doc, overrides) {
+    const mover = doc.steps.find((t) => t.id === s.args[1]);
+    if (!mover) return null;
+    const objs = [X];
+    for (const tp of trialParams(mover, vals, doc, s.id)) {
+      const v = movedValues(doc, vals, mover.id, tp, s.id, overrides).get(s.args[0]);
+      if (v && v.kind === X.kind) objs.push(v);
+    }
+    if (objs.length < 4) return null;
+    // ứng viên: giao của hai vị trí khác nhau rõ rệt
+    const size = X.kind === 'circle' ? X.r : 1;
+    const cand = X.kind === 'line' ? [G.intersectLL(objs[1], objs[2])].filter(Boolean) : G.intersectCC(objs[1], objs[2]);
+    const tol = 1e-6 * (1 + size + Math.max(0, ...cand.map((c) => Math.hypot(c.x, c.y))));
+    const good = cand.filter((c) => objs.every((o) => distTo(c, o) <= tol)).sort((a, b) => a.x - b.x || a.y - b.y);
+    const r = good[p.which || 0];
+    return r ? G.pt(r.x, r.y) : null;
+  },
+  /** Quỹ tích của X khi D chạy trên đường của nó: đường gấp khúc n điểm (null ở chỗ không xác định). */
+  locus(s, _args, p, vals, doc, overrides) {
+    const D = doc.steps.find((t) => t.id === s.args[1]);
+    if (!D || D.type !== 'point_on') return null;
+    const host = vals.get(D.args[0]);
+    if (!host) return null;
+    const n = Math.max(8, Math.min(600, p.n | 0 || 160));
+    const t0 = paramsOf(D).t;
+    let a, b;
+    if (host.kind === 'circle') [a, b] = [0, 2 * Math.PI];
+    else if (host.sub === 'segment') [a, b] = [0, 1];
+    else if (host.sub === 'ray') [a, b] = [0, Math.max(4, 3 * Math.abs(t0))];
+    else [a, b] = [t0 - 3, t0 + 3];
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = a + ((b - a) * i) / n;
+      const v = movedValues(doc, vals, D.id, { t }, s.id, overrides).get(s.args[0]);
+      pts.push(v && v.kind === 'point' ? { x: v.x, y: v.y } : null);
+    }
+    return { kind: 'locus', pts, closed: host.kind === 'circle' };
+  },
+};
 
 function valueFinite(v) {
   if (v.kind === 'point') return Number.isFinite(v.x) && Number.isFinite(v.y);

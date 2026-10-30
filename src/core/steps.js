@@ -386,6 +386,62 @@ export const STEP_TYPES = {
     facts: (s) => [{ on: [s.args[0], s.id] }, { on: [s.args[1], s.id] }],
   },
 
+  // ---------- BẢN 1.7: góc bằng góc, điểm trong tam giác, điểm cố định, quỹ tích ----------
+  angle_line: {
+    // Đường qua O tạo với tia OX một góc bằng góc ∠ABC lấy trên hình (args: O, X, A, B, C). flip = false: quay OX
+    // theo đúng hướng của góc mẫu; flip = true: phía bên kia (chọn bằng cách rê chuột khi dựng).
+    kind: 'line', args: ['point', 'point', 'point', 'point', 'point'], params: { flip: false }, label: 'Đường tạo góc bằng góc cho trước',
+    compute: ([O, X, A, B, C], p) => {
+      const a = G.directedAngle(A, B, C);
+      if (a == null || G.dist(O, X) < G.EPS) return null;
+      return G.lineThrough(O, G.rotatePoint(X, O, p.flip ? -a : a));
+    },
+    facts: (s) => [{ on: [s.args[0], s.id] }],
+  },
+  angle_point: {
+    // Điểm E trên đường l với ∠XOE = ∠ABC (args: O, X, A, B, C, l); flip chọn phía – lấy theo chỗ bấm khi dựng.
+    kind: 'point', args: ['point', 'point', 'point', 'point', 'point', 'line'], params: { flip: false }, label: 'Điểm trên đường tạo góc bằng góc cho trước',
+    compute: ([O, X, A, B, C, l], p) => {
+      const a = G.directedAngle(A, B, C);
+      if (a == null || G.dist(O, X) < G.EPS) return null;
+      return G.intersectLL(G.lineThrough(O, G.rotatePoint(X, O, p.flip ? -a : a)), l);
+    },
+    facts: (s) => [{ on: [s.id, s.args[5]] }],
+  },
+  point_in: {
+    // Điểm thay đổi BÊN TRONG tam giác ABC: P = A + u·AB + v·AC (khi kéo luôn giữ u, v ≥ 0, u + v ≤ 1).
+    kind: 'point', args: ['point', 'point', 'point'], params: { u: 1 / 3, v: 1 / 3 }, label: 'Điểm trong tam giác',
+    compute: ([A, B, C], p) => G.pt(A.x + p.u * (B.x - A.x) + p.v * (C.x - A.x), A.y + p.u * (B.y - A.y) + p.v * (C.y - A.y)),
+  },
+  fixed_point: {
+    // Điểm cố định của họ đường thẳng/đường tròn X khi điểm M thay đổi (args: X, M): dời thử M rồi giao các vị trí của X
+    // (xem model.js – SAMPLERS). which: chỉ số khi có hai điểm cố định (xếp theo x tăng).
+    kind: 'point', args: ['curve', 'point'], params: { which: 0 }, label: 'Điểm cố định', sampler: true,
+    compute: () => null,
+    facts: (s) => [{ on: [s.id, s.args[0]] }],
+  },
+  locus: {
+    // Quỹ tích của điểm X khi điểm D chạy trên đường của nó (args: X, D; D là điểm trên đối tượng). Giá trị: đường gấp
+    // khúc lấy mẫu (xem model.js – SAMPLERS); không tham gia khám phá.
+    kind: 'mark', args: ['point', 'point'], params: { n: 160 }, label: 'Quỹ tích', sampler: true,
+    compute: () => null,
+  },
+  measure_len: {
+    // Số đo độ dài AB (hiện trên hình, cập nhật khi kéo). dx, dy: dời chữ (px).
+    kind: 'mark', args: ['point', 'point'], params: { dx: 0, dy: 0 }, label: 'Đo độ dài',
+    compute: ([A, B]) => ({ kind: 'measure', m: 'len', value: G.dist(A, B), at: { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } }),
+  },
+  measure_angle: {
+    // Số đo góc ABC (độ, 0..180).
+    kind: 'mark', args: ['point', 'point', 'point'], params: { dx: 0, dy: 0 }, label: 'Đo góc',
+    compute: ([A, B, C]) => { const a = G.directedAngle(A, B, C); return a == null ? null : { kind: 'measure', m: 'angle', value: Math.abs(a), at: { x: B.x, y: B.y } }; },
+  },
+  measure_ratio: {
+    // Tỉ số AB/CD.
+    kind: 'mark', args: ['point', 'point', 'point', 'point'], params: { dx: 0, dy: 0 }, label: 'Đo tỉ số',
+    compute: ([A, B, C, D]) => { const cd = G.dist(C, D); return cd < G.EPS ? null : { kind: 'measure', m: 'ratio', value: G.dist(A, B) / cd, at: { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } }; },
+  },
+
   // ---------- ĐÁNH DẤU (không tham gia khám phá) ----------
   polygon: {
     kind: 'mark', args: ['...point'], label: 'Miền đa giác',

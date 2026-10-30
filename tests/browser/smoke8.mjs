@@ -145,6 +145,13 @@ export async function run({ page, ok, shot, errors }) {
   await page.waitForTimeout(100);
   if (await page.$('.modal-back')) await page.click('.modal .primary');
 
+  // ---- nhiều tab: nút ✕ của tab đang mở và nút ＋ luôn thấy ----
+  const nt0 = await page.evaluate(() => __app.tabs.length);
+  await page.evaluate(() => { for (let i = 0; i < 14; i++) __app.newTab(); });
+  const vis = await page.evaluate(() => { const tb = document.getElementById('tabbar').getBoundingClientRect(); const x = document.querySelector('.dtab.active .dt-x').getBoundingClientRect(); const p = document.getElementById('tab-new').getBoundingClientRect(); return x.width > 0 && x.right <= tb.right + 0.5 && p.right <= tb.right + 0.5 && !(x.right > p.left && x.left < p.right); });
+  ok(vis, 'mở 15+ tab: các tab co lại, nút ✕ của tab đang mở và nút ＋ vẫn thấy, không đè nhau');
+  await page.evaluate((n) => { __app.tabs.splice(n); __app.showTab(n - 1); }, nt0);
+
   // ---- \widehat, \overrightarrow ----
   await page.evaluate(() => __app.textBoxes.newBox('ghichu', { fx: 0.3, fy: 0.3, w: 420, text: '$\\widehat{BAC} = \\widehat{BHC}$ và\n$\\overrightarrow{AB} + \\overrightarrow{BC}$' }));
   await page.waitForTimeout(200);

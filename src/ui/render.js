@@ -5,7 +5,7 @@
 import { kinds } from '../core/model.js';
 import { parseLabel, labelHTML } from '../core/names.js';
 import { placeLabels } from '../core/labels.js';
-import { styleOf } from '../core/styles.js';
+import { styleOf, isShown } from '../core/styles.js';
 import { trimmedRange } from '../core/geom.js';
 
 export { labelHTML };
@@ -31,6 +31,8 @@ export class Renderer {
     this.labelOffsets = new Map(); // id → [dx, dy] px (y hướng lên), chưa nhân scale
     this.labelBoxes = new Map(); // id → {x, y, w, h} toạ độ màn hình (để kéo nhãn)
     this.drawnIds = new Set();
+    this.measureBoxes = new Map(); // id → {x, y, w, h} khung chữ số đo (để chọn, kéo)
+    this.traces = null; // vết (bản 1.7): Map id → {kind, items: [giá trị]} do App ghi khi kéo
     view.painter = (ctx, v) => this.draw(ctx, v);
     view.onViewChange(() => this.onViewChange());
   }
@@ -53,7 +55,7 @@ export class Renderer {
     const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
     const layer = (s, kind) => order[s.type === 'polygon' ? 'polygon' : kind] ?? 3;
     this.items = doc.steps
-      .filter((s) => !s.hidden && (!visible || visible.has(s.id)))
+      .filter((s) => isShown(doc, s) && (!visible || visible.has(s.id)))
       .map((s) => {
         const kind = k.get(s.id);
         return { s, kind, st: styleOf(s, kind, theme), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
@@ -183,6 +185,8 @@ export class Renderer {
     ctx.lineJoin = 'round';
     if (this.grid) drawGrid(ctx, view);
     this.drawImages(ctx, view);
+    this.measureBoxes = new Map();
+    if (this.traces) this.drawTraces(ctx, view);
     const labels = [];
     const trimPts = this.trimPoints();
     this.lineRanges = new Map();
@@ -216,6 +220,11 @@ export class Renderer {
         ctx.fill();
         ctx.globalAlpha = 1;
         if (st.border) { ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash([]); ctx.stroke(); }
+      } else if (v.kind === 'locus') {
+        drawLocus(ctx, view, v, sel ? '#60a5fa' : color, width * (sel ? 1.8 : 1), st.dash);
+      } else if (v.kind === 'measure') {
+        const box = drawMeasure(ctx, view, this.doc, s, v, this.values, sc, sel ? '#2563eb' : hl ? '#b45309' : st.color);
+        if (box) this.measureBoxes.set(s.id, box);
       } else if (s.type === 'angle_mark' || s.type === 'segment_mark') {
         const px = 1 / view.scale;
         const [X, Y] = s.type === 'angle_mark' ? angleMarkPath(v, st, px, sc) : segMarkPath(v, st, px, sc);
@@ -237,9 +246,99 @@ export class Renderer {
   }
 }
 
+Renderer.prototype.drawTraces = function (ctx, view) {
+  const sc = this.scale;
+  for (const tr of this.traces.values()) {
+    if (!tr.items.length) continue;
+    if (tr.kind === 'point') {
+      ctx.fillStyle = TRACE;
+      for (const p of tr.items) { const q = view.toScreen(p); ctx.fillRect(q.x - 1.2 * sc, q.y - 1.2 * sc, 2.4 * sc, 2.4 * sc); }
+    } else {
+      ctx.globalAlpha = 0.45;
+      for (const v of tr.items) {
+        if (tr.kind === 'circle') strokeCircle(ctx, view.toScreen(v.c), v.r * view.scale, TRACE, 0.8 * sc, false);
+        else strokeLine(ctx, view, v, 'line', TRACE, 0.8 * sc, false);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+};
+
 const round1 = (v) => Math.round(v * 10) / 10;
+const TRACE = '#2f8f9d';
 
 // ================= các hàm vẽ =================
+/** Quỹ tích: đường gấp khúc qua các mẫu; ngắt ở mẫu không xác định và ở bước nhảy lớn bất thường (tiệm cận). */
+function drawLocus(ctx, view, v, color, width, dash) {
+  const Q = v.pts.map((p) => (p ? view.toScreen(p) : null));
+  const steps = [];
+  for (let i = 1; i < Q.length; i++) if (Q[i] && Q[i - 1]) steps.push(Math.hypot(Q[i].x - Q[i - 1].x, Q[i].y - Q[i - 1].y));
+  steps.sort((a, b) => a - b);
+  const med = steps.length ? steps[steps.length >> 1] : 0;
+  const jump = Math.max(40, 8 * med);
+  setStroke(ctx, color, width, dash);
+  ctx.beginPath();
+  let pen = false;
+  const n = Q.length;
+  for (let i = 0; i < n + (v.closed ? 1 : 0); i++) {
+    const q = Q[i % n], prev = i ? Q[(i - 1) % n] : null;
+    if (!q || Math.abs(q.x) > 1e6 || Math.abs(q.y) > 1e6) { pen = false; continue; }
+    if (pen && prev && Math.hypot(q.x - prev.x, q.y - prev.y) <= jump) ctx.lineTo(q.x, q.y);
+    else ctx.moveTo(q.x, q.y);
+    pen = true;
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+const plainName = (n) => String(n || '?').replace(/[_{}]/g, '');
+const fmtNum = (x, d) => x.toFixed(d).replace('.', ',');
+
+/** Chữ của một số đo: "AB = 5,00", "∠ABC = 81,9°", "AB/CD = 1,25". */
+export function measureText(doc, s, v) {
+  const n = s.args.map((a) => plainName(doc.steps.find((x) => x.id === a)?.name));
+  if (v.m === 'len') return `${n[0]}${n[1]} = ${fmtNum(v.value, 2)}`;
+  if (v.m === 'angle') return `∠${n[0]}${n[1]}${n[2]} = ${fmtNum(v.value, 1)}°`;
+  return `${n[0]}${n[1]}/${n[2]}${n[3]} = ${fmtNum(v.value, 3)}`;
+}
+
+/** Số đo trên hình: chữ có nền mờ; độ dời dx, dy (px) nằm trong params. Trả về khung chữ (toạ độ màn hình). */
+function drawMeasure(ctx, view, doc, s, v, values, sc, color) {
+  const text = measureText(doc, s, v);
+  let q = view.toScreen(v.at);
+  if (v.m === 'angle') {
+    // đặt trên phân giác của góc, cách đỉnh một đoạn
+    const A = values.get(s.args[0]), C = values.get(s.args[2]);
+    const a = A && view.toScreen(A), c = C && view.toScreen(C);
+    if (a && c) {
+      const u1 = norm(a.x - q.x, a.y - q.y), u2 = norm(c.x - q.x, c.y - q.y);
+      let b = norm(u1.x + u2.x, u1.y + u2.y);
+      if (!Number.isFinite(b.x)) b = { x: 0, y: -1 };
+      q = { x: q.x + b.x * 34 * sc, y: q.y + b.y * 34 * sc };
+    }
+  } else q = { x: q.x, y: q.y - 12 * sc };
+  const p = s.params || {};
+  const x = q.x + (p.dx || 0) * sc, y = q.y + (p.dy || 0) * sc;
+  const fpx = 13 * sc;
+  ctx.font = `${fpx}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+  const w = ctx.measureText(text).width;
+  const box = { x: x - w / 2 - 4 * sc, y: y - fpx * 0.75, w: w + 8 * sc, h: fpx * 1.5 };
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  return box;
+}
+
+function norm(x, y) {
+  const l = Math.hypot(x, y);
+  return { x: x / l, y: y / l };
+}
+
 function setStroke(ctx, color, width, dash) {
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
