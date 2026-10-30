@@ -70,11 +70,12 @@ class Span:
 
 
 class AngleChaser:
-    def __init__(self, doc, known=(), max_rounds=5, classical=True):
+    def __init__(self, doc, known=(), max_rounds=5, classical=True, strict=True):
         self.doc = doc
         self.vals = evaluate(doc)
         self.kind = kinds(doc)
         self.max_rounds = max_rounds
+        self.strict = strict  # nghiêm ngặt: không gán tính chất cho điểm thật chỉ vì trùng toạ độ với điểm ảo
         self.pts = [s["id"] for s in doc["steps"] if self.kind.get(s["id"]) == "point" and self.vals.get(s["id"]) is not None]
         P = [self.vals[p] for p in self.pts]
         xs = [p.x for p in P] or [0]
@@ -100,6 +101,7 @@ class AngleChaser:
         self.lspan = Span(0)
         self._pow_done = set()
         self._alt_done = set()
+        self._sim_done = set()
         self.tangents = []  # (đường tròn, tiếp điểm, đường tiếp tuyến hoặc None, điểm ngoài hoặc None)
         self._build()
         self._reflected_circles()
@@ -523,12 +525,15 @@ class AngleChaser:
                 self.equation([(self.pair(mx, my), 1), (self.pair(x, y), -1)])
 
     # ---------------------------------------------------------------- lớp affine
+    def _may_reuse(self, x):
+        return not self.strict or x.startswith("_")
+
     def _virtual_foot(self, P, U, V, tag):
         """Chân đường vuông góc từ P xuống UV: dùng điểm có sẵn nếu trùng (bằng số), không thì thêm điểm "ảo"."""
         if any(self.vals.get(x) is None for x in (P, U, V)) or G.dist(self.vals[U], self.vals[V]) < self.eps:
             return None
         X = G.project(self.vals[P], G.line_through(self.vals[U], self.vals[V]))
-        f = next((x for x in self.pts if G.dist(self.vals[x], X) < self.eps), None)
+        f = next((x for x in self.pts if self._may_reuse(x) and G.dist(self.vals[x], X) < self.eps), None)
         if f is None:
             f = "_f" + tag
             self.vals[f], self.kind[f] = X, "point"
@@ -553,7 +558,7 @@ class AngleChaser:
             Oc = G.circumcenter(*(self.vals[x] for x in a))
             if Oc is None:
                 continue
-            o = next((x for x in self.pts if G.dist(self.vals[x], Oc) < self.eps), None)
+            o = next((x for x in self.pts if self._may_reuse(x) and G.dist(self.vals[x], Oc) < self.eps), None)
             if o is None:
                 o = "_o" + s["id"]
                 self.vals[o], self.kind[o] = Oc, "point"
@@ -824,7 +829,7 @@ class AngleChaser:
             if o is None or self.vals.get(o) is None:
                 continue
             Oc = G.reflect_point_over_line(self.vals[o], G.line_through(self.vals[U], self.vals[V]))
-            c2 = next((x for x in self.pts if G.dist(self.vals[x], Oc) < self.eps), None)
+            c2 = next((x for x in self.pts if self._may_reuse(x) and G.dist(self.vals[x], Oc) < self.eps), None)
             if c2 is None:
                 c2 = "_c" + sid
                 self.vals[c2], self.kind[c2] = Oc, "point"
@@ -836,6 +841,68 @@ class AngleChaser:
             self.reflections.append((o, c2, U, V))
             if f is not None:
                 self.mids.append((f, o, c2))
+
+    def _similar(self, max_pts=40, max_pairs=600):
+        """Hai tam giác có hai cặp góc bằng nhau (SUY RA ĐƯỢC, cùng hoặc ngược hướng) ⇒ đồng dạng ⇒ tỉ số các cạnh
+        tương ứng bằng nhau (lớp độ dài). Ghép cặp nhanh bằng "chữ ký" góc tính bằng số."""
+        pts = [p for p in self.pts if not p.startswith("_x")][:max_pts]
+        if len(pts) < 4:
+            return 0
+        sig = {}
+        for a, b, c in itertools.combinations(pts, 3):
+            A_, B_, C_ = self.vals[a], self.vals[b], self.vals[c]
+            area = G.cross(G.sub(B_, A_), G.sub(C_, A_))
+            if abs(area) < 1e-6 * self.scale * self.scale:
+                continue
+            angs = []
+            for v, x, y in ((a, b, c), (b, c, a), (c, a, b)):
+                V, X, Y = self.vals[v], self.vals[x], self.vals[y]
+                angs.append((math.acos(max(-1.0, min(1.0, G.dot(G.unit(G.sub(X, V)), G.unit(G.sub(Y, V)))))), v, x, y))
+            angs.sort()
+            if angs[1][0] - angs[0][0] < 1e-6 or angs[2][0] - angs[1][0] < 1e-6:
+                continue  # tam giác cân: tương ứng đỉnh không duy nhất
+            key = (round(angs[0][0], 6), round(angs[1][0], 6))
+            sig.setdefault(key, []).append((angs, area > 0))
+        added, pairs = 0, 0
+        for group in sig.values():
+            for (t1, o1), (t2, o2) in itertools.combinations(group, 2):
+                k = (tuple(x[1] for x in t1), tuple(x[1] for x in t2))
+                if k in self._sim_done:
+                    continue
+                pairs += 1
+                if pairs > max_pairs:
+                    return added
+                self._sim_done.add(k)
+                # đỉnh tương ứng theo thứ tự độ lớn góc; hướng tính theo đúng thứ tự đó
+                v1 = [x[1] for x in t1]
+                v2 = [x[1] for x in t2]
+                P1 = [self.vals[x] for x in v1]
+                P2 = [self.vals[x] for x in v2]
+                same = (G.cross(G.sub(P1[1], P1[0]), G.sub(P1[2], P1[0])) > 0) == \
+                       (G.cross(G.sub(P2[1], P2[0]), G.sub(P2[2], P2[0])) > 0)
+                sgn = -1 if same else 1  # cùng hướng: góc có hướng bằng nhau; ngược hướng: đối nhau
+                eqs, rat = [], []
+                for i_ in range(3):
+                    j_, k_ = [t for t in range(3) if t != i_]
+                    eqs.append([(self.pair(v1[i_], v1[k_]), 1), (self.pair(v1[i_], v1[j_]), -1),
+                                (self.pair(v2[i_], v2[k_]), sgn), (self.pair(v2[i_], v2[j_]), -sgn)])
+                    rat.append([(self.L(v1[i_], v1[j_]), 1), (self.L(v1[i_], v1[k_]), -1),
+                                (self.L(v2[i_], v2[j_]), -1), (self.L(v2[i_], v2[k_]), 1)])
+                got = [self.derivable(e) for e in eqs]
+                if sum(got) < 2:
+                    # cạnh – góc – cạnh: một góc bằng nhau và tỉ số hai cạnh kề bằng nhau ⇒ đồng dạng ⇒ các góc còn lại
+                    if not any(g_ and self.lderivable(r_) for g_, r_ in zip(got, rat)):
+                        self._sim_done.discard(k)  # có thể thành công ở vòng sau
+                        continue
+                    for e, g_ in zip(eqs, got):
+                        if not g_:
+                            self.equation(e)
+                L = self.L
+                s0 = (L(v1[1], v1[2]), L(v2[1], v2[2]))
+                for s_ in ((L(v1[0], v1[2]), L(v2[0], v2[2])), (L(v1[0], v1[1]), L(v2[0], v2[1]))):
+                    self.lequation([(s_[0], 1), (s_[1], -1), (s0[0], -1), (s0[1], 1)])
+                added += 1
+        return added
 
     def _right_altitude(self):
         """Tam giác XPQ vuông tại X (suy ra được), M chân đường cao từ X trên PQ ⇒ XP² = PM·PQ, XQ² = QM·QP,
@@ -1260,6 +1327,7 @@ class AngleChaser:
             added += self._axis_points()
             added += self._perp_bisectors()
             added += self._right_altitude()
+            added += self._similar()
             added += self._power()
             added += self._isosceles()
             # góc vuông suy ra được + trung điểm cạnh huyền → điểm cách đều trung điểm
@@ -1297,9 +1365,9 @@ def point_form(doc, rtype, ids):
     return out
 
 
-def difficulty(doc, rtype, ids, known=(), max_rounds=5, classical=True):
+def difficulty(doc, rtype, ids, known=(), max_rounds=5, classical=True, strict=True):
     """Mức khó theo bộ đuổi góc: 1, 2, … (vòng suy luận), None (không suy ra được) hoặc "?" (ngoài tầm biểu diễn)."""
     try:
-        return AngleChaser(doc, known=known, max_rounds=max_rounds, classical=classical).level(rtype, ids)
+        return AngleChaser(doc, known=known, max_rounds=max_rounds, classical=classical, strict=strict).level(rtype, ids)
     except Exception:  # noqa: BLE001 – không làm đổ vòng khám phá; lỗi ≠ "khó" nên trả "?" (chưa đo được)
         return "?"

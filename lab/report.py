@@ -133,8 +133,9 @@ filter();
 
 
 TIER_NOTES = [
-    ("kho", "Đuổi góc (kể cả dùng kết luận các bổ đề) không suy ra được, hoặc cần ≥ 3 vòng, hoặc Newclid không chứng minh được."),
-    ("vua", "Cần một tứ giác nội tiếp / thẳng hàng trung gian (2 vòng đuổi góc), hoặc loại quan hệ chưa đo được độ khó."),
+    ("kho", "Bộ suy luận (đuổi góc, vectơ, tỉ số, đồng dạng, phương tích, dùng kết luận các bổ đề) không suy ra được hoặc "
+            "cần ≥ 4 vòng."),
+    ("vua", "Cần 2–3 vòng suy luận (một tứ giác nội tiếp / cặp tam giác đồng dạng trung gian…), hoặc chưa đo được độ khó."),
     ("de", "Đuổi góc một bước, nhưng giữ lại vì đối tượng tự nhiên và nối hai bổ đề hoặc dính (O), (I), O, H…"),
 ]
 
@@ -167,13 +168,13 @@ def _proof_text(nc, doc):
     return "\n\n".join(out) or (nc.get("proof") or "").strip()
 
 
-KHO_LABEL = {1: ("đuổi góc 1 bước", "kho-easy"), 2: ("đuổi góc 2 vòng", "kho-mid"),
-             None: ("đuổi góc không ra – cần ý khác", "kho-hard"), "?": ("chưa đo được độ khó", "")}
+KHO_LABEL = {1: ("suy ra 1 bước", "kho-easy"), 2: ("2 vòng suy luận", "kho-mid"), 3: ("3 vòng suy luận", "kho-mid"),
+             None: ("máy không suy ra được – cần ý khác", "kho-hard"), "?": ("chưa đo được độ khó", "")}
 
 
 def _kho_chip(k):
-    if isinstance(k, int) and k >= 3:
-        return f'<span class="chip kho-hard">đuổi góc {k} vòng</span>'
+    if isinstance(k, int) and k >= 4:
+        return f'<span class="chip kho-hard">{k} vòng suy luận</span>'
     lab, cls = KHO_LABEL.get(k, (None, ""))
     return f'<span class="chip {cls}">{lab}</span>' if lab else ""
 

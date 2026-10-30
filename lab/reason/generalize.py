@@ -120,21 +120,27 @@ def decorative(doc, rtype, ids, samples, seed=1, max_points=8):
         X = v0.get(x)
         if X is None:
             continue
-        for h, st in by.items():
-            if order[h] >= order[x] or kinds_.get(h) not in ("line", "circle") or v0.get(h) is None:
-                continue
-            if G.dist_to_object(v0[h], X) > eps0:
+        # đường chứa x: đường/đường tròn có sẵn dựng trước x, và đường "ngầm" qua hai đối số của x (vd chân đường
+        # vuông góc xuống BC khi hình không vẽ đường BC)
+        hosts = [h for h in by if order[h] < order[x] and kinds_.get(h) in ("line", "circle") and v0.get(h) is not None]
+        st_x = by[x]
+        imp = {"foot": (1, 2), "altitude_foot": (1, 2), "incircle_touch": (1, 2), "symmedian_foot": (1, 2),
+               "cevian_foot": (2, 3), "midpoint": (0, 1)}.get(st_x["type"])
+        if imp:
+            U_, V_ = st_x["args"][imp[0]], st_x["args"][imp[1]]
+            if not any(by[h]["type"] in ("line", "segment", "ray") and set(by[h]["args"]) == {U_, V_} for h in hosts):
+                hosts.append(["pts", U_, V_])
+        for h in hosts:
+            hv = G.line_through(v0[h[1]], v0[h[2]]) if isinstance(h, list) else v0[h]
+            if hv is None or G.dist_to_object(hv, X) > eps0:
                 continue
             # sự kiện chính là "x nằm trên h" (viết cách khác) thì nới lỏng vô nghĩa
-            if fact_pts and all(p is not None and G.dist_to_object(v0[h], p) < eps0 for p in fact_pts) and \
+            if fact_pts and all(p is not None and G.dist_to_object(hv, p) < eps0 for p in fact_pts) and \
                     rtype in ("concyclic", "collinear", "on_circle", "on_line"):
                 continue
-            d = copy.deepcopy(doc)
-            for s in d["steps"]:
-                if s["id"] == x:
-                    s["type"], s["args"], s["params"] = "point_on", [h], {"t": 0.0}
-            seg = by[h]["type"] == "segment"
-            circ = kinds_.get(h) == "circle"
+            d = _relax_on(doc, x, h, 0.0)
+            seg = not isinstance(h, list) and by[h]["type"] == "segment"
+            circ = not isinstance(h, list) and kinds_.get(h) == "circle"
 
             def place(vb, x=x):
                 t = rnd.uniform(0.1, 0.9) if seg else (rnd.uniform(0, 2 * math.pi) if circ else rnd.uniform(-1.5, 1.5))
@@ -179,16 +185,31 @@ def generalized_doc(doc, ids, tq):
             continue
         if tq["loai"] == "tu_do":
             st["type"], st["args"], st["params"] = "free_point", [], {"x": round(X.x, 6), "y": round(X.y, 6)}
+    if tq["loai"] == "tren":
+        hd = tq["duong"]
+        h = G.line_through(v[hd[1]], v[hd[2]]) if isinstance(hd, list) else v.get(hd)
+        if h is None:
+            return None
+        if h.kind == "circle":
+            t = math.atan2(X.y - h.c.y, X.x - h.c.x)
         else:
-            h = v.get(tq["duong"])
-            if h is None:
-                return None
-            if h.kind == "circle":
-                t = math.atan2(X.y - h.c.y, X.x - h.c.x)
-            else:
-                t = G.dot(G.sub(X, h.p), h.d) / max(G.dot(h.d, h.d), 1e-18)
-            st["type"], st["args"], st["params"] = "point_on", [tq["duong"]], {"t": t}
+            t = G.dot(G.sub(X, h.p), h.d) / max(G.dot(h.d, h.d), 1e-18)
+        d = _relax_on(doc, x, hd, t)
     return sub_doc(d, ids, title=doc.get("title", ""))
+
+
+def _relax_on(doc, x, h, t):
+    """Hình với x thay bằng "điểm tuỳ ý trên h" (h: id đường có sẵn, hoặc ["pts", U, V] – thêm đường UV ngay trước x)."""
+    d = copy.deepcopy(doc)
+    host = h
+    if isinstance(h, list):
+        host = "_h" + x
+        i = next(k for k, s in enumerate(d["steps"]) if s["id"] == x)
+        d["steps"].insert(i, {"id": host, "type": "line", "args": [h[1], h[2]]})
+    for s in d["steps"]:
+        if s["id"] == x:
+            s["type"], s["args"], s["params"] = "point_on", [host], {"t": t}
+    return d
 
 
 def describe(tq, name=lambda x: x, curve=lambda x: x):
@@ -200,7 +221,9 @@ def describe(tq, name=lambda x: x, curve=lambda x: x):
     if tq["loai"] == "tu_do":
         return f"{name(tq['diem'])} chỉ để trang trí – thay bằng một điểm bất kỳ vẫn đúng"
     if tq["loai"] == "tren":
-        return f"{name(tq['diem'])} chỉ cần nằm trên {curve(tq['duong'])} – thay bằng điểm bất kỳ trên đó vẫn đúng"
+        hd = tq["duong"]
+        where = f"đường thẳng {name(hd[1])}{name(hd[2])}" if isinstance(hd, list) else curve(hd)
+        return f"{name(tq['diem'])} chỉ cần nằm trên {where} – thay bằng điểm bất kỳ trên đó vẫn đúng"
     return "đường thẳng Euler chỉ để trang trí – vẫn đúng với mọi đường thẳng qua O"
 
 

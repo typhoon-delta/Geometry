@@ -35,7 +35,7 @@ class TestSuyLuan(unittest.TestCase):
         self.assertEqual(kl_level("dxH"), 1)          # đối xứng của H qua BC nằm trên (O)
         self.assertEqual(kl_level("tbt", 1), 1)       # A, I, S_a, I_a thẳng hàng
         self.assertIsNone(kl_level("gergonne"))       # cần Ceva – ngoài tầm đuổi góc
-        self.assertIsNone(kl_level("nagel"))
+        self.assertEqual(kl_level("nagel"), 3)        # đường thẳng Nagel: cần tam giác đồng dạng (tỉ số)
 
     def test_duong_trung_binh(self):
         # M, N trung điểm AB, AC ⇒ MN ∥ BC (lớp affine)
@@ -94,7 +94,7 @@ class TestSuyLuan(unittest.TestCase):
         self.assertIsNone(decorative(mk([{"id": "X", "type": "midpoint", "args": ["A", "H"]}], ["e", "X"]), "on_circle", ["e", "X"], S))
 
     def test_nam_bai_thay_co_gui(self):
-        """Năm bài đứng đầu tầng Khó của một lần chạy thật, thầy/cô gửi lại: bốn bài thực ra dễ, một bài khó thật."""
+        """Năm bài đứng đầu tầng Khó của một lần chạy thật, thầy/cô gửi lại: bốn bài thực ra dễ, một bài vừa (3 vòng)."""
         import copy
 
         from lab.reason.angles import point_form
@@ -114,18 +114,18 @@ class TestSuyLuan(unittest.TestCase):
             # đường tròn đối xứng của (O) qua BC là (BHC)
             2: ([("P", "circumcenter", ["B", "H", "C"], None), ("w1", "reflect", ["w", "BC"], None),
                  ("Q", "intersection_other", ["CA", "w1", "C"], None), ("R", "circumcenter", ["Q", "B", "A"], None),
-                 ("U", "reflect", ["R", "BC"], None)], "concyclic", ["B", "O", "P", "R", "U"], [], 1),
+                 ("U", "reflect", ["R", "BC"], None)], "concyclic", ["B", "O", "P", "R", "U"], [], 2),
             # phương tích + hệ thức lượng: PM·PO = PB² = PQ·PR
             3: ([("d1", "tangent_at", ["w", "B"], None), ("d2", "tangent_at", ["w", "C"], None),
                  ("P", "intersection", ["d1", "d2"], None), ("Q", "reflect", ["A", "O"], None), ("PQ", "line", ["P", "Q"], None),
                  ("R", "intersection_other", ["PQ", "w", "Q"], None)], "concyclic", ["O", "Ma", "Q", "R"], [], 2),
             4: ([("w1", "reflect", ["w", "BC"], None), ("P", "intersection_other", ["CA", "w1", "C"], None),
                  ("Q", "circumcenter", ["P", "B", "A"], None)], "collinear", ["B", "H", "E", "Q"], [], 1),
-            # đối xứng của điểm Humpty qua BC trên đường tròn đường kính OP: khó thật
+            # đối xứng của điểm Humpty qua BC trên đường tròn đường kính OP: khó hơn – 3 vòng (cần tam giác đồng dạng)
             5: ([("d1", "tangent_at", ["w", "A"], None), ("P", "intersection", ["d1", "BC"], None),
                  ("w1", "circle_tangent_at", ["B", "C", "A"], None), ("w2", "circle_tangent_at", ["C", "B", "A"], None),
                  ("Q", "intersection_other", ["w1", "w2", "A"], None), ("R", "reflect", ["Q", "BC"], None)],
-                "concyclic", ["A", "O", "Ma", "P", "R"], [("collinear", ["A", "Q", "Ma"])], None),
+                "concyclic", ["A", "O", "Ma", "P", "R"], [("collinear", ["A", "Q", "Ma"])], 3),
         }
         S = make_samples(6, 11)
         for k, (extra, rt, ids, kls, want) in bai.items():

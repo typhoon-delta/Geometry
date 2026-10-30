@@ -1180,3 +1180,22 @@ Tốc độ giảm khoảng 25 % (bộ suy luận làm nhiều việc hơn).
 
 Sửa thêm: luật hệ thức lượng nhanh hơn ~13 lần (tra chân đường cao theo toạ độ); **lỗi trong bộ suy luận trước đây bị
 tính là "khó"** – nay trả "?" (chưa đo được).
+
+## 5. Đợt 2 (bài #26–#50) và luật tam giác đồng dạng
+
+Giải tay #26–#50: lại phần lớn là bổ đề kinh điển đội lốt – bổ đề "bắn" S_aX·S_aR = S_aB² (#26, X_a chỉ cần nằm trên BC),
+bổ đề đường đẳng giác AX·AY = AB·AC (#41), BT_a·CT_a = r·r_a (#45)… Cả ba cần **tam giác đồng dạng ⇒ tỉ số**, thứ bộ suy
+luận chưa có. Đã thêm:
+
+* **Tam giác đồng dạng** (góc–góc ⇒ tỉ số ba cạnh; cạnh–góc–cạnh ⇒ các góc còn lại), ghép cặp nhanh bằng "chữ ký" góc
+  tính bằng số, tương ứng đỉnh theo độ lớn góc, xét cả cùng hướng và ngược hướng.
+* **Điểm trang trí trên đường ngầm**: điểm dựng là chân đường vuông góc / tiếp điểm / trung điểm trên đường UV mà hình
+  không vẽ UV – vẫn thử "tuỳ ý trên UV" (vd #26: "Lấy Q tuỳ ý trên đường thẳng BC").
+* **Chế độ nghiêm ngặt** (mặc định): điểm ảo luôn tạo riêng, không gán tính chất cho điểm thật chỉ vì trùng toạ độ
+  (tránh "dùng điều cần chứng minh làm giả thiết").
+* Ngưỡng tầng: **Khó** = không suy ra được hoặc ≥ 4 vòng; **Vừa** = 2–3 vòng (với luật đồng dạng, 3 vòng thường là bài
+  cỡ vừa); Newclid "không chứng minh được" không còn tự động là "khó" khi bộ suy luận đã giải được.
+
+Kết quả trên 50 bài (`lab/tests/test_50_bai.py`): **45 bài máy tự giải trong ≤ 3 vòng**; 5 bài chưa (#7 – thực ra dễ
+bằng hình chữ nhật, #22 – tứ giác điều hoà, #42, #44, #47). Cả bốn "ứng viên khó" của đợt 1 (#10, #13, #23, #25) đều
+được giải trong 2–3 vòng nhờ đồng dạng – máy chỉ cho số vòng, chưa in lời giải. Chạy 5 phút: tầng Khó còn 10 %.

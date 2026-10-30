@@ -55,8 +55,8 @@ FEATURE_LABELS = {
     "do_dai_chung_minh": "độ dài chứng minh", "xa_nhau": "đối tượng xa nhau trong cây dựng",
     "dac_biet": "dính (O), (I), đường tròn Euler, O, I, H", "dac_biet_phu": "dính G, N", "it_buoc": "ít bước dựng",
     "diem_tu_do": "điểm tuỳ ý", "so_diem": "phát biểu dài",
-    "kho_1": "đuổi góc 1 bước", "kho_2": "đuổi góc 2 vòng", "kho_3": "đuổi góc ≥ 3 vòng",
-    "kho_khong": "đuổi góc không suy ra được", "kho_chua": "chưa đánh giá được độ khó",
+    "kho_1": "suy ra 1 bước", "kho_2": "2 vòng suy luận", "kho_3": "≥ 3 vòng suy luận",
+    "kho_khong": "bộ suy luận không suy ra được", "kho_chua": "chưa đánh giá được độ khó",
     "tu_nhien": "độ tự nhiên", "giao_thoa": "nối hai bổ đề", "noi_bo": "nằm gọn trong một bổ đề",
     "he_qua": "hệ quả trực tiếp của sự kiện khác", "dai_dong": "phát biểu dài dòng (số câu dựng hình quá 4)",
     "gia_dac_biet": "có điểm chỉ để trang trí (nới lỏng vẫn đúng)",
@@ -143,9 +143,9 @@ def tier(fact, cfg_loc=None):
     k = fact.get("kho", "?")
     if nc == "chung-minh-duoc" and k in (None, "?"):
         k = 2  # Newclid chứng minh được: không "khó"
-    if k is None or (isinstance(k, int) and k >= 3) or nc in ("khong-chung-minh-duoc", "het-gio"):
+    if k is None or (isinstance(k, int) and k >= 4) or nc in ("khong-chung-minh-duoc", "het-gio") and k in (None, "?"):
         return "kho"
-    if k == 2 or k == "?":
+    if k in (2, 3) or k == "?" or (isinstance(k, int) and k >= 4):
         return "vua"
     special = feats.get("dac_biet", 0) + feats.get("dac_biet_phu", 0)
     if fact.get("tong_quat"):
