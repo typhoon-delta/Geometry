@@ -8,11 +8,12 @@ export function setupTabBar(app) {
   const label = (doc, i) => doc.title || `Hình ${i + 1}`;
   const render = () => {
     if (host.querySelector('input')) return; // đang đặt tên
-    host.innerHTML = app.tabs.map((t, i) => {
+    // các tab nằm trong vùng cuộn riêng; nút ＋ ở ngoài nên luôn thấy dù mở nhiều tab
+    host.innerHTML = '<div class="dt-list">' + app.tabs.map((t, i) => {
       const doc = i === app.tabIdx ? app.doc : t.doc;
       return `<div class="dtab${i === app.tabIdx ? ' active' : ''}" data-tab="${i}" title="${escapeHTML(label(doc, i))}${i === app.tabIdx ? ' – nháy đúp để đặt tên' : i < 9 ? ` (Alt+${i + 1})` : ''}">
         <span class="dt-name">${escapeHTML(label(doc, i))}</span>${tabDirty(app, i) ? '<span class="dt-dot" title="Có thay đổi chưa lưu ra tệp hay kho"></span>' : ''}<button class="dt-x" data-close="${i}" title="Đóng hình">✕</button></div>`;
-    }).join('') + '<button id="tab-new" class="dt-new" title="Hình mới (tab mới)">＋</button>';
+    }).join('') + '</div><button id="tab-new" class="dt-new" title="Hình mới (tab mới)">＋</button>';
     host.querySelector('.dtab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
   app.renderTabs = render;

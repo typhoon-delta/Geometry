@@ -28520,11 +28520,11 @@ ${tk.v}
     const label = (doc2, i) => doc2.title || `H\xECnh ${i + 1}`;
     const render3 = () => {
       if (host.querySelector("input")) return;
-      host.innerHTML = app.tabs.map((t2, i) => {
+      host.innerHTML = '<div class="dt-list">' + app.tabs.map((t2, i) => {
         const doc2 = i === app.tabIdx ? app.doc : t2.doc;
         return `<div class="dtab${i === app.tabIdx ? " active" : ""}" data-tab="${i}" title="${escapeHTML(label(doc2, i))}${i === app.tabIdx ? " \u2013 nh\xE1y \u0111\xFAp \u0111\u1EC3 \u0111\u1EB7t t\xEAn" : i < 9 ? ` (Alt+${i + 1})` : ""}">
         <span class="dt-name">${escapeHTML(label(doc2, i))}</span>${tabDirty(app, i) ? '<span class="dt-dot" title="C\xF3 thay \u0111\u1ED5i ch\u01B0a l\u01B0u ra t\u1EC7p hay kho"></span>' : ""}<button class="dt-x" data-close="${i}" title="\u0110\xF3ng h\xECnh">\u2715</button></div>`;
-      }).join("") + '<button id="tab-new" class="dt-new" title="H\xECnh m\u1EDBi (tab m\u1EDBi)">\uFF0B</button>';
+      }).join("") + '</div><button id="tab-new" class="dt-new" title="H\xECnh m\u1EDBi (tab m\u1EDBi)">\uFF0B</button>';
       host.querySelector(".dtab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
     };
     app.renderTabs = render3;
