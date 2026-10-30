@@ -19,7 +19,7 @@ test('điểm phụ: IMO 2013/4 – gợi ý đầu tiên là giao điểm thứ
   const { THU_VIEN } = await import('../src/core/thu-vien.js');
   const { parseCommand } = await import('../src/core/cmd.js');
   const { clone } = await import('../src/core/model.js');
-  const { rankAux } = await import('../src/explore/aux.js');
+  const { rankAux } = await import('../src/explore/auxPoints.js');
   const d = clone(THU_VIEN.find((x) => x.id === 'imo2013-4').doc);
   const claim = parseCommand(d, 'kiểm tra X, Y, H thẳng hàng').run(d);
   const r = rankAux(d, claim, { budgetMs: 20000 });

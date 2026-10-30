@@ -6,7 +6,7 @@
 //   • Điểm phụ gợi ý: rê chuột để xem trước, "Dựng" để thêm vào hình.
 
 import { discover } from '../explore/discover.js';
-import { rankAux } from '../explore/aux.js';
+import { rankAux } from '../explore/auxPoints.js';
 import { claimsFor, claimText, CLAIMS } from '../explore/check.js';
 import { parseCommand } from '../core/cmd.js';
 import { addSpecs } from '../core/apply.js';

@@ -26449,7 +26449,7 @@ ${tk.v}
     return { relations: rels, goal: goalInfo, stats: { ...base2.stats, ms: Date.now() - t0, quantities: rels.filter((r) => r.type === "equal_len" || r.type === "equal_angle").length } };
   }
 
-  // src/explore/aux.js
+  // src/explore/auxPoints.js
   var nm2 = (doc2, id) => stepById(doc2, id)?.name || "?";
   var cv = (doc2, id) => {
     const d = describe(doc2, id);

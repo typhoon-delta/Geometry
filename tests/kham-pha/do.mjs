@@ -10,7 +10,7 @@ import { matchContext, relationImplies } from '../../src/explore/match.js';
 import { checkClaim } from '../../src/explore/check.js';
 import { DE_BAI } from './de-bai.mjs';
 import { proveClaim } from '../../src/explore/deduce.js';
-import { rankAux } from '../../src/explore/aux.js';
+import { rankAux } from '../../src/explore/auxPoints.js';
 import { addSpecs } from '../../src/core/apply.js';
 
 /** Áp các lệnh dựng (setup / điểm phụ) lên bản sao hình. */

@@ -1047,7 +1047,7 @@ chứng minh**, và (4) gợi ý **điểm phụ** – chỗ khó nhất của m
   theo độ "lạ", độ lớn, mức xa giả thiết và độ gần mục tiêu.
 * **Mục tiêu** (bước đệm): gõ như lệnh kiểm tra hoặc lấy từ đối tượng đang chọn; thẻ mục tiêu (đúng?/chứng minh được?/vì sao);
   quan hệ dính tới mục tiêu lên đầu; từ một quan hệ có thể *Đặt làm mục tiêu*, *Chèn vào lời giải*.
-* **Điểm phụ** (`src/explore/aux.js`): dựng thử giao điểm thứ hai của đường với đường tròn, trung điểm, chân đường vuông góc,
+* **Điểm phụ** (`src/explore/auxPoints.js`): dựng thử giao điểm thứ hai của đường với đường tròn, trung điểm, chân đường vuông góc,
   điểm đối tâm, tâm ngoại tiếp, giao điểm hai đường tròn ngoại tiếp (Miquel), tâm đồng dạng quay; với mỗi điểm chạy lại bộ máy
   (giới hạn 4 giây), xếp: làm mục tiêu chứng minh được → nhiều quan hệ mới không hiển nhiên. Xem trước khi rê chuột, *Dựng* để
   thêm.
