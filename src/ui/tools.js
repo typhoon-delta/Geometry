@@ -7,6 +7,7 @@
 //   preview : kiểu xem trước khi đang chọn ('segment'|'line'|'ray'|'circle'|'polygon')
 
 import { STEP_TYPES } from '../core/steps.js';
+import { dependents } from '../core/model.js';
 import { LIBRARY, MENUS } from './library.js';
 
 const T = (id, label, group, icon, inputs, hints, make, extra = {}) => ({ id, label, group, icon, inputs, hints, make, ...extra });
@@ -73,8 +74,13 @@ export const TOOLS = [
     (p) => [{ type: 'fixed_point', args: p, params: { which: 0 }, name: 'X' }, { type: 'fixed_point', args: p, params: { which: 1 }, name: 'Y' }],
     { anyOrder: true, after: 'fixedPoint' }),
   T('locus', 'Quỹ tích', 'Quỹ tích', '∿', ['point', 'point'],
-    ['Chọn điểm cần vẽ quỹ tích (vd trung điểm N)', 'Chọn điểm chạy (điểm nằm trên một đường, dựng bằng công cụ Điểm bấm lên đường)'],
-    (p) => [{ type: 'locus', args: p }], { after: 'locus' }),
+    ['Chọn điểm chạy (vd D chạy trên BC) và điểm cần vẽ quỹ tích – thứ tự nào cũng được', 'Chọn nốt điểm còn lại'],
+    // tự nhận ra điểm chạy: điểm trên đường mà điểm kia phụ thuộc vào (bấm D rồi K hay K rồi D đều được)
+    ([a, b], app) => {
+      const on = (id) => app.doc.steps.find((s) => s.id === id)?.type === 'point_on';
+      const driverFirst = on(a) && (!on(b) || dependents(app.doc, [a]).has(b));
+      return [{ type: 'locus', args: driverFirst ? [b, a] : [a, b] }];
+    }, { after: 'locus' }),
   T('measure_len', 'Đo độ dài', 'Đo', '|↔|', ['point', 'point'], ['Chọn điểm thứ nhất (hoặc bấm vào một đoạn thẳng)', 'Chọn điểm thứ hai'], one('measure_len'), { segmentShortcut: true }),
   T('measure_angle', 'Đo góc', 'Đo', '∠°', ['point', 'point', 'point'], ['Chọn điểm trên cạnh thứ nhất', 'Chọn ĐỈNH góc', 'Chọn điểm trên cạnh thứ hai'], one('measure_angle')),
   T('measure_ratio', 'Đo tỉ số AB/CD', 'Đo', 'a/b', ['point', 'point', 'point', 'point'], ['Chọn A', 'Chọn B', 'Chọn C', 'Chọn D (tỉ số AB/CD)'], one('measure_ratio'), { allowRepeat: true }),

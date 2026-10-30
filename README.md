@@ -119,8 +119,9 @@ và mọi công cụ cần chọn điểm cũng vậy: bấm vào chỗ cắt l�
   lấy** để chọn phía. Vd đề "E trên AC sao cho ∠AQE = ∠PCB": góc mẫu P, C, B; đỉnh Q; điểm A; đường AC.
 * **Điểm trong tam giác** (nhóm *Điểm*): chọn ba đỉnh rồi bấm vào trong tam giác. Kéo thì điểm luôn ở trong tam giác
   (ra ngoài thì dừng ở cạnh); khám phá chỉ thử các vị trí trong tam giác.
-* **Quỹ tích** (nhóm *Quỹ tích, điểm cố định*): chọn điểm cần vẽ quỹ tích rồi điểm chạy (điểm trên đường thẳng/đường tròn,
-  dựng bằng công cụ Điểm bấm lên đường). Quỹ tích cập nhật khi kéo các điểm khác.
+* **Quỹ tích** (nhóm *Quỹ tích, điểm cố định*): chọn điểm chạy (điểm trên đường thẳng/đường tròn, dựng bằng công cụ Điểm
+  bấm lên đường) và điểm cần vẽ quỹ tích – thứ tự nào cũng được. Quỹ tích cập nhật khi kéo các điểm khác. Điểm chạy lỡ dựng
+  thành điểm tự do: chọn nó, bấm **Gắn lên đường…** ở thẻ thuộc tính rồi bấm vào đường – mọi thứ dựng từ nó giữ nguyên.
 * **Vết**: chọn một điểm (đường thẳng, đường tròn) → tích *Để lại vết khi kéo* ở thẻ thuộc tính, rồi kéo điểm khác.
   *Hiển thị › Xoá vết*. Vết không lưu vào hình.
 * **Điểm cố định**: chọn đường thẳng/đường tròn thay đổi và điểm thay đổi (điểm tự do, trên đường, trong tam giác) – thứ tự

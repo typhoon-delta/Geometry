@@ -922,15 +922,55 @@ export class App {
   afterTool(kind, ids) {
     const vals = evaluate(this.doc);
     const bad = ids.filter((id) => !vals.get(id));
+    const why = kind === 'locus' && bad.length ? this.locusProblem(stepById(this.doc, bad[0])) : null;
     if (bad.length) this.doc.steps = removeSteps(this.doc, bad).doc.steps;
     const left = ids.filter((id) => !bad.includes(id));
     if (kind === 'fixedPoint') {
       if (!left.length) toast('Không tìm thấy điểm cố định: đường này không đi qua điểm cố định nào khi điểm đã chọn thay đổi (hoặc điểm đó không đổi được)', 5000);
       else toast(left.length === 1 ? `Điểm cố định: ${this.name(left[0])}` : `Có hai điểm cố định: ${left.map((id) => this.name(id)).join(', ')}`);
     } else if (kind === 'locus' && !left.length) {
-      toast('Điểm chạy phải là điểm nằm trên một đường (dựng bằng công cụ Điểm bấm lên đường thẳng/đường tròn), và điểm cần vẽ quỹ tích phải phụ thuộc vào nó', 5500);
+      toast(why, 7000);
     }
     return left;
+  }
+
+  /** Vì sao không vẽ được quỹ tích (args: [điểm vẽ quỹ tích, điểm chạy]) – lời nhắc cụ thể. */
+  locusProblem(s) {
+    const [X, D] = s.args;
+    const sd = stepById(this.doc, D), sx = stepById(this.doc, X);
+    const n = (st) => st?.name || '?';
+    if (sd.type !== 'point_on' && sx.type !== 'point_on') {
+      const free = [sd, sx].find((st) => st.type === 'free_point');
+      return `Cần một điểm chạy trên một đường, nhưng ${n(sx)} và ${n(sd)} đều không phải.` +
+        (free ? ` ${n(free)} đang là điểm tự do: chọn ${n(free)}, bấm "Gắn lên đường…" ở thẻ thuộc tính rồi bấm vào đường (vd BC) – các thứ dựng từ ${n(free)} vẫn giữ nguyên.` : '');
+    }
+    if (!dependents(this.doc, [D]).has(X)) return `${n(sx)} không phụ thuộc ${n(sd)} nên không thay đổi khi ${n(sd)} chạy – không có quỹ tích.`;
+    return `Không vẽ được quỹ tích: ${n(sx)} không xác định khi ${n(sd)} chạy trên đường của nó.`;
+  }
+
+  /** "Gắn lên đường…": biến điểm tự do thành điểm chạy trên một đường thẳng / đường tròn (lần bấm tiếp theo). */
+  startAttach(id) {
+    this.attach = { id };
+    this.showHint(`Bấm vào đường thẳng hoặc đường tròn để gắn ${this.name(id)} lên (Esc: huỷ)`);
+    this.stage.classList.add('tool-active');
+  }
+
+  attachTo(id, curve) {
+    const s = stepById(this.doc, id);
+    if (!s || s.type !== 'free_point') return false;
+    if (curve === id || dependents(this.doc, [id]).has(curve)) { toast('Không gắn được: đường này dựng từ chính điểm đó'); return false; }
+    const c = this.values.get(curve), P = this.values.get(id);
+    if (!c || !P) return false;
+    const t = Math.round(G.paramOf(c, P) * 1e9) / 1e9;
+    this.commit((doc) => {
+      const st = stepById(doc, id);
+      st.type = 'point_on';
+      st.args = [curve];
+      st.params = { t };
+      doc.steps = topoOrder(doc.steps);
+    });
+    toast(`${s.name} giờ chạy trên ${describe(this.doc, curve)} – kéo ${s.name} hoặc vẽ quỹ tích theo ${s.name}`, 4000);
+    return true;
   }
 
   /** Phía của đường tạo góc theo chỗ chuột (extraPos): cùng phía với chuột so với đường OX. */
@@ -1102,6 +1142,20 @@ export class App {
         toast(`Đã ẩn ${s.name || 'đối tượng'} – Ctrl+Z để hiện lại`);
         return;
       }
+    }
+
+    if (this.attach) {
+      e.stopPropagation();
+      e.preventDefault();
+      const { id } = this.attach;
+      const h = this.hitTest(sx, sy).find((x) => (x.kind === 'line' || x.kind === 'circle'));
+      this.attach = null;
+      this.stage.classList.toggle('tool-active', this.toolId !== 'move');
+      if (h) this.attachTo(id, h.id);
+      this.selection = new Set([id]);
+      this.refresh();
+      this.showHint();
+      return;
     }
 
     if (this.redefine) {
@@ -1742,7 +1796,8 @@ export class App {
       }
       if (e.key === 'Home') { e.preventDefault(); this.zoomFit(); return; }
       if (e.key === 'Escape') {
-        if (this.redefine) { this.redefine = null; this.stage.classList.toggle('tool-active', this.toolId !== 'move'); this.showHint(); }
+        if (this.attach) { this.attach = null; this.stage.classList.toggle('tool-active', this.toolId !== 'move'); this.showHint(); }
+        else if (this.redefine) { this.redefine = null; this.stage.classList.toggle('tool-active', this.toolId !== 'move'); this.showHint(); }
         else if (this.picks.length || this.awaitExtra) this.cancelTool();
         else if (this.toolId !== 'move') this.setTool('move');
         else { this.selection.clear(); this.imageSel = null; this.setRelation(null); }

@@ -164,6 +164,7 @@ export function renderProps(app) {
   if (specials.length) html += `<div class="row special-row">Đưa về ${specials.map((c, i) => `<button class="mini" data-special="${i}" title="${esc(c.label)}">${esc(shortLabel(c))}</button>`).join('')}</div>`;
   if (one && (kind === 'line' || kind === 'circle')) html += `<label class="row" title="Đường phụ: nét đứt, ẩn/hiện tất cả cùng lúc bằng Ctrl+Shift+D. Bỏ chọn: đường chính."><input id="p-aux" type="checkbox" ${s.aux ? 'checked' : ''}> Đường phụ (bỏ chọn: đường chính)</label>`;
   if (one && kind !== 'mark') html += `<label class="row"><input id="p-trace" type="checkbox" ${app.traceIds.has(s.id) ? 'checked' : ''}> Để lại vết khi kéo</label>`;
+  if (one && s.type === 'free_point') html += `<div class="row"><button id="p-attach" class="mini wide" title="Cho điểm chạy trên một đường thẳng / đường tròn (vd D di động trên BC); mọi thứ dựng từ điểm này giữ nguyên">Gắn lên đường…</button></div>`;
   if (one && s.args.length && STEP_TYPES[s.type] && !['locus', 'fixed_point'].includes(s.type)) {
     // sửa đối tượng cha: bấm một tên rồi bấm đối tượng thay thế trên hình
     html += `<div class="row redef">Dựng từ ${s.args.map((a, i) => `<button class="mini" data-redef="${i}" title="Thay đối tượng này (các đối tượng phụ thuộc giữ nguyên)">${labelHTML(stepById(app.doc, a)?.name || '?')}</button>`).join('')}</div>`;
@@ -196,6 +197,7 @@ export function renderProps(app) {
   }));
   if (q('#p-aux')) q('#p-aux').onchange = (e) => app.setStepProp(s.id, 'aux', e.target.checked);
   if (q('#p-trace')) q('#p-trace').onchange = (e) => app.toggleTrace(s.id, e.target.checked);
+  if (q('#p-attach')) q('#p-attach').onclick = () => app.startAttach(s.id);
   host.querySelectorAll('[data-redef]').forEach((b) => (b.onclick = () => app.startRedefine(s.id, +b.dataset.redef)));
   if (q('#p-hidden')) q('#p-hidden').onchange = (e) => app.setStepProp(s.id, 'hidden', e.target.checked);
   if (q('#p-join')) q('#p-join').onchange = (e) => app.setStepProp(s.id, 'joinPrev', e.target.checked);
