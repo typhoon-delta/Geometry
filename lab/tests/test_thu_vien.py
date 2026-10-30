@@ -70,6 +70,21 @@ class TestThuVien(unittest.TestCase):
         self.assertEqual(sum(1 for s in doc["steps"] if s["type"] == "point_on"), 1)
         self.assertEqual(len(kls), 2)
 
+    def test_dich_sang_newclid(self):
+        # mọi cấu hình (trừ BHC: đối xứng của đường tròn) dịch được sang JGEX – để Newclid làm ý kiến thứ hai
+        from lab.core.model import sub_doc
+        from lab.prover.jgex import NotTranslatable, to_jgex
+
+        for c in CONFIGS:
+            doc, _, kls = start_doc([c.key])
+            for _, rtype, ids in kls:
+                if c.key == "BHC":
+                    with self.assertRaises(NotTranslatable):
+                        to_jgex(sub_doc(doc, ids, title=""), rtype, ids)
+                    continue
+                pr = to_jgex(sub_doc(doc, ids, title=""), rtype, ids)
+                self.assertTrue(pr.goals, c.key)
+
 
 if __name__ == "__main__":
     unittest.main()

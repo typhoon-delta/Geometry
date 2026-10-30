@@ -129,7 +129,7 @@ class Lab:
         self.used0 = self.state["da_chay_giay"]
         # sự kiện chưa kiểm tra bằng Newclid từ lần trước → đưa lại vào hàng đợi
         for f in self.facts:
-            if self.newclid_on and f.get("newclid") is None and f["score"] >= nc["nguong_diem"]:
+            if self.newclid_on and f.get("newclid") is None and self._want_newclid(f):
                 heapq.heappush(self.pending, (-f["score"], f["key"]))
 
     def _unfinished(self):
@@ -156,6 +156,11 @@ class Lab:
         f["tang"] = tier(f, self.cfg.get("loc"))
         return f
 
+    def _want_newclid(self, f):
+        """Newclid là ý kiến thứ hai cho ứng viên KHÓ (bộ đuổi góc không suy ra được): chỉ gửi các sự kiện tầng "khó"
+        (hoặc chưa đo được độ khó) có điểm từ ngưỡng trở lên – gửi cả cái dễ thì hàng đợi dài vô tận."""
+        return f["score"] >= self.cfg["newclid"]["nguong_diem"] and f.get("tang", "kho") == "kho"
+
     def on_fact(self, f):
         f["vong"] = self.state["vong"]
         f["luc"] = round(self.used(), 1)
@@ -163,7 +168,7 @@ class Lab:
         self.rescore(f)
         self.facts.append(f)
         self.by_key[f["key"]] = f
-        if self.newclid_on and f["score"] >= self.cfg["newclid"]["nguong_diem"]:
+        if self.newclid_on and self._want_newclid(f):
             heapq.heappush(self.pending, (-f["score"], f["key"]))
         self.tick()
 

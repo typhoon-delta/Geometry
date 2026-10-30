@@ -22,7 +22,7 @@ bat = true               # false: không dùng Newclid
 gioi_han_giay = 30       # giới hạn thời gian cho MỖI mục tiêu
 tong_gioi_han_giay = 120 # giới hạn tổng cho một sự kiện (nhiều mục tiêu)
 so_tien_trinh = 2        # số bài chạy song song (máy 4 nhân: 2; máy 8 nhân: 4)
-nguong_diem = 6.0        # chỉ gửi Newclid các sự kiện có điểm sơ bộ ≥ ngưỡng này
+nguong_diem = 6.0        # chỉ gửi Newclid các sự kiện tầng "Khó" có điểm sơ bộ ≥ ngưỡng này
 goi_y_diem_phu = "khong" # chỗ cắm mô hình ngôn ngữ gợi ý điểm phụ (xem lab/prover/goi_y.py)
 
 [trong_so]

@@ -493,3 +493,45 @@ python -m unittest discover -s lab/tests -t .
    hồi vào tệp (trình duyệt không được ghi tệp trực tiếp).
 9. **Lưu tiến độ ở ranh giới vòng + mỗi phút** (tệp JSON ghi tạm rồi đổi tên): một vòng chỉ 2–3 phút nên mất điện
    chỉ mất tối đa một vòng; lần chạy dở được nhận ra và chạy tiếp tự động.
+
+---
+
+# Bản 2.1 – Phòng thí nghiệm "thông minh" hơn: ghép bổ đề, đo độ khó, lọc có chọn lọc
+
+Phản hồi sau bản 2: *phần lớn kết quả vô nghĩa hoặc không khó, thuật toán chưa thông minh*. Nguyên nhân chính: vòng
+khám phá dựng ngẫu nhiên quanh tam giác (tâm của các bộ ba điểm bất kỳ…), và "khó" chỉ được đo bằng Newclid (chậm,
+kiểm được vài trăm sự kiện/giờ, lại có nhiều lỗ hổng riêng). Bản này đổi cả cách **tìm** lẫn cách **đánh giá**.
+
+## 1. Đã làm
+
+| Phần | Nội dung |
+|---|---|
+| Thư viện cấu hình kinh điển `lab/library` | 26 cấu hình: Simson, Steiner, Miquel, bổ đề tâm nội–bàng tiếp, mixtilinear, đối trung/Lemoine, đối xứng của H, điểm xuyên tâm đối, điểm Queue, Humpty, ba tâm bàng tiếp, Feuerbach, Gergonne, Nagel, tiếp tuyến tại A, đường tròn pedal của hai điểm đẳng giác, tam giác Cevian, tiếp tuyến tại điểm giữa cung, Apollonius, trung điểm đường cao–tiếp điểm–tâm bàng tiếp, (BHC), đối xứng tiếp điểm qua I, cực–đối cực, (AEF) qua H, trung điểm AH trên đường tròn Euler, hai đường tròn tiếp xúc qua A. Mỗi cấu hình khai báo **kết luận chính** và nhãn (H, ω, I, tiếp xúc…). Kiểm thử: mọi kết luận đúng bằng số; > 300 cặp ghép đều hợp lệ. |
+| Ghép hai cấu hình | Mỗi vòng chọn một cặp (ưu tiên cặp có nhãn chung, cặp chưa thử; 15 % số vòng vẫn chạy từ cấu hình gốc), gộp đối tượng trùng bằng số (vd Simson + Steiner dùng chung điểm P). Kết luận chính của hai bổ đề **coi là đã biết** (không báo lại, dùng làm kiến thức); các quan hệ khác nằm gọn trong một bổ đề vẫn báo nhưng trừ nhẹ điểm (`noi_bo`) – theo ý thầy/cô "còn tuỳ". Quan hệ nối phần của bổ đề này với bổ đề kia được cộng điểm `giao_thoa`. Đối tượng của hai bổ đề được ưu tiên làm đối số khi dựng thêm. |
+| Phép dựng | Giữ đủ đối xứng (qua điểm, qua đường), giao điểm, chân đường vuông góc, tiếp tuyến, đường kính… như bản 2 (không giới hạn vào "tâm của tam giác có nghĩa"). |
+| Độ tự nhiên `lab/search/naturalness.py` | Mỗi đối tượng có độ tự nhiên 0..1 = độ tự nhiên của phép dựng × trung bình nhân của các đối số. Đối xứng, giao, chân đường vuông góc: cao. Tâm ngoại tiếp/trực tâm/tâm nội tiếp/trọng tâm: **cao nếu tam giác có nghĩa** (hai đỉnh là đỉnh của ABC như BHC, AIB; hoặc tam giác DEF, tam giác trung bình, tam giác tiếp điểm; hoặc ba điểm của cùng một bổ đề), **thấp nếu là bộ ba bất kỳ**. |
+| Bộ suy luận đo độ khó `lab/reason/angles.py` | Tự viết, ba lớp chạy chung: **đuổi góc có hướng** (biến hướng của từng đường, phương trình tuyến tính, hằng số và nhánh "mod π/2" chọn bằng số như người giải nhìn hình); **lớp affine** (trung điểm, đối xứng qua điểm/qua đường bằng chân đường vuông góc "ảo", trọng tâm, vị tự, tịnh tiến, N là trung điểm OH, H = A + B + C − 2O ⇒ đường trung bình, vị tự, hình bình hành, đường thẳng Euler của tam giác bất kỳ); **lớp độ dài** (log độ dài: cách đều tâm, tỉ số của các cặp song song, phương tích PA·PB = PC·PD và PT² = PA·PB, điểm trên trục đối xứng cách đều hai điểm đối xứng, tiếp điểm của đường tròn nội tiếp; cân từ góc ⇔ bằng nhau về độ dài; đảo phương tích cho mục tiêu đồng viên). Suy diễn theo **vòng**: mỗi vòng mọi bộ 3 điểm thẳng hàng / 4 điểm đồng viên / cách đều đúng bằng số mà suy ra được thì thành sự kiện mới. **Độ khó = số vòng** (1 = đuổi thẳng từ giả thiết và các bổ đề; 2 = cần một tứ giác nội tiếp / thẳng hàng trung gian; None = không suy ra được: cần Ceva, Menelaus, tỉ số phức tạp, điểm phụ…). Trên các kết luận của thư viện (không cho biết trước kết luận): Simson 2, Steiner 2, Miquel 1, đối xứng của H trên (O) 1, Queue 2, cực–đối cực 2; Gergonne, Nagel, mixtilinear, Apollonius, Humpty: không suy ra được (đúng là cần tỉ số / Ceva). |
+| Hệ quả trực tiếp | Sự kiện suy ra trong **một** vòng từ các sự kiện đã báo trước đó (cùng vòng) được đánh dấu `he_qua` và lọc bỏ. |
+| Tầng và lọc có chọn lọc `lab/score.py` | **Khó** (đuổi góc không ra hoặc ≥ 3 vòng, hoặc Newclid không chứng minh được), **Vừa** (2 vòng, hoặc chưa đo được), **Dễ nhưng đẹp** (1 vòng nhưng đối tượng tự nhiên ≥ 0,8 và nối hai bổ đề hoặc dính (O), (I), O, H…), **Đã lọc bỏ** (hệ quả trực tiếp, đối tượng gượng ép có độ tự nhiên < 0,65, dễ mà không đặc sắc, bị chê). Không bỏ hết cái dễ. |
+| Báo cáo | Ba tầng, mỗi tầng tối đa 150 **nhóm**: các sự kiện cùng "bộ xương" (loại quan hệ + các loại phép dựng + bổ đề) gom dưới một đại diện, biến thể xem trong mục mở rộng. Mỗi thẻ ghi hai bổ đề xuất phát, phần của bổ đề nào dính vào kết luận, độ khó, độ tự nhiên. Mục **Đã lọc bỏ**: số lượng theo lý do + 40 sự kiện điểm cao nhất bị lọc để thầy/cô kiểm tra bộ lọc. Lọc thêm theo bổ đề. |
+| Chấm điểm | Đặc trưng mới: `kho_1`, `kho_2`, `kho_3`, `kho_khong`, `kho_chua`, `tu_nhien`, `giao_thoa`, `noi_bo`, `he_qua`, `dai_dong` (phát biểu quá 4 câu dựng hình). Trọng số trong `lab/cau-hinh.toml`, vẫn học từ Hay/Chán. |
+| Newclid | Chỉ gửi các sự kiện **tầng Khó** (ý kiến thứ hai cho chúng) – trước đây hàng đợi dài hàng nghìn sự kiện dễ. Bộ dịch JGEX dịch thêm điểm Lemoine, chân đường đối trung (qua cực của cạnh), đường tròn mixtilinear trong. |
+| Phát biểu | Câu tiếng Việt cho mọi loại bước của thư viện (bàng tiếp, Lemoine, mixtilinear, tiếp xúc tại một điểm, điểm tuỳ ý, đường đẳng giác, vị tự…). |
+| Kiểm thử | `test_thu_vien.py` (kết luận đúng, ghép cặp, gộp đối tượng, dịch sang Newclid), `test_suy_luan.py` (độ khó các bổ đề, đường trung bình, đường thẳng Euler của tam giác bất kỳ, phương tích, trục đối xứng). Toàn bộ 30+ kiểm thử qua. |
+
+**Chạy thử 5 phút** (không Newclid, 4 vòng, 4000 sự kiện giữ lại): Khó 22 %, Vừa 26 %, Dễ nhưng đẹp 27 %, Đã lọc bỏ
+25 %; trước khi có lớp affine/độ dài, 75 % bị gán nhầm "khó" (các bài chỉ cần đường trung bình, vị tự, phương tích).
+Ví dụ đứng đầu tầng Khó: *"I, trung điểm đường cao AD và hình chiếu của tâm bàng tiếp góc A lên BC thẳng hàng"* (bổ đề
+cần tỉ số – đúng là khó với đuổi góc).
+
+## 2. Chưa làm / hạn chế
+
+* Bộ suy luận **chưa có** tam giác đồng dạng tổng quát, Ceva/Menelaus, nghịch đảo, phép quay; "vị tự bảo toàn đường
+  tròn" chỉ dùng được khi ảnh và tạo ảnh đều có trong hình. Vì vậy tầng Khó vẫn còn những sự kiện người giải thấy ngay
+  bằng đồng dạng; Newclid (ý kiến thứ hai) và nút "Chán" bổ sung.
+* Quan hệ "đồng quy" và "trùng nhau" đo được độ khó một phần (đồng quy qua giao điểm ảo của hai đường đầu; "trùng
+  nhau" chưa đo → xếp Vừa).
+* Đường tròn đối xứng của (O) (cấu hình BHC) và đường tròn bàng tiếp mixtilinear chưa dịch được sang Newclid.
+* "Bộ xương" gom nhóm còn khá mịn (cùng ý nhưng khác phép dựng phụ vẫn là hai nhóm).
+* Thư viện 26 cấu hình là bộ khởi đầu; thêm cấu hình mới: viết một hàm trong `lab/library/__init__.py` (dùng
+  `Builder.add`, `Builder.kl`) và thêm một dòng vào `CONFIGS`, kiểm thử tự kiểm kết luận.

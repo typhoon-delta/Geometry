@@ -333,6 +333,38 @@ class Translator:
             o = self.add_point(v.c, [f"on_tline {{x}} {A} {A} {B}", f"on_bline {{x}} {A} {C}"], base="o")
             self.cr[sid] = (o, A)
             return
+        if t in ("lemoine", "symmedian_foot"):
+            # đường đối trung từ A đi qua giao điểm hai tiếp tuyến tại B, C của đường tròn ngoại tiếp
+            A, B, C = (self.P(x) for x in a)
+            O = self.circumcenter(A, B, C)
+
+            def pole(X, Y):
+                Vx, Vy = self._xy(X), self._xy(Y)
+                o = self._xy(O)
+                Q = G.intersect_ll(G.line_through(Vx, G.add(Vx, G.perp(G.sub(Vx, o)))),
+                                      G.line_through(Vy, G.add(Vy, G.perp(G.sub(Vy, o)))))
+                if Q is None:
+                    raise NotTranslatable("hai tiếp tuyến song song")
+                return self.add_point(Q, [f"on_tline {{x}} {X} {X} {O}", f"on_tline {{x}} {Y} {Y} {O}"], base="t",
+                                      key=("pole", O, frozenset((X, Y))))
+
+            ta = pole(B, C)
+            if t == "symmedian_foot":
+                self.pt[sid] = self.add_point(v, [f"on_line {{x}} {A} {ta}", f"on_line {{x}} {B} {C}"], base="s")
+            else:
+                tb = pole(C, A)
+                self.pt[sid] = self.add_point(v, [f"on_line {{x}} {A} {ta}", f"on_line {{x}} {B} {tb}"], base="k",
+                                              key=("K", frozenset((A, B, C))))
+            return
+        if t == "mixtilinear" and not p.get("external"):
+            # tiếp điểm trên AB nằm trên đường qua I vuông góc AI; tâm = giao của AI và đường vuông góc AB tại tiếp điểm
+            A, B, C = (self.P(x) for x in a)
+            i = self.incenter(A, B, C)
+            T = G.project(v.c, G.line_through(self._xy(A), self._xy(B)))
+            tb = self.add_point(T, [f"on_tline {{x}} {i} {A} {i}", f"on_line {{x}} {A} {B}"], base="u")
+            k = self.add_point(v.c, [f"on_tline {{x}} {tb} {A} {B}", f"on_line {{x}} {A} {i}"], base="k")
+            self.cr[sid] = (k, tb)
+            return
         raise NotTranslatable(f"chưa dịch được loại bước '{t}'")
 
     def _kind(self, sid):

@@ -112,9 +112,25 @@ Các lệnh khác:
 **Bấm đúp `lab\xem-bao-cao.bat`** (hoặc `python -m lab bao-cao`). Trình duyệt mở trang báo cáo; **để cửa sổ đen
 mở** trong khi xem (nó là máy chủ nhỏ chỉ chạy trên máy mình để ghi đánh giá). Xem xong đóng cửa sổ đen.
 
+Mỗi vòng chạy **ghép hai cấu hình kinh điển** (Simson, Steiner, Miquel, tâm nội–bàng tiếp, mixtilinear, Lemoine,
+điểm Queue, Humpty, Feuerbach, Gergonne, Nagel… – xem `lab/library/__init__.py`) rồi dựng thêm (đối xứng, giao điểm,
+chân đường vuông góc, tiếp tuyến…). Kết luận chính của các bổ đề coi là **đã biết**: không báo lại, và được dùng như
+kiến thức khi đo độ khó. Báo cáo chia **tầng**:
+
+| Tầng | Nghĩa |
+|---|---|
+| **Khó** | bộ suy luận của phòng thí nghiệm (đuổi góc + tỉ số độ dài + phương tích, dùng kết luận các bổ đề) không suy ra được hoặc cần ≥ 3 vòng; hoặc Newclid không chứng minh được |
+| **Vừa** | cần một bước trung gian (tứ giác nội tiếp, thẳng hàng phụ…), hoặc loại quan hệ chưa đo được độ khó |
+| **Dễ nhưng đẹp** | suy ra ngay, nhưng **giữ lại** vì các đối tượng tự nhiên và kết luận nối hai bổ đề hoặc dính (O), (I), O, H… |
+| **Đã lọc bỏ** | hệ quả trực tiếp của sự kiện đã báo, đối tượng gượng ép (tâm của một tam giác "bất kỳ"…), dễ mà không đặc sắc, bị chê – chỉ hiện số lượng, lý do và 40 cái điểm cao nhất để thầy/cô kiểm tra bộ lọc |
+
+Trong mỗi tầng, các sự kiện **cùng một ý** (cùng loại quan hệ, cùng các phép dựng, cùng bổ đề) được **gom thành
+một nhóm**: hiện cái điểm cao nhất, các biến thể nằm trong mục "… biến thể cùng ý".
+
 Mỗi sự kiện trong báo cáo có:
 
-* **điểm "lạ"** và xếp hạng; nhãn loại quan hệ; kết quả Newclid:
+* **điểm "lạ"** và xếp hạng; nhãn loại quan hệ, **độ khó** (đuổi góc 1 bước / 2 vòng / không ra), **độ tự nhiên**,
+  hai bổ đề xuất phát; kết quả Newclid:
   * *KHÔNG chứng minh được – ứng viên sâu*: bộ suy diễn không tự chứng minh được trong giới hạn thời gian →
     đáng xem nhất để chế đề;
   * *chứng minh được – tầm thường*: Newclid chứng minh ngay (đã bị hạ điểm);
@@ -128,7 +144,7 @@ Mỗi sự kiện trong báo cáo có:
   tượng của sự kiện được khen được ưu tiên làm "trạm" xuất phát;
 * mục mở rộng: thành phần điểm, **chứng minh của Newclid** (nếu có), bài toán đã gửi Newclid.
 
-Có thể lọc theo loại quan hệ, theo kết quả Newclid, tìm chữ, ẩn các sự kiện đã đánh giá.
+Có thể lọc theo bổ đề, loại quan hệ, kết quả Newclid, tìm chữ, ẩn các sự kiện đã đánh giá.
 
 > Nếu mở báo cáo bằng cách bấm đúp tệp `reports\...\index.html` (không qua `bao-cao`), đánh giá chỉ lưu trong
 > trình duyệt: bấm **Tải phản hồi (JSON)** rồi chép tệp tải về vào thư mục `lab\du-lieu\phan-hoi\`.
@@ -146,6 +162,13 @@ Mở `lab\cau-hinh.toml` bằng Notepad. Mỗi dòng có ghi chú tiếng Việt
 * `[newclid]` – `gioi_han_giay` (thời gian cho mỗi mục tiêu), `so_tien_trinh` (số bài chạy song song: máy 4 nhân
   để 2, máy 8 nhân để 4), `nguong_diem`.
 * `[trong_so_phep_dung]` – ưu tiên các phép dựng (0 = không dùng).
+* `[trong_so]` (phần mới) – `kho_1`, `kho_2`, `kho_3`, `kho_khong` (thưởng/phạt theo độ khó), `tu_nhien`,
+  `giao_thoa` (nối hai bổ đề), `noi_bo` (nằm gọn trong một bổ đề), `he_qua`, `dai_dong` (phát biểu dài).
+* `[loc]` – `nguong_tu_nhien` (dưới ngưỡng → lọc bỏ), `nguong_tu_nhien_de` (cái dễ chỉ giữ khi đủ tự nhiên).
+  Thấy bộ lọc bỏ oan nhiều thì hạ các ngưỡng này.
+* `[ghep]` – `xac_suat_cau_hinh_goc`: tỉ lệ vòng chạy từ cấu hình gốc (tam giác + các điểm đặc biệt) thay vì ghép
+  hai bổ đề.
+* `[bao_cao]` – `so_su_kien`: số **nhóm** tối đa hiện ở mỗi tầng.
 
 ## 7. Sự cố thường gặp
 
@@ -161,7 +184,8 @@ Mở `lab\cau-hinh.toml` bằng Notepad. Mỗi dòng có ghi chú tiếng Việt
 ## 8. Dành cho người phát triển
 
 * Mã nguồn: `lab/core` (lõi hình học, khớp `src/core` của bản JS), `lab/scan` (bộ quét quan hệ, khớp
-  `src/explore`), `lab/search` (vòng mở rộng), `lab/prover` (cầu nối Newclid + chỗ cắm mô hình ngôn ngữ),
+  `src/explore`), `lab/search` (vòng mở rộng, độ tự nhiên), `lab/library` (thư viện cấu hình kinh điển + ghép),
+  `lab/reason` (bộ suy luận đo độ khó), `lab/prover` (cầu nối Newclid + chỗ cắm mô hình ngôn ngữ),
   `lab/report.py`, `lab/run.py`.
 * Kiểm thử (khoảng 3–4 phút, cần Newclid cho phần chứng minh):
 
