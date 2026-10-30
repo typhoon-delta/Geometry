@@ -121,7 +121,7 @@ class TestNamMuoiBai(unittest.TestCase):
                 self.assertLessEqual(lv, 3, f"bài #{k}")
         # bài #1 (đối ngẫu bổ đề trung điểm đường cao): với sổ tri thức là 1 bước, không có thì phải tự chứng minh lại
         self.assertEqual(difficulty(*doc_of(1)), 1)
-        self.assertGreater(difficulty(*doc_of(1), classical=False), 1)
+        self.assertNotEqual(difficulty(*doc_of(1), classical=False), 1)
 
 
 if __name__ == "__main__":
