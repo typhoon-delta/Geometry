@@ -13,6 +13,7 @@ import re
 
 from .core import geom as G
 from .core.model import evaluate, kinds
+from .core.steps import STEP_TYPES
 
 BASE_IDS = {"A", "B", "C", "BC", "CA", "AB", "w", "O", "H", "I", "G", "N", "g", "e", "D", "E", "F", "Ma", "Mb", "Mc",
             "Ta", "Tb", "Tc", "Sa", "Sb", "Sc", "Ra", "Rb", "Rc"}
@@ -175,7 +176,8 @@ class Namer:
             return f"đường tròn đường kính {self.ns(a)}"
         if t == "circle":
             return f"đường tròn tâm {self.n(a[0])} đi qua {self.n(a[1])}"
-        kind = "đường thẳng" if t in ("perpendicular", "parallel", "tangent_at", "perp_bisector", "angle_bisector") else "đường tròn"
+        kind = "đường thẳng" if t in ("perpendicular", "parallel", "tangent_at", "perp_bisector", "angle_bisector",
+                                      "isogonal_line", "radical_axis", "common_tangent") else "đường tròn"
         return f"{kind} {self.n(sid)}"
 
 
@@ -273,7 +275,67 @@ def _step_sentence(N, s):
         return f"Vẽ {N.curve(s['id'])}."
     if t in ("polygon", "angle_mark", "segment_mark"):
         return None
-    return f"Dựng {me} ({t})."
+    tri = N.ns(a[:3]) if len(a) >= 3 else ""
+    if t == "free_point":
+        return f"Lấy điểm {me} tuỳ ý (trong mặt phẳng)."
+    if t == "excenter":
+        return f"Gọi {me} là tâm đường tròn bàng tiếp góc {N.n(a[0])} của tam giác {tri}."
+    if t == "excircle":
+        return f"Gọi {me} là đường tròn bàng tiếp góc {N.n(a[0])} của tam giác {tri}."
+    if t == "incircle":
+        return f"Gọi {me} là đường tròn nội tiếp tam giác {tri}."
+    if t == "circumcircle":
+        return f"Vẽ đường tròn ngoại tiếp tam giác {tri}."
+    if t == "nine_point_circle":
+        return f"Gọi {me} là đường tròn Euler của tam giác {tri}."
+    if t == "nine_point_center":
+        return f"Gọi {me} là tâm đường tròn Euler của tam giác {tri}."
+    if t == "incircle_touch":
+        return f"Gọi {me} là tiếp điểm của đường tròn nội tiếp tam giác {tri} với cạnh {N.ns(a[1:3])}."
+    if t == "arc_midpoint":
+        return (f"Gọi {me} là điểm chính giữa cung {N.ns(a[1:3])} {'chứa' if p.get('contains') else 'không chứa'} "
+                f"{N.n(a[0])} của đường tròn ({tri}).")
+    if t == "lemoine":
+        return f"Gọi {me} là điểm Lemoine (giao ba đường đối trung) của tam giác {tri}."
+    if t == "kosnita":
+        return f"Gọi {me} là điểm Kosnita của tam giác {tri}."
+    if t == "symmedian_foot":
+        return f"Gọi {me} là chân đường đối trung kẻ từ {N.n(a[0])} của tam giác {tri}."
+    if t == "cevian_foot":
+        return f"Đường thẳng {N.n(a[1])}{N.n(a[0])} cắt {N.ns(a[2:4])} tại {me}."
+    if t == "mixtilinear":
+        return (f"Gọi {me} là đường tròn {'bàng tiếp' if p.get('external') else 'nội tiếp'} mixtilinear góc {N.n(a[0])} "
+                f"của tam giác {tri} (tiếp xúc {N.ns(a[:2])}, {N.ns([a[0], a[2]])} và tiếp xúc trong với đường tròn ({tri})).")
+    if t == "circle_tangent_at":
+        return f"Gọi {me} là đường tròn tiếp xúc với {N.ns(a[:2])} tại {N.n(a[0])} và đi qua {N.n(a[2])}."
+    if t == "circle_radius":
+        return f"Vẽ đường tròn {me} tâm {N.n(a[0])} bán kính {N.ns(a[1:3])}."
+    if t == "tangent_point":
+        return f"Từ {N.n(a[1])} kẻ tiếp tuyến tới {N.curve(a[0])}, tiếp điểm {me}."
+    if t == "angle_bisector":
+        return (f"Gọi {me} là đường phân giác {'ngoài' if p.get('external') else 'trong'} của góc "
+                f"{N.n(a[0])}{N.n(a[1])}{N.n(a[2])}.")
+    if t == "perp_bisector":
+        return f"Gọi {me} là đường trung trực của {N.ns(a)}."
+    if t == "isogonal_line":
+        return f"Gọi {me} là đường đẳng giác của {N.n(a[1])}{N.n(a[3])} đối với góc {N.n(a[0])}{N.n(a[1])}{N.n(a[2])}."
+    if t == "homothety":
+        return f"Gọi {me} là ảnh của {N.n(a[0])} qua phép vị tự tâm {N.n(a[1])} tỉ số {p.get('k', 2)}."
+    if t == "rotate":
+        return f"Gọi {me} là ảnh của {N.n(a[0])} qua phép quay tâm {N.n(a[1])} góc {p.get('angle', 90)}°."
+    if t == "translate":
+        return f"Gọi {me} là ảnh của {N.n(a[0])} qua phép tịnh tiến theo vectơ {N.ns(a[1:3])}."
+    if t == "invert":
+        return f"Gọi {me} là ảnh của {N.n(a[0])} qua phép nghịch đảo đối với {N.curve(a[1])}."
+    if t == "radical_axis":
+        return f"Gọi {me} là trục đẳng phương của {N.curve(a[0])} và {N.curve(a[1])}."
+    if t == "radical_center":
+        return f"Gọi {me} là tâm đẳng phương của {', '.join(N.curve(x) for x in a)}."
+    if t == "homothety_center":
+        return f"Gọi {me} là tâm vị tự {'trong' if p.get('internal') else 'ngoài'} của {N.curve(a[0])} và {N.curve(a[1])}."
+    if t == "common_tangent":
+        return f"Gọi {me} là một tiếp tuyến chung {'trong' if p.get('internal') else 'ngoài'} của {N.curve(a[0])} và {N.curve(a[1])}."
+    return f"Dựng {me} ({STEP_TYPES[t].label.lower() if t in STEP_TYPES else t})."
 
 
 def _conclusion(N, ftype, ids, extra_name=None):

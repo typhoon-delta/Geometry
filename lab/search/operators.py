@@ -173,6 +173,8 @@ def obj_weight(U, o, stations):
             w = SPECIAL_POINT_W[o.special]
         elif o.special in ("circumcircle", "incircle", "ninepoint"):
             w = 3.0
+        elif o.src - {"tram"}:  # đối tượng của các bổ đề đang ghép: trọng tâm của vòng
+            w = 3.0
         elif o.id in ("A", "B", "C"):
             w = 2.0
         else:

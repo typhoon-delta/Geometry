@@ -28,12 +28,13 @@ import numpy as np
 from ..core import geom as G
 from ..core.model import compute_step, evaluate, kinds
 from ..core.steps import STEP_TYPES
+from .naturalness import op_naturalness
 
 NAMES_POINT = list("PQRUVWJKLXYZ")
 
 
 class UObj:
-    __slots__ = ("id", "kind", "depth", "op", "anc", "aux", "special", "weight", "hits", "order", "new_steps")
+    __slots__ = ("id", "kind", "depth", "op", "anc", "aux", "special", "weight", "hits", "order", "new_steps", "src", "nat")
 
     def __init__(self, sid, kind, depth, op, anc, aux=False, special=None):
         self.id = sid
@@ -47,6 +48,8 @@ class UObj:
         self.hits = 0  # số ứng viên quan hệ có chứa đối tượng này
         self.order = 0
         self.new_steps = 0  # số bước không thuộc cấu hình gốc trong bao đóng
+        self.src = frozenset()  # các cấu hình kinh điển mà đối tượng "thuộc về" (theo tổ tiên)
+        self.nat = 1.0  # độ tự nhiên (1 = đối tượng kinh điển; giảm dần theo phép dựng kém tự nhiên)
 
 
 def _special_of(step):
@@ -56,7 +59,7 @@ def _special_of(step):
 
 class Universe:
     def __init__(self, base_doc, samples, tol=1e-7, far=12.0, min_sep=2e-4, max_radius=15.0, base_ids=None,
-                 fp_samples=None):
+                 fp_samples=None, provenance=None):
         self.doc = copy.deepcopy(base_doc)
         self.K = len(samples)
         # mẫu "dấu vân tay": cùng một tam giác với các đỉnh được đổi tên (6 hoán vị) – để nhận ra hai sự kiện
@@ -91,6 +94,9 @@ class Universe:
             if k in ("point", "line", "circle") and all(self.vals[j].get(s["id"]) is not None for j in range(self.K)):
                 anc = frozenset([s["id"], *self._anc_of(s["args"])])
                 o = UObj(s["id"], k, 0, "gốc", anc, special=_special_of(s))
+                src = (provenance or {}).get(s["id"], "goc")
+                inherited = frozenset().union(*(self.objs[a].src for a in s["args"] if a in self.objs))
+                o.src = inherited | (frozenset([src]) if src != "goc" else frozenset())
                 self._register(o)
                 sig = self.signature(s)
                 if sig:
@@ -291,6 +297,9 @@ class Universe:
             depth = max((self.objs[a].depth for a in args if a in self.objs), default=0)
         anc = frozenset([step["id"], *self._anc_of(args)])
         o = UObj(step["id"], kind, depth, op, anc, aux=aux)
+        arg_objs = [self.objs[a] for a in args if a in self.objs]
+        o.src = frozenset().union(*(x.src for x in arg_objs)) if arg_objs else frozenset()
+        o.nat = op_naturalness(op, typ, arg_objs)
         self._register(o)
         if sig is not None:
             self.sigs[sig] = step["id"]

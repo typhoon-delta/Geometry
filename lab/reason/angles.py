@@ -1,0 +1,891 @@
+"""BỘ SUY LUẬN "ĐUỔI GÓC" để đo độ khó của một sự kiện.
+
+Ý tưởng (giống phần AR của AlphaGeometry/Newclid, nhưng xử lý góc có hướng bằng số):
+* Mỗi đường thẳng (qua hai điểm, hoặc một đối tượng đường thẳng của hình) có một biến "hướng" d(·) (mod π).
+* Sự kiện đã biết → phương trình tuyến tính nguyên giữa các hướng:
+      thẳng hàng  d(XY) = d(XZ)          song song d(a) = d(b)        vuông góc d(a) − d(b) = π/2
+      đồng viên   d(CA) − d(CB) = d(DA) − d(DB)
+      cân (OX = OY, O tâm)               d(XO) + d(YO) = 2 d(XY)
+      phân giác / đẳng giác / đối xứng / tiếp tuyến – dây cung…
+* Một quan hệ SUY RA ĐƯỢC nếu phương trình của nó nằm trong không gian sinh bởi các phương trình đã biết (hệ số hữu
+  tỉ). Hằng số (bội của π/2) và nhánh "mod π/2" khi chia đôi góc được quyết định bằng số – đúng như người giải dùng
+  hình vẽ để chọn trường hợp – nên bộ này không vấp lỗi "2x = 2y" như Newclid.
+* Lớp AFFINE: điểm dựng bằng trung điểm, đối xứng qua điểm / qua đường (qua chân đường vuông góc "ảo"), trọng tâm,
+  vị tự, tịnh tiến, tâm Euler (N trung điểm OH, H = A + B + C − 2O) được viết thành tổ hợp tuyến tính của các điểm
+  "gốc"; hai cặp điểm có hiệu tỉ lệ ⇒ hai đường song song (đường trung bình, vị tự, hình bình hành…).
+  Trung điểm M của XY và điểm O cách đều X, Y ⇒ OM ⊥ XY.
+* Lớp ĐỘ DÀI (đuổi tỉ số, biến log|XY|): cách đều tâm, tỉ số của hai cặp song song trong lớp affine, phương tích
+  (PA·PB = PC·PD, PT² = PA·PB với tiếp tuyến). Cân suy ra từ góc ⇔ bằng nhau về độ dài; mục tiêu đồng viên cũng được
+  chấp nhận qua đảo phương tích, điểm trên đường tròn qua bán kính bằng nhau.
+* Suy diễn theo VÒNG: ở mỗi vòng, mọi bộ 3 điểm thẳng hàng / 4 điểm đồng viên / góc vuông ĐÚNG BẰNG SỐ mà suy ra được
+  thì thành sự kiện mới (sinh thêm phương trình; tứ giác nội tiếp có tâm đã biết → thêm điểm cách đều tâm…).
+
+MỨC ĐỘ KHÓ = số vòng cần để suy ra kết luận (1 = đuổi góc thẳng từ giả thiết; 2 = cần một tứ giác nội tiếp / thẳng
+hàng trung gian; …); None = không suy ra được bằng đuổi góc (cần tỉ số, điểm phụ, … → "khó").
+"""
+
+from __future__ import annotations
+
+import itertools
+import math
+
+import numpy as np
+
+from ..core import geom as G
+from ..core.model import evaluate, kinds
+from ..core.steps import STEP_TYPES
+
+LINE_TYPES = {"line", "segment", "ray"}
+
+
+class Span:
+    """Không gian sinh bởi các phương trình (vectơ hệ số), cơ sở trực chuẩn tăng dần."""
+
+    def __init__(self, n):
+        self.n = n
+        self.Q = np.zeros((0, n))
+
+    def resize(self, n):
+        if n > self.n:
+            self.Q = np.hstack([self.Q, np.zeros((self.Q.shape[0], n - self.n))])
+            self.n = n
+
+    def residual(self, v):
+        if self.Q.shape[0]:
+            v = v - self.Q.T @ (self.Q @ v)
+        return v
+
+    def contains(self, v, tol=1e-7):
+        r = self.residual(v)
+        return float(np.linalg.norm(r)) <= tol * max(1.0, float(np.linalg.norm(v)))
+
+    def add(self, v, tol=1e-9):
+        r = self.residual(v)
+        r = self.residual(r)  # trực chuẩn hoá lại cho ổn định số
+        nr = float(np.linalg.norm(r))
+        if nr > tol * max(1.0, float(np.linalg.norm(v))):
+            self.Q = np.vstack([self.Q, r / nr])
+            return True
+        return False
+
+
+class AngleChaser:
+    def __init__(self, doc, known=(), max_rounds=5):
+        self.doc = doc
+        self.vals = evaluate(doc)
+        self.kind = kinds(doc)
+        self.max_rounds = max_rounds
+        self.pts = [s["id"] for s in doc["steps"] if self.kind.get(s["id"]) == "point" and self.vals.get(s["id"]) is not None]
+        P = [self.vals[p] for p in self.pts]
+        xs = [p.x for p in P] or [0]
+        ys = [p.y for p in P] or [0]
+        self.scale = max(max(xs) - min(xs), max(ys) - min(ys), 1e-9)
+        self.eps = 1e-8 * self.scale
+        self.var = {}
+        self.eqs = []
+        self.span = Span(0)
+        self.lines = {}  # đối tượng đường thẳng / đường ảo → tập điểm đã biết nằm trên nó
+        self.circles = []  # [tập điểm, tâm hoặc None]
+        self.centers = {}  # tâm O → tập điểm cách đều O (đã biết)
+        self.known_col = set()
+        self.known_cyc = set()
+        self.diam = {s["id"]: tuple(s["args"]) for s in doc["steps"] if s["type"] == "circle_diameter"}
+        self.midpoints = {s["id"]: tuple(s["args"]) for s in doc["steps"] if s["type"] == "midpoint"}
+        self.mids = [(m, a, b) for m, (a, b) in self.midpoints.items()]  # mọi bộ (trung điểm, hai đầu) đã biết
+        self._pb_done = set()
+        self.reflections = []  # (P, ảnh, U, V): ảnh = đối xứng của P qua đường UV
+        self._ax_done = set()
+        self.lvar = {}  # biến log-độ dài
+        self.leqs = []
+        self.lspan = Span(0)
+        self._pow_done = set()
+        self.tangents = []  # (đường tròn, tiếp điểm, đường tiếp tuyến hoặc None, điểm ngoài hoặc None)
+        self._build()
+        self._affine()
+        self._axis_points()
+        self._perp_bisectors()
+        ids_doc = {s["id"] for s in doc["steps"]}
+        for f in known:
+            refs = [x for v in f.values() for x in v if isinstance(x, str)]
+            if "col" in f or "cyc" in f:
+                key = "col" if "col" in f else "cyc"
+                sub = [x for x in f[key] if x in ids_doc]
+                if len(sub) >= (3 if key == "col" else 4):
+                    self._add_fact({key: sub})
+            elif all(r in ids_doc for r in refs):
+                self._add_fact(f)
+
+    # ---------------------------------------------------------------- biến và phương trình
+    def v(self, key):
+        if key not in self.var:
+            self.var[key] = len(self.var)
+        return self.var[key]
+
+    def pair(self, a, b):
+        if a == b:
+            return None
+        return self.v(("P",) + tuple(sorted((a, b))))
+
+    def _vec(self, terms):
+        n = len(self.var)
+        vec = np.zeros(n)
+        for idx, c in terms:
+            vec[idx] += c
+        return vec
+
+    def equation(self, terms):
+        """Thêm phương trình Σ c·d(var) ≡ const (mod π)."""
+        terms = [(i, c) for i, c in terms if i is not None]
+        if not terms:
+            return
+        self.eqs.append(terms)
+
+    def _flush(self):
+        self.span.resize(len(self.var))
+        for terms in self.eqs:
+            self.span.add(self._vec(terms))
+        self.eqs = []
+
+    def derivable(self, terms):
+        if any(i is None for i, _ in terms):
+            return False
+        self._flush()
+        vec = self._vec(terms)
+        if float(np.linalg.norm(vec)) < 1e-12:
+            return True
+        self.span.resize(len(self.var))
+        return self.span.contains(vec)
+
+    # ---------------------------------------------------------------- độ dài (log)
+    def L(self, a, b):
+        if a == b:
+            return None
+        k = tuple(sorted((a, b)))
+        if k not in self.lvar:
+            self.lvar[k] = len(self.lvar)
+        return self.lvar[k]
+
+    def lequation(self, terms):
+        terms = [(i, c) for i, c in terms if i is not None]
+        if terms:
+            self.leqs.append(terms)
+
+    def _lvec(self, terms):
+        vec = np.zeros(len(self.lvar))
+        for idx, c in terms:
+            vec[idx] += c
+        return vec
+
+    def lderivable(self, terms):
+        if any(i is None for i, _ in terms):
+            return False
+        self.lspan.resize(len(self.lvar))
+        for t in self.leqs:
+            self.lspan.add(self._lvec(t))
+        self.leqs = []
+        vec = self._lvec(terms)
+        if float(np.linalg.norm(vec)) < 1e-12:
+            return True
+        self.lspan.resize(len(self.lvar))
+        return self.lspan.contains(vec)
+
+    def eq_len(self, o, x, y):
+        return [(self.L(o, x), 1), (self.L(o, y), -1)]
+
+    # ---------------------------------------------------------------- các dạng sự kiện
+    def eq_col(self, a, b, c):
+        return [(self.pair(a, b), 1), (self.pair(a, c), -1)]
+
+    def col_any(self, a, b, c):
+        """Ba điểm thẳng hàng: một trong ba đẳng thức hướng là đủ (hai đường qua một điểm chung cùng hướng)."""
+        return ("any", [self.eq_col(a, b, c), self.eq_col(b, a, c), self.eq_col(c, a, b)])
+
+    def eq_cyc(self, a, b, c, d):
+        # ∠(CA, CB) = ∠(DA, DB)
+        return [(self.pair(c, a), 1), (self.pair(c, b), -1), (self.pair(d, a), -1), (self.pair(d, b), 1)]
+
+    def eq_iso(self, o, x, y):
+        # OX = OY ⇒ d(XO) + d(YO) = 2 d(XY)
+        return [(self.pair(x, o), 1), (self.pair(y, o), 1), (self.pair(x, y), -2)]
+
+    def add_col(self, pts):
+        pts = list(dict.fromkeys(pts))
+        for c in pts[2:]:
+            self.equation(self.eq_col(pts[0], pts[1], c))
+        for i in range(len(pts)):
+            for j in range(i + 1, len(pts)):
+                for k in range(j + 1, len(pts)):
+                    self.known_col.add(frozenset((pts[i], pts[j], pts[k])))
+        # mọi cặp trên cùng đường có cùng hướng
+        for x in pts[2:]:
+            self.equation([(self.pair(pts[0], x), 1), (self.pair(pts[0], pts[1]), -1)])
+        for i in range(1, len(pts)):
+            for j in range(i + 1, len(pts)):
+                self.equation([(self.pair(pts[i], pts[j]), 1), (self.pair(pts[0], pts[1]), -1)])
+
+    def add_cyc(self, pts):
+        pts = list(dict.fromkeys(pts))
+        if len(pts) < 4:
+            return
+        for quad in itertools.combinations(pts, 4):
+            a, b, c, d = quad
+            self.equation(self.eq_cyc(a, b, c, d))
+            self.equation(self.eq_cyc(a, c, b, d))
+            self.known_cyc.add(frozenset(quad))
+        # tâm đã biết của đường tròn chứa ≥ 3 điểm này → thêm điểm cách đều
+        for o, eq in list(self.centers.items()):
+            if len(eq & set(pts)) >= 3:
+                for x in pts:
+                    if x not in eq and x != o:
+                        self.add_center_point(o, x)
+
+    def add_center_point(self, o, x):
+        s = self.centers.setdefault(o, set())
+        if x in s or x == o:
+            return
+        for y in s:
+            if y != x:
+                self.equation(self.eq_iso(o, x, y))
+                self.lequation(self.eq_len(o, x, y))
+        s.add(x)
+        # điểm cách đều tâm của một đường tròn đã biết → nằm trên đường tròn đó
+        for e in self.circles:
+            if e[1] == o and x not in e[0] and (e[0] & s):
+                self.on_circle(x, e[2])
+
+    def line_var(self, ref):
+        """Biến hướng của một đường (id đối tượng hoặc tham chiếu ảo)."""
+        if isinstance(ref, str):
+            st = next((s for s in self.doc["steps"] if s["id"] == ref), None)
+            if st and st["type"] in LINE_TYPES:
+                return self.pair(*st["args"])
+            key = ("L", ref)
+        elif "L" in ref:
+            return self.pair(*ref["L"])
+        elif "PB" in ref:
+            a, b = ref["PB"]
+            key = ("PB",) + tuple(sorted((a, b)))
+            idx = self.v(key)
+            self.equation([(idx, 1), (self.pair(a, b), -1)])  # (+π/2)
+            return idx
+        elif "AB" in ref:
+            a, vtx, c = ref["AB"]
+            key = ("AB", vtx) + tuple(sorted((a, c)))
+            idx = self.v(key)
+            self.equation([(idx, 2), (self.pair(vtx, a), -1), (self.pair(vtx, c), -1)])
+            self.lines.setdefault(key, set()).add(vtx)
+            return idx
+        else:
+            return None
+        return self.v(key)
+
+    def on_line(self, p, ref):
+        idx = self.line_var(ref)
+        if idx is None:
+            return
+        key = ref if isinstance(ref, str) else ("ref", repr(sorted(ref.items())))
+        if isinstance(ref, dict) and "AB" in ref:
+            a, vtx, c = ref["AB"]
+            key = ("AB", vtx) + tuple(sorted((a, c)))
+        s = self.lines.setdefault(key, set())
+        if not s and isinstance(ref, str):
+            st = next((x for x in self.doc["steps"] if x["id"] == ref), None)
+            if st and st["type"] in LINE_TYPES:
+                s |= set(st["args"])  # hai điểm xác định đường thẳng
+        for q in s:
+            if q != p:
+                self.equation([(self.pair(p, q), 1), (idx, -1)])
+        s.add(p)
+        self._line_idx = getattr(self, "_line_idx", {})
+        self._line_idx[key] = idx
+
+    def circle_entity(self, ref):
+        if isinstance(ref, str):
+            key = ref
+        elif "C" in ref:
+            key = ("C",) + tuple(sorted(ref["C"]))
+        elif "IC" in ref:
+            key = ("IC",) + tuple(sorted(ref["IC"]))
+        else:
+            return None
+        for e in self.circles:
+            if e[2] == key:
+                return e
+        e = [set(), None, key]
+        if isinstance(ref, dict) and "C" in ref:
+            e[0] |= set(ref["C"])
+        self.circles.append(e)
+        return e
+
+    def on_circle(self, p, ref):
+        e = self.circle_entity(ref)
+        if e is None:
+            return
+        e[0].add(p)
+        diam = self.diam.get(e[2]) if isinstance(e[2], str) else None
+        if diam and p not in diam:
+            self.equation([(self.pair(p, diam[0]), 1), (self.pair(p, diam[1]), -1)])  # (+π/2) Thales
+        if e[1] is not None:
+            self.add_center_point(e[1], p)
+        if len(e[0]) >= 4:
+            self.add_cyc(sorted(e[0]))
+
+    # ---------------------------------------------------------------- dựng hệ phương trình từ hình
+    def _add_fact(self, f):
+        if "col" in f:
+            self.add_col(f["col"])
+        elif "cyc" in f:
+            self.add_cyc(f["cyc"])
+        elif "on" in f:
+            p, ref = f["on"]
+            k = self.kind.get(ref) if isinstance(ref, str) else ("circle" if ("C" in ref or "IC" in ref) else "line")
+            if k == "circle":
+                self.on_circle(p, ref)
+            elif k == "line":
+                self.on_line(p, ref)
+        elif "par" in f or "perp" in f:
+            a, b = (self.line_var(r) for r in (f.get("par") or f.get("perp")))
+            if a is not None and b is not None:
+                self.equation([(a, 1), (b, -1)])
+        elif "tan" in f:
+            pass  # tiếp xúc: dùng qua bước tangent_at (góc tạo bởi tiếp tuyến và dây cung)
+
+    def _build(self):
+        steps = self.doc["steps"]
+        by = {s["id"]: s for s in steps}
+        k = self.kind
+        for s in steps:
+            d = STEP_TYPES.get(s["type"])
+            if d is None or d.facts is None:
+                continue
+            try:
+                facts = d.facts(s, [k.get(a) for a in s["args"]], self.doc) or []
+            except Exception:  # noqa: BLE001
+                facts = []
+            for f in facts:
+                self._add_fact(f)
+        # tâm của các đường tròn
+        for s in steps:
+            t, a, sid = s["type"], s["args"], s["id"]
+            if t == "circle":
+                e = self.circle_entity(sid)
+                e[1] = a[0]
+                self.add_center_point(a[0], a[1])
+                for p in list(e[0]):
+                    self.add_center_point(a[0], p)
+            elif t in ("circumcenter",):
+                for x in a:
+                    self.add_center_point(sid, x)
+            elif t == "center":
+                c = by.get(a[0])
+                e = self.circle_entity(a[0])
+                e[1] = sid
+                if c and c["type"] in ("circle_3pts", "circumcircle"):
+                    e[0] |= set(c["args"])
+                for p in list(e[0]):
+                    self.add_center_point(sid, p)
+            elif t == "circle_diameter":
+                m = next((x["id"] for x in steps if x["type"] == "midpoint" and set(x["args"]) == set(a)), None)
+                e = self.circle_entity(sid)
+                e[0] |= set(a)
+                if m:
+                    e[1] = m
+                    for p in e[0]:
+                        self.add_center_point(m, p)
+        for s in steps:
+            if s["type"] == "nine_point_circle":
+                A, B, C = s["args"]
+                for sid, (x, y) in self.midpoints.items():
+                    if {x, y} in ({A, B}, {B, C}, {C, A}):
+                        self.on_circle(sid, s["id"])
+        # gắn tâm (circumcenter) cho đường tròn ngoại tiếp cùng bộ ba
+        cc = {frozenset(s["args"]): s["id"] for s in steps if s["type"] == "circumcenter"}
+        for s in steps:
+            if s["type"] in ("circumcircle", "circle_3pts") and frozenset(s["args"]) in cc:
+                e = self.circle_entity(s["id"])
+                e[1] = cc[frozenset(s["args"])]
+                for p in e[0]:
+                    self.add_center_point(e[1], p)
+        # các tính chất góc riêng của từng loại bước
+        for s in steps:
+            t, a, sid = s["type"], s["args"], s["id"]
+            pr = lambda x, y: self.pair(x, y)  # noqa: E731
+            if t in ("incenter", "excenter"):
+                A, B, C = a
+                for V, X, Y in ((A, B, C), (B, C, A), (C, A, B)):
+                    self.equation([(pr(V, sid), 2), (pr(V, X), -1), (pr(V, Y), -1)])
+            elif t == "arc_midpoint":
+                A, B, C = a
+                self.equation([(pr(A, sid), 2), (pr(A, B), -1), (pr(A, C), -1)])
+            elif t == "isogonal_conjugate":
+                P, A, B, C = a
+                for V, X, Y in ((A, B, C), (B, C, A), (C, A, B)):
+                    self.equation([(pr(V, P), 1), (pr(V, sid), 1), (pr(V, X), -1), (pr(V, Y), -1)])
+            elif t == "isogonal_line":
+                B, A, C, P = a
+                self.equation([(self.line_var(sid), 1), (pr(A, P), 1), (pr(A, B), -1), (pr(A, C), -1)])
+            elif t == "reflect_pts":
+                P, U, V = a
+                self.equation([(pr(U, P), 1), (pr(U, sid), 1), (pr(U, V), -2)])
+                self.equation([(pr(V, P), 1), (pr(V, sid), 1), (pr(U, V), -2)])
+                self.add_center_point(U, P)
+                self.add_center_point(U, sid)
+                self.add_center_point(V, P)
+                self.add_center_point(V, sid)
+            elif t == "reflect" and k.get(a[0]) == "point" and k.get(a[1]) == "line":
+                pts = self._points_on_line_obj(a[1])
+                if len(pts) >= 2:
+                    U, V = pts[:2]
+                    for W in (U, V):
+                        self.equation([(pr(W, a[0]), 1), (pr(W, sid), 1), (pr(U, V), -2)])
+                        self.add_center_point(W, a[0])
+                        self.add_center_point(W, sid)
+            elif t == "tangent_at":
+                c, T = a
+                ce = self.circle_entity(c)
+                tl = self.line_var(sid)
+                for X, Y in itertools.combinations(sorted(ce[0] - {T}), 2):
+                    # góc giữa tiếp tuyến và dây TX = góc nội tiếp chắn cung TX
+                    self.equation([(pr(T, X), 1), (tl, -1), (pr(Y, X), -1), (pr(Y, T), 1)])
+                    self.equation([(pr(T, Y), 1), (tl, -1), (pr(X, Y), -1), (pr(X, T), 1)])
+                if ce[1]:
+                    self.equation([(tl, 1), (pr(T, ce[1]), -1)])
+                self.tangents.append((c, T, sid, None))
+            elif t == "tangent_point":
+                c, P = a
+                ce = self.circle_entity(c)
+                if ce[1]:
+                    self.equation([(pr(P, sid), 1), (pr(sid, ce[1]), -1)])
+                self.tangents.append((c, sid, None, P))
+            elif t == "midpoint":
+                self.add_center_point(sid, a[0])
+                self.add_center_point(sid, a[1])
+            elif t == "reflect" and k.get(a[0]) == "point" and k.get(a[1]) == "point":
+                self.add_center_point(a[1], a[0])
+                self.add_center_point(a[1], sid)
+        # tiếp điểm của đường tròn nội tiếp: I cách đều các tiếp điểm, mỗi đỉnh cách đều hai tiếp điểm kề nó
+        touch = {}
+        for s_ in steps:
+            if s_["type"] == "incircle_touch":
+                touch.setdefault(frozenset(s_["args"]), []).append((s_["id"], set(s_["args"][1:])))
+        for tri, ts in touch.items():
+            inc = next((x["id"] for x in steps if x["type"] == "incenter" and frozenset(x["args"]) == tri), None)
+            for t1, side in ts:
+                if inc:
+                    self.add_center_point(inc, t1)
+            for (t1, s1), (t2, s2) in itertools.combinations(ts, 2):
+                for V in s1 & s2:
+                    self.add_center_point(V, t1)
+                    self.add_center_point(V, t2)
+        # vị tự (trung điểm / đối xứng qua cùng một tâm): ảnh song song với gốc
+        groups = {}
+        for s in steps:
+            t, a = s["type"], s["args"]
+            if t == "midpoint":
+                groups.setdefault(a[1], {})[a[0]] = s["id"]
+                groups.setdefault(a[0], {})[a[1]] = s["id"]
+            elif t == "reflect" and k.get(a[0]) == "point" and k.get(a[1]) == "point":
+                groups.setdefault(("r", a[1]), {})[a[0]] = s["id"]
+        for m in groups.values():
+            for (x, mx), (y, my) in itertools.combinations(m.items(), 2):
+                self.equation([(self.pair(mx, my), 1), (self.pair(x, y), -1)])
+
+    # ---------------------------------------------------------------- lớp affine
+    def _virtual_foot(self, P, U, V, tag):
+        """Chân đường vuông góc từ P xuống UV: dùng điểm có sẵn nếu trùng (bằng số), không thì thêm điểm "ảo"."""
+        if any(self.vals.get(x) is None for x in (P, U, V)) or G.dist(self.vals[U], self.vals[V]) < self.eps:
+            return None
+        X = G.project(self.vals[P], G.line_through(self.vals[U], self.vals[V]))
+        f = next((x for x in self.pts if G.dist(self.vals[x], X) < self.eps), None)
+        if f is None:
+            f = "_f" + tag
+            self.vals[f], self.kind[f] = X, "point"
+            self.pts.append(f)
+        if f not in (U, V):
+            self.add_col([U, V, f])
+        if f != P:
+            self.equation([(self.pair(P, f), 1), (self.pair(U, V), -1)])  # (+π/2)
+        return f
+
+    def _affine(self):
+        steps = self.doc["steps"]
+        ids = {s["id"] for s in steps}
+        co = {}
+
+        def c(x):
+            return co.get(x) or {x: 1.0}
+
+        def comb(*terms):
+            out = {}
+            for k, x in terms:
+                for b, v in c(x).items():
+                    out[b] = out.get(b, 0.0) + k * v
+            return {b: v for b, v in out.items() if abs(v) > 1e-12}
+
+        for s in steps:
+            t, a, sid = s["type"], s["args"], s["id"]
+            if self.kind.get(sid) != "point" or self.vals.get(sid) is None:
+                continue
+            if t == "midpoint":
+                co[sid] = comb((0.5, a[0]), (0.5, a[1]))
+            elif t == "centroid":
+                co[sid] = comb((1 / 3, a[0]), (1 / 3, a[1]), (1 / 3, a[2]))
+            elif t == "reflect" and self.kind.get(a[1]) == "point":
+                co[sid] = comb((2.0, a[1]), (-1.0, a[0]))
+                self.mids.append((a[1], a[0], sid))
+            elif t in ("reflect", "reflect_pts"):
+                if t == "reflect":
+                    pts = self._points_on_line_obj(a[1])
+                    if len(pts) < 2:
+                        continue
+                    U, V = pts[:2]
+                else:
+                    U, V = a[1], a[2]
+                f = self._virtual_foot(a[0], U, V, sid)
+                self.reflections.append((a[0], sid, U, V))
+                if f is not None:
+                    co[sid] = comb((2.0, f), (-1.0, a[0]))
+                    self.mids.append((f, a[0], sid))
+            elif t == "homothety" and self.kind.get(a[0]) == "point":
+                k = float((s.get("params") or {}).get("k", 2))
+                co[sid] = comb((k, a[0]), (1 - k, a[1]))
+            elif t == "translate" and self.kind.get(a[0]) == "point":
+                co[sid] = comb((1.0, a[0]), (1.0, a[2]), (-1.0, a[1]))
+            elif t == "nine_point_center":
+                O = next((x["id"] for x in steps if x["type"] == "circumcenter" and sorted(x["args"]) == sorted(a)), None)
+                H = next((x["id"] for x in steps if x["type"] == "orthocenter" and sorted(x["args"]) == sorted(a)), None)
+                if O and H:
+                    co[sid] = comb((0.5, O), (0.5, H))
+                    self.mids.append((sid, O, H))
+            elif t == "orthocenter":
+                O = next((x["id"] for x in steps if x["type"] == "circumcenter" and sorted(x["args"]) == sorted(a)), None)
+                if O:  # Sylvester: OH = OA + OB + OC
+                    co[sid] = comb((1.0, a[0]), (1.0, a[1]), (1.0, a[2]), (-2.0, O))
+        pts = [p for p in self.pts if p in ids or p.startswith("_f")]
+        basis = sorted({b for p in pts for b in c(p)})
+        bi = {b: i for i, b in enumerate(basis)}
+        M = np.zeros((len(pts), len(basis)))
+        for i, p in enumerate(pts):
+            for b, v in c(p).items():
+                M[i, bi[b]] = v
+        groups = {}
+        for i, j in itertools.combinations(range(len(pts)), 2):
+            d = M[j] - M[i]
+            nz = np.nonzero(np.abs(d) > 1e-9)[0]
+            if not len(nz):
+                continue  # trùng nhau
+            key = tuple(np.round(d / d[nz[0]], 7))
+            groups.setdefault(key, []).append((pts[i], pts[j]))
+        for g in groups.values():
+            if len(g) < 2:
+                continue
+            x0, y0 = g[0]
+            for x, y in g[1:]:
+                u = G.sub(self.vals[y0], self.vals[x0])
+                v = G.sub(self.vals[y], self.vals[x])
+                if abs(G.cross(G.unit(u), G.unit(v))) < 1e-7:  # kiểm lại bằng số
+                    self.equation([(self.pair(x, y), 1), (self.pair(x0, y0), -1)])
+                    self.lequation([(self.L(x, y), 1), (self.L(x0, y0), -1)])  # (+ log tỉ số)
+        self.affine = co
+
+    def _axis_points(self):
+        """X nằm trên trục đối xứng UV (đã biết) ⇒ X cách đều P và ảnh P' của nó, XU là phân giác của góc PXP'."""
+        added = 0
+        for P, P2, U, V in self.reflections:
+            for X in self.pts:
+                if X in (P, P2) or (P, P2, X) in self._ax_done or not self._num_col(U, V, X):
+                    continue
+                if X not in (U, V) and frozenset((U, V, X)) not in self.known_col and not self._goal_ok(self.col_any(U, V, X)):
+                    continue
+                self._ax_done.add((P, P2, X))
+                self.equation([(self.pair(X, P), 1), (self.pair(X, P2), 1), (self.pair(U, V), -2)])
+                self.add_center_point(X, P)
+                self.add_center_point(X, P2)
+                added += 1
+        return added
+
+    def _perp_bisectors(self):
+        """M trung điểm XY, O cách đều X và Y (đã biết) ⇒ OM ⊥ XY."""
+        added = 0
+        for m, a, b in self.mids:
+            for o, eq in self.centers.items():
+                if o in (m, a, b) or a not in eq or b not in eq or (o, m, a, b) in self._pb_done:
+                    continue
+                self._pb_done.add((o, m, a, b))
+                self.equation([(self.pair(o, m), 1), (self.pair(a, b), -1)])
+                added += 1
+        return added
+
+    def _circle_sets(self):
+        sets = [set(e[0]) for e in self.circles if len(e[0]) >= 2]
+        for q in self.known_cyc:
+            if not any(q <= t for t in sets):
+                sets.append(set(q))
+        return sets
+
+    def _power(self):
+        """Phương tích: P, A, B thẳng hàng (đã biết), A, B trên cùng đường tròn với C, D (P, C, D thẳng hàng)
+        ⇒ PA·PB = PC·PD; tiếp tuyến PT ⇒ PT² = PA·PB."""
+        added = 0
+        tan_by_pt = {}
+        for c, T, tl, P in self.tangents:
+            e = self.circle_entity(c)
+            on = set(self.lines.get(tl, set())) | set(self._points_on_line_obj(tl)) if tl else {P}
+            for X in on:
+                if X and X != T:
+                    tan_by_pt.setdefault(X, []).append((frozenset(e[0] | {T}), T))
+        for S in self._circle_sets():
+            S = sorted(S)
+            for P in self.pts:
+                if P in S:
+                    continue
+                prs = [(a, b) for a, b in itertools.combinations(S, 2)
+                       if a in self.vals and b in self.vals and self._num_col(a, b, P) and
+                       (frozenset((P, a, b)) in self.known_col or self._goal_ok(self.col_any(P, a, b)))]
+                prs += [(T, T) for cs, T in tan_by_pt.get(P, []) if T in S or len(cs & set(S)) >= 3]
+                for (a, b), (c, d) in itertools.combinations(prs, 2):
+                    key = (P, frozenset(((a, b), (c, d))))
+                    if key in self._pow_done:
+                        continue
+                    self._pow_done.add(key)
+                    self.lequation([(self.L(P, a), 1), (self.L(P, b), 1), (self.L(P, c), -1), (self.L(P, d), -1)])
+                    added += 1
+        return added
+
+    def _isosceles(self):
+        """OX = OY đúng bằng số: suy ra được bằng góc (cân) hoặc bằng độ dài ⇒ O cách đều X, Y (cả hai lớp)."""
+        added = 0
+        n = len(self.pts)
+        P = np.array([[self.vals[p].x, self.vals[p].y] for p in self.pts])
+        for i in range(n):
+            o = self.pts[i]
+            d = np.hypot(P[:, 0] - P[i, 0], P[:, 1] - P[i, 1])
+            eq = self.centers.get(o, set())
+            for j, k in itertools.combinations(range(n), 2):
+                if i in (j, k) or abs(d[j] - d[k]) > self.eps or d[j] < self.eps:
+                    continue
+                x, y = self.pts[j], self.pts[k]
+                if x in eq and y in eq:
+                    continue
+                if frozenset((o, x, y)) in self.known_col:
+                    continue
+                if self.lderivable(self.eq_len(o, x, y)) or self.derivable(self.eq_iso(o, x, y)):
+                    self.add_center_point(o, x)
+                    self.add_center_point(o, y)
+                    eq = self.centers.get(o, set())
+                    added += 1
+        return added
+
+    def power_goal(self, a, b, c, d):
+        """Đảo phương tích cho 4 điểm a, b, c, d: giao X của (ab), (cd) là một điểm có sẵn."""
+        out = []
+        for (p, q), (r, t) in (((a, b), (c, d)), ((a, c), (b, d)), ((a, d), (b, c))):
+            for X in self.pts:
+                if X in (a, b, c, d) or X.startswith("_x"):
+                    continue
+                if self._num_col(p, q, X) and self._num_col(r, t, X):
+                    out.append(("all", [self.col_any(X, p, q), self.col_any(X, r, t),
+                                        ("len", [(self.L(X, p), 1), (self.L(X, q), 1), (self.L(X, r), -1), (self.L(X, t), -1)])]))
+        return out
+
+    def _points_on_line_obj(self, lid):
+        st = next((s for s in self.doc["steps"] if s["id"] == lid), None)
+        if st and st["type"] in LINE_TYPES:
+            return list(st["args"])
+        return sorted(self.lines.get(lid, set()))
+
+    # ---------------------------------------------------------------- số
+    def _num_col(self, a, b, c):
+        A, B, C = (self.vals[x] for x in (a, b, c))
+        return G.dist_point_line(C, G.line_through(A, B)) < self.eps if G.dist(A, B) > self.eps else False
+
+    def _num_candidates(self):
+        """Mọi bộ 3 điểm thẳng hàng, 4 điểm đồng viên ĐÚNG BẰNG SỐ (chưa biết)."""
+        pts = self.pts
+        P = np.array([[self.vals[p].x, self.vals[p].y] for p in pts])
+        n = len(pts)
+        cols, cycs = [], []
+        for i, j in itertools.combinations(range(n), 2):
+            d = P[j] - P[i]
+            nd = math.hypot(*d)
+            if nd < self.eps:
+                continue
+            dist = np.abs((P[:, 0] - P[i, 0]) * d[1] - (P[:, 1] - P[i, 1]) * d[0]) / nd
+            for k in np.nonzero(dist < self.eps)[0]:
+                if k > j:
+                    key = frozenset((pts[i], pts[j], pts[k]))
+                    if key not in self.known_col:
+                        cols.append((pts[i], pts[j], pts[k]))
+        for i, j, k in itertools.combinations(range(n), 3):
+            c = G.circle_through(G.pt(*P[i]), G.pt(*P[j]), G.pt(*P[k]))
+            if c is None or c.r > 50 * self.scale:
+                continue
+            dist = np.abs(np.hypot(P[:, 0] - c.c.x, P[:, 1] - c.c.y) - c.r)
+            for m in np.nonzero(dist < self.eps)[0]:
+                if m > k:
+                    key = frozenset((pts[i], pts[j], pts[k], pts[m]))
+                    if key not in self.known_cyc:
+                        cycs.append((pts[i], pts[j], pts[k], pts[m]))
+        return cols, cycs
+
+    # ---------------------------------------------------------------- mục tiêu
+    def goal_terms(self, rtype, ids):
+        """Danh sách phương trình (mỗi phương trình là list (biến, hệ số)) tương đương với quan hệ; None nếu ngoài tầm."""
+        if rtype == "collinear":
+            return [self.col_any(ids[0], ids[1], x) for x in ids[2:]]
+        if rtype == "concyclic":
+            return [("any", [self.eq_cyc(ids[0], ids[1], ids[2], x), self.eq_cyc(ids[0], ids[2], ids[1], x),
+                             self.eq_cyc(ids[1], ids[2], ids[0], x)] + self.power_goal(ids[0], ids[1], ids[2], x))
+                    for x in ids[3:]]
+        if rtype == "on_line":
+            pts = self._points_on_line_obj(ids[0])
+            if len(pts) >= 2:
+                return [self.col_any(pts[0], pts[1], x) for x in ids[1:] if x not in pts[:2]]
+            idx = self.line_var(ids[0])
+            known = sorted(self.lines.get(ids[0], set()))
+            if known:
+                return [[(self.pair(known[0], x), 1), (idx, -1)] for x in ids[1:] if x != known[0]]
+            return None
+        if rtype == "on_circle":
+            e = self.circle_entity(ids[0])
+            st = next((s for s in self.doc["steps"] if s["id"] == ids[0]), None)
+            pts = sorted(e[0]) if e else []
+            if st and st["type"] in ("circle_3pts", "circumcircle"):
+                pts = list(st["args"])
+            if st and st["type"] == "circle_diameter":
+                a, b = st["args"]
+                return [[(self.pair(x, a), 1), (self.pair(x, b), -1)] for x in ids[1:]]
+            pts = [p for p in pts if p not in ids[1:]]
+            if e and e[1] and pts:
+                o, r = e[1], pts[0]
+                return [("any", [self.eq_iso(o, x, r), ("len", self.eq_len(o, x, r))] +
+                         ([self.eq_cyc(pts[0], pts[1], pts[2], x)] if len(pts) >= 3 else []))
+                        for x in ids[1:]]
+            if len(pts) >= 3:
+                return [("any", [self.eq_cyc(pts[0], pts[1], pts[2], x), self.eq_cyc(pts[0], pts[2], pts[1], x),
+                                 self.eq_cyc(pts[1], pts[2], pts[0], x)]) for x in ids[1:]]
+            return None
+        if rtype in ("parallel", "perpendicular"):
+            a, b = (self.line_var(r) for r in ids)
+            return [[(a, 1), (b, -1)]] if a is not None and b is not None else None
+        if rtype == "tangent":
+            kinds_ = [self.kind.get(i) for i in ids]
+            if "line" in kinds_ and "circle" in kinds_:
+                lid, cid = (ids[0], ids[1]) if kinds_[0] == "line" else (ids[1], ids[0])
+                e = self.circle_entity(cid)
+                if e and e[1]:
+                    T = [p for p in self.pts if p in self.lines.get(lid, set()) | set(self._points_on_line_obj(lid))
+                         and abs(G.dist(self.vals[p], self.vals[e[1]]) - self.vals[cid].r) < self.eps]
+                    if T:
+                        return [[(self.line_var(lid), 1), (self.pair(T[0], e[1]), -1)]]
+            return None
+        return None
+
+    def _parallelograms(self):
+        """PQRS có PQ ∥ SR và PS ∥ QR (suy ra được) → trung điểm của đường chéo PR cũng là trung điểm của QS."""
+        added = 0
+        for m, (p, r) in self.midpoints.items():
+            M = self.vals[m]
+            for q in self.pts:
+                if q in (p, r, m):
+                    continue
+                Q = self.vals[q]
+                S = G.pt(2 * M.x - Q.x, 2 * M.y - Q.y)
+                s_id = next((x for x in self.pts if G.dist(self.vals[x], S) < self.eps), None)
+                if s_id is None or s_id in (p, r, q) or q > s_id:
+                    continue
+                if frozenset((q, m, s_id)) in self.known_col:
+                    continue
+                if self.derivable([(self.pair(p, q), 1), (self.pair(s_id, r), -1)]) and \
+                        self.derivable([(self.pair(p, s_id), 1), (self.pair(q, r), -1)]):
+                    self.add_col([q, m, s_id])
+                    self.add_center_point(m, q)
+                    self.add_center_point(m, s_id)
+                    added += 1
+        return added
+
+    def _goal_ok(self, g):
+        if isinstance(g, tuple) and g and g[0] == "any":
+            return any(self._goal_ok(x) for x in g[1])
+        if isinstance(g, tuple) and g and g[0] == "all":
+            return all(self._goal_ok(x) for x in g[1])
+        if isinstance(g, tuple) and g and g[0] == "len":
+            return self.lderivable(g[1])
+        return self.derivable(g)
+
+    def level(self, rtype, ids):
+        """Số vòng suy luận cần để suy ra quan hệ (1, 2, …); None nếu không suy ra được; "?" nếu loại quan hệ
+        này bộ đuổi góc không biểu diễn được (vd hai điểm trùng nhau)."""
+        if rtype == "concurrent":
+            # thêm giao điểm của hai đường đầu làm một điểm "ảo", mục tiêu: điểm đó nằm trên các đường còn lại
+            a, b = ids[0], ids[1]
+            X = None
+            for Y in G.intersect(self.vals[a], self.vals[b]):
+                if all(G.dist_to_object(self.vals[c], Y) < self.eps for c in ids[2:]):
+                    X = Y
+            if X is None:
+                return "?"
+            self.vals["_x"] = X
+            self.kind["_x"] = "point"
+            self.pts.append("_x")
+            self._add_fact({"on": ["_x", a]})
+            self._add_fact({"on": ["_x", b]})
+            terms = []
+            for c in ids[2:]:
+                g = self.goal_terms("on_line" if self.kind.get(c) == "line" else "on_circle", [c, "_x"])
+                if g is None:
+                    return "?"
+                terms += g
+            return self._run(terms)
+        goals = self.goal_terms(rtype, ids)
+        if goals is None:
+            return "?"
+        return self._run(goals)
+
+    def _run(self, goals):
+        for rnd in range(1, self.max_rounds + 1):
+            if all(self._goal_ok(g) for g in goals):
+                return rnd
+            cols, cycs = self._num_candidates()
+            added = 0
+            for c in cols:
+                if self._goal_ok(self.col_any(*c)):
+                    self.add_col(c)
+                    added += 1
+            for q in cycs:
+                a, b, c, d = q
+                # một đẳng thức góc nội tiếp là đủ (điểm ở vị trí tổng quát – đã kiểm bằng số)
+                if self.derivable(self.eq_cyc(a, b, c, d)) or self.derivable(self.eq_cyc(a, c, b, d)) or \
+                        self.derivable(self.eq_cyc(a, d, b, c)):
+                    self.add_cyc(list(q))
+                    added += 1
+            added += self._parallelograms()
+            added += self._axis_points()
+            added += self._perp_bisectors()
+            added += self._power()
+            added += self._isosceles()
+            # góc vuông suy ra được + trung điểm cạnh huyền → điểm cách đều trung điểm
+            for m, eq in list(self.centers.items()):
+                st = next((s for s in self.doc["steps"] if s["id"] == m and s["type"] == "midpoint"), None)
+                if not st:
+                    continue
+                a, b = st["args"]
+                for x in self.pts:
+                    if x in (a, b, m) or x in eq:
+                        continue
+                    X, A, B = self.vals[x], self.vals[a], self.vals[b]
+                    if abs(G.dot(G.sub(A, X), G.sub(B, X))) < self.eps * self.scale and \
+                            self.derivable([(self.pair(x, a), 1), (self.pair(x, b), -1)]):
+                        self.add_center_point(m, x)
+                        added += 1
+            if not added:
+                return None
+        return None
+
+
+def difficulty(doc, rtype, ids, known=(), max_rounds=5):
+    """Mức khó theo bộ đuổi góc: 1, 2, … (vòng suy luận), None (không suy ra được) hoặc "?" (ngoài tầm biểu diễn)."""
+    try:
+        return AngleChaser(doc, known=known, max_rounds=max_rounds).level(rtype, ids)
+    except Exception:  # noqa: BLE001 – không làm đổ vòng khám phá
+        return None

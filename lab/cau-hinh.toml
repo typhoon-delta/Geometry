@@ -38,11 +38,22 @@ loai_song_song = 1.2
 loai_vuong_goc = 1.2
 loai_trung_nhau = 1.5
 loai_trung_duong = 0.3
-# -- kết quả Newclid
-newclid_chung_minh_duoc = -4.0      # chứng minh được ngay = tầm thường (hạ hạng)
-newclid_mot_phan = 1.5              # chứng minh được một phần các mục tiêu
-newclid_khong_chung_minh_duoc = 4.0 # bộ suy diễn bão hoà mà không chứng minh được = ứng viên sâu
-newclid_het_gio = 3.0               # quá thời gian
+# -- độ khó theo bộ đuổi góc của phòng thí nghiệm (lab/reason/angles.py)
+kho_1 = -0.5             # suy ra bằng một bước đuổi góc từ giả thiết và các bổ đề
+kho_2 = 1.0              # cần một tứ giác nội tiếp / thẳng hàng trung gian
+kho_3 = 2.5              # cần ≥ 3 vòng suy luận
+kho_khong = 3.0          # đuổi góc không suy ra được (cần tỉ số, điểm phụ…)
+kho_chua = 0.5           # loại quan hệ chưa đánh giá được (đồng quy phức tạp, trùng nhau…)
+# -- độ tự nhiên, ghép bổ đề
+tu_nhien = 8.0           # × độ tự nhiên (0..1) của các đối tượng
+giao_thoa = 2.5          # kết luận nối phần của hai bổ đề khác nhau
+noi_bo = -1.0            # nằm gọn trong một bổ đề (nhưng không phải kết luận chính của nó)
+he_qua = -3.0            # hệ quả trực tiếp của một sự kiện đã báo
+# -- kết quả Newclid (ý kiến thứ hai cho các sự kiện điểm cao)
+newclid_chung_minh_duoc = -2.0      # chứng minh được ngay
+newclid_mot_phan = 1.0              # chứng minh được một phần các mục tiêu
+newclid_khong_chung_minh_duoc = 2.0 # bộ suy diễn bão hoà mà không chứng minh được
+newclid_het_gio = 1.5               # quá thời gian
 do_dai_chung_minh = 0.04            # cộng theo số dòng chứng minh (tối đa 60 dòng) khi chứng minh được
 # -- cấu trúc
 xa_nhau = 3.0            # các đối tượng ở xa nhau trong cây dựng (0..1)
@@ -51,6 +62,15 @@ dac_biet_phu = 0.4       # mỗi đối tượng là G, N (tối đa 2)
 it_buoc = 2.5            # ít bước dựng (1 = rất ít, 0 = nhiều)
 diem_tu_do = -0.3        # mỗi điểm tuỳ ý (điểm trên đường) trong hình
 so_diem = -0.15          # mỗi điểm trong phát biểu quá 4 điểm (sự kiện dài dòng)
+dai_dong = -0.7          # mỗi câu dựng hình quá 4 câu (kể cả câu của bổ đề)
+
+[loc]
+# Lọc có chọn lọc cho báo cáo: bỏ hệ quả trực tiếp và đối tượng gượng ép; giữ cái dễ nếu đẹp.
+nguong_tu_nhien = 0.65   # độ tự nhiên dưới ngưỡng này → lọc bỏ
+nguong_tu_nhien_de = 0.8 # sự kiện dễ chỉ giữ khi tự nhiên từ ngưỡng này và nối hai bổ đề / dính O, I, H, (O)…
+
+[ghep]
+xac_suat_cau_hinh_goc = 0.15  # tỉ lệ vòng chạy từ cấu hình gốc thay vì ghép hai bổ đề
 
 [trong_so_phep_dung]
 # Ưu tiên của từng phép dựng khi mở rộng (1 = bình thường, 0 = không dùng)
@@ -76,6 +96,6 @@ diameter = 0.8
 
 [bao_cao]
 dia_chi_web = "https://typhoon-delta.github.io/Geometry/"  # công cụ web để mở hình (link #h=…)
-so_su_kien = 150         # số sự kiện đưa vào báo cáo
+so_su_kien = 150         # số NHÓM sự kiện tối đa mỗi tầng (khó / vừa / dễ nhưng đẹp)
 cong_may_chu = 8765      # cổng của máy chủ nhỏ khi xem báo cáo (python -m lab bao-cao)
 hoc_toc_do = 0.15        # tốc độ học từ phản hồi

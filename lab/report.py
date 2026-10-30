@@ -19,7 +19,8 @@ from .feedback import load_feedback
 from .present import display_doc, statement, statement_text
 from .render_svg import render_svg
 from .run import RUNS_DIR, _read_json, list_runs
-from .score import explain
+from .library import BY_KEY
+from .score import TIER_LABELS, explain, skeleton, tier
 
 TYPE_LABEL = {
     "collinear": "thẳng hàng", "concyclic": "đồng viên", "concurrent": "đồng quy", "tangent": "tiếp xúc",
@@ -65,6 +66,11 @@ pre{white-space:pre-wrap;word-break:break-word;background:#f7f8fa;border:1px sol
 table.pts{border-collapse:collapse;font-size:13px}table.pts td{padding:1px 8px 1px 0}
 .note{background:#fff8e6;border:1px solid #f0d9a7;border-radius:8px;padding:8px 12px;font-size:13.5px;margin:8px 0}
 .hidden{display:none}
+h2{font-size:18px;margin:26px 0 4px;padding-top:6px;border-top:2px solid var(--line)}
+.tier-note{color:var(--muted);font-size:13.5px;margin:0 0 6px}
+.toc a{margin-right:14px}
+.kho-hard{background:#fbeaea;color:var(--bad)}.kho-mid{background:#fdf3e1;color:var(--warn)}.kho-easy{background:#eaf4ee;color:var(--good)}
+ul.var{margin:4px 0 0 0;padding-left:18px}ul.var li{margin:3px 0}
 """
 
 JS = r"""
@@ -111,18 +117,25 @@ document.getElementById('dl').addEventListener('click', () => {
   document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 500);
 });
 function filter() {
-  const t = document.getElementById('f-type').value, n = document.getElementById('f-nc').value;
+  const t = document.getElementById('f-type').value, n = document.getElementById('f-nc').value, s = document.getElementById('f-src').value;
   const q = document.getElementById('f-q').value.toLowerCase(), hideJudged = document.getElementById('f-judged').checked;
   let shown = 0;
   document.querySelectorAll('.card').forEach((c) => {
-    const ok = (!t || c.dataset.type === t) && (!n || c.dataset.nc === n) && (!q || c.dataset.text.includes(q)) && (!hideJudged || !current(c.dataset.key));
+    const ok = (!t || c.dataset.type === t) && (!n || c.dataset.nc === n) && (!s || (' ' + c.dataset.src + ' ').includes(' ' + s + ' ')) && (!q || c.dataset.text.includes(q)) && (!hideJudged || !current(c.dataset.key));
     c.classList.toggle('hidden', !ok); if (ok) shown++;
   });
   document.getElementById('count').textContent = shown + ' sự kiện';
 }
-['f-type', 'f-nc', 'f-q', 'f-judged'].forEach((id) => document.getElementById(id).addEventListener('input', filter));
+['f-type', 'f-nc', 'f-src', 'f-q', 'f-judged'].forEach((id) => document.getElementById(id).addEventListener('input', filter));
 filter();
 """
+
+
+TIER_NOTES = [
+    ("kho", "Đuổi góc (kể cả dùng kết luận các bổ đề) không suy ra được, hoặc cần ≥ 3 vòng, hoặc Newclid không chứng minh được."),
+    ("vua", "Cần một tứ giác nội tiếp / thẳng hàng trung gian (2 vòng đuổi góc), hoặc loại quan hệ chưa đo được độ khó."),
+    ("de", "Đuổi góc một bước, nhưng giữ lại vì đối tượng tự nhiên và nối hai bổ đề hoặc dính (O), (I), O, H…"),
+]
 
 
 def _nc_group(nc):
@@ -153,7 +166,43 @@ def _proof_text(nc, doc):
     return "\n\n".join(out) or (nc.get("proof") or "").strip()
 
 
-def _card(i, f, cfg, weights):
+KHO_LABEL = {1: ("đuổi góc 1 bước", "kho-easy"), 2: ("đuổi góc 2 vòng", "kho-mid"),
+             None: ("đuổi góc không ra – cần ý khác", "kho-hard"), "?": ("chưa đo được độ khó", "")}
+
+
+def _kho_chip(k):
+    if isinstance(k, int) and k >= 3:
+        return f'<span class="chip kho-hard">đuổi góc {k} vòng</span>'
+    lab, cls = KHO_LABEL.get(k, (None, ""))
+    return f'<span class="chip {cls}">{lab}</span>' if lab else ""
+
+
+def _src_text(f):
+    keys = f.get("cau_hinh") or []
+    if not keys:
+        return "cấu hình gốc"
+    return " + ".join(BY_KEY[k].ten if k in BY_KEY else k for k in keys)
+
+
+def _variants(vs, cfg):
+    """Các biến thể cùng "bộ xương" với sự kiện đại diện: chỉ phát biểu ngắn + link mở hình."""
+    items = []
+    for f in vs:
+        try:
+            doc = display_doc(f, title="Biến thể")
+            txt = statement_text(f, doc)
+            doc["title"] = txt[:180]
+            web = share_url(doc, cfg["bao_cao"]["dia_chi_web"])
+            items.append(f'<li>{html.escape(txt)} <span class="meta">({f["score"]:.2f})</span> '
+                         f'<a href="{html.escape(web)}" target="_blank" rel="noopener">mở hình</a></li>')
+        except Exception:  # noqa: BLE001
+            continue
+    if not items:
+        return ""
+    return f'<details><summary>{len(items)} biến thể cùng ý (gom lại)</summary><ul class="var">{"".join(items)}</ul></details>'
+
+
+def _card(i, f, cfg, weights, variants=()):
     title = f"Sự kiện {i}"
     doc = display_doc(f, title=title)
     st = statement(f, doc)
@@ -165,6 +214,12 @@ def _card(i, f, cfg, weights):
     nc_label, nc_cls = NC_LABEL.get(nc.get("status"), (f"Newclid: {nc.get('status')}", "nc-none"))
     chips = [f'<span class="chip">{TYPE_LABEL.get(f["type"], f["type"])}</span>', f'<span class="chip {nc_cls}">{nc_label}</span>',
              f'<span class="chip">{f.get("so_buoc", 0)} bước dựng mới</span>']
+    if "kho" in f:
+        chips.insert(1, _kho_chip(f["kho"]))
+    if "tu_nhien" in f:
+        chips.append(f'<span class="chip">tự nhiên {f["tu_nhien"]:.2f}</span>')
+    if f.get("giao_thoa"):
+        chips.append('<span class="chip kho-mid">nối hai bổ đề</span>')
     if nc.get("goals_total", 0) > 1:
         chips.append(f'<span class="chip">{nc.get("goals_proved", 0)}/{nc["goals_total"]} mục tiêu</span>')
     parts = explain(f.get("dac_trung", {}), weights)
@@ -174,7 +229,12 @@ def _card(i, f, cfg, weights):
     reasons = "; ".join(p.get("reason") or p.get("error") or "" for p in nc.get("parts", []) if p.get("reason") or p.get("error"))
     text = statement_text(f, doc).lower()
     gt = "".join(f"<p>{s}</p>" for s in st["gia_thiet"])
-    det = [f'<details><summary>Thành phần điểm</summary><table class="pts">{expl}</table></details>']
+    src = f'<p class="meta">Xuất phát: <b>{html.escape(_src_text(f))}</b>'
+    if f.get("nguon"):
+        src += " · kết luận dính phần của: " + html.escape(", ".join(BY_KEY[k].ten if k in BY_KEY else k for k in f["nguon"]))
+    src += "</p>"
+    det = [_variants(variants, cfg)] if variants else []
+    det += [f'<details><summary>Thành phần điểm</summary><table class="pts">{expl}</table></details>']
     if proof:
         det.append(f"<details><summary>Chứng minh của Newclid ({nc.get('proof_lines', 0)} dòng)</summary><pre>{html.escape(proof)}</pre></details>")
     if probs:
@@ -185,9 +245,10 @@ def _card(i, f, cfg, weights):
                f"phép dựng: {', '.join(f.get('ops') or []) or '—'}\nkhoá {f['key']}</pre></details>")
     feat = html.escape(json.dumps(f.get("dac_trung", {})))
     return f"""
-<article class="card" data-key="{f['key']}" data-type="{f['type']}" data-nc="{_nc_group(nc)}" data-feat="{feat}" data-text="{html.escape(text)}">
+<article class="card" data-key="{f['key']}" data-type="{f['type']}" data-nc="{_nc_group(nc)}" data-src="{html.escape(' '.join(f.get('cau_hinh') or ['goc']))}" data-feat="{feat}" data-text="{html.escape(text)}">
  <div>
   <div class="head"><span class="rank">#{i}</span><span class="score">{f['score']:.2f}</span>{''.join(chips)}</div>
+  {src}
   <div class="st">{gt}<p class="kl">{st['ket_luan']}</p></div>
   <div class="actions">
    <a class="web" href="{html.escape(web)}" target="_blank" rel="noopener">Mở trong công cụ (web)</a>
@@ -214,15 +275,55 @@ def build_report(run_id=None, cfg=None):
     for f in facts:
         if f["key"] in fb:
             f["phan_hoi"] = fb[f["key"]].get("danh_gia")
-    shown = [f for f in facts if f.get("phan_hoi") != "chan"]
-    shown.sort(key=lambda f: -f["score"])
-    shown = shown[: int(cfg["bao_cao"]["so_su_kien"])]
-    cards = []
-    for i, f in enumerate(shown, 1):
+    loc = cfg.get("loc")
+    for f in facts:
+        f["tang"] = tier(f, loc)
+    per = int(cfg["bao_cao"]["so_su_kien"])
+    sections, n_card = [], 0
+    for t, note in TIER_NOTES:
+        fs = sorted((f for f in facts if f["tang"] == t), key=lambda f: -f["score"])
+        groups = {}
+        for f in fs:
+            groups.setdefault(skeleton(f, f.get("base_ids") or ()), []).append(f)
+        reps = list(groups.values())[:per]  # thứ tự nhóm theo điểm của đại diện (fs đã sắp)
+        cards = []
+        for g in reps:
+            n_card += 1
+            try:
+                cards.append(_card(n_card, g[0], cfg, weights, variants=g[1:9]))
+            except Exception as e:  # noqa: BLE001 – một sự kiện lỗi không làm hỏng cả báo cáo
+                cards.append(f'<article class="card"><div>Sự kiện #{n_card}: lỗi khi trình bày ({html.escape(str(e))})</div></article>')
+        more = f" (hiện {len(reps)} nhóm đầu)" if len(groups) > len(reps) else ""
+        sections.append((t, len(fs), len(groups), f'<h2 id="tang-{t}">{TIER_LABELS[t]} – {len(fs)} sự kiện, {len(groups)} nhóm{more}</h2>'
+                         f'<p class="tier-note">{note}</p>' + ("".join(cards) or "<p>Chưa có.</p>")))
+    dropped = [f for f in facts if f["tang"] == "loai"]
+    why = {"hệ quả trực tiếp của sự kiện khác": 0, "đối tượng gượng ép (độ tự nhiên thấp)": 0,
+           "dễ (đuổi góc 1 bước) và không đặc sắc": 0, "bị đánh Chán": 0}
+    for f in dropped:
+        if f.get("phan_hoi") == "chan":
+            why["bị đánh Chán"] += 1
+        elif f.get("he_qua"):
+            why["hệ quả trực tiếp của sự kiện khác"] += 1
+        elif f.get("tu_nhien", 1.0) < (loc or {}).get("nguong_tu_nhien", 0.65):
+            why["đối tượng gượng ép (độ tự nhiên thấp)"] += 1
+        else:
+            why["dễ (đuổi góc 1 bước) và không đặc sắc"] += 1
+    dropped.sort(key=lambda f: -f["score"])
+    peek = []
+    for f in dropped[:40]:
         try:
-            cards.append(_card(i, f, cfg, weights))
-        except Exception as e:  # noqa: BLE001 – một sự kiện lỗi không làm hỏng cả báo cáo
-            cards.append(f'<article class="card"><div>Sự kiện #{i}: lỗi khi trình bày ({html.escape(str(e))})</div></article>')
+            doc = display_doc(f, title="")
+            peek.append(f"<li>{html.escape(statement_text(f, doc))} <span class='meta'>({f['score']:.2f})</span></li>")
+        except Exception:  # noqa: BLE001
+            continue
+    why_txt = " · ".join(f"{k}: <b>{v}</b>" for k, v in why.items() if v)
+    sections.append(("loai", len(dropped), 0, f'<h2 id="tang-loai">{TIER_LABELS["loai"]} – {len(dropped)} sự kiện</h2>'
+                     f'<p class="tier-note">{why_txt or "không có"}. Ngưỡng lọc sửa trong mục [loc] của lab/cau-hinh.toml.</p>'
+                     + (f'<details><summary>Xem 40 sự kiện điểm cao nhất bị lọc (để kiểm tra bộ lọc)</summary><ul class="var">{"".join(peek)}</ul></details>' if peek else "")))
+    toc = " ".join(f'<a href="#tang-{t}">{TIER_LABELS[t]} ({n})</a>' for t, n, _, _ in sections)
+    pairs = state.get("cap_da_ghep") or {}
+    srcs = sorted({k for f in facts for k in (f.get("cau_hinh") or [])})
+    opt_src = "".join(f'<option value="{k}">{html.escape(BY_KEY[k].ten if k in BY_KEY else k)}</option>' for k in srcs)
     nc = state.get("newclid") or {}
     nc_txt = f"Newclid {nc.get('version')}" if nc.get("ok") else f"Newclid KHÔNG dùng được: {nc.get('reason', 'chưa rõ')}"
     st = state.get("thong_ke", {})
@@ -241,14 +342,18 @@ def build_report(run_id=None, cfg=None):
 <header><h1>Phòng thí nghiệm hình học – lần chạy {html.escape(run_id)}</h1>
 <div class="meta">Bắt đầu <b>{html.escape(state.get('bat_dau', ''))}</b> · đã chạy <b>{hours:.2f}</b> / {state.get('ngan_sach_giay', 0) / 3600:.2f} giờ
 {'· <b>đã xong</b>' if state.get('xong') else '· <b>chưa xong</b> (chạy lại lệnh để tiếp tục)'} · {state.get('vong', 0)} vòng ·
-<b>{len(facts)}</b> sự kiện (giữ lại) · {html.escape(nc_txt)} · Newclid đã kiểm {st.get('newclid_da_kiem', 0)}:
+<b>{len(facts)}</b> sự kiện (giữ lại) · {len(pairs)} cặp bổ đề đã ghép · {html.escape(nc_txt)} · Newclid đã kiểm {st.get('newclid_da_kiem', 0)}:
 <b>{deep}</b> sâu, {easy} tầm thường · ứng viên đã xét {st.get('ung_vien', 0)}, loại hiển nhiên {st.get('hien_nhien', 0)}
 · trọng số chỉnh từ phản hồi: {delta_txt} · sinh lúc {datetime.now().strftime('%H:%M %d/%m/%Y')}</div></header>
 <main>
-<div class="note">Mỗi sự kiện đã được kiểm chứng bằng số trên nhiều tam giác ngẫu nhiên (không phải chứng minh). "Ứng viên sâu" =
+<div class="note">Mỗi vòng ghép hai cấu hình kinh điển rồi dựng thêm; kết luận chính của các bổ đề coi là đã biết.
+Sự kiện chia tầng theo độ khó đo bằng bộ đuổi góc của phòng thí nghiệm (dùng kết luận các bổ đề làm kiến thức), các biến thể
+cùng một ý được gom lại dưới một đại diện. Mỗi sự kiện đã được kiểm chứng bằng số trên nhiều tam giác ngẫu nhiên (không phải chứng minh). "Ứng viên sâu" =
 bộ suy diễn Newclid không tự chứng minh được trong giới hạn thời gian. Bấm <b>Mở trong công cụ</b> để kéo thả kiểm tra;
 <b>Hay</b>/<b>Chán</b> để lần chạy sau chấm điểm theo ý thầy/cô. <span id="fb-status"></span></div>
+<div class="toc">{toc}</div>
 <div class="bar">
+ <select id="f-src"><option value="">Mọi bổ đề</option><option value="goc">Cấu hình gốc</option>{opt_src}</select>
  <select id="f-type"><option value="">Mọi loại quan hệ</option>{opt_types}</select>
  <select id="f-nc"><option value="">Mọi kết quả Newclid</option><option value="sau">Ứng viên sâu</option><option value="mot-phan">Một phần</option>
  <option value="tam-thuong">Tầm thường</option><option value="chua">Chưa kiểm tra / chưa dịch được</option></select>
@@ -256,7 +361,7 @@ bộ suy diễn Newclid không tự chứng minh được trong giới hạn th�
  <label><input id="f-judged" type="checkbox"> ẩn sự kiện đã đánh giá</label>
  <button id="dl" type="button">Tải phản hồi (JSON)</button> <span id="count" class="meta"></span>
 </div>
-{''.join(cards) if cards else '<p>Chưa có sự kiện nào.</p>'}
+{''.join(sec for _, _, _, sec in sections) if facts else '<p>Chưa có sự kiện nào.</p>'}
 </main>
 <script id="fb-file" type="application/json">{fb_embed}</script>
 <script>{JS}</script>

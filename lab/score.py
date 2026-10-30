@@ -10,6 +10,14 @@ cộng phần điều chỉnh học từ phản hồi "hay"/"chán" (lab/feedbac
     it_buoc                 cấu hình ít bước dựng (1 = ít nhất)
     diem_tu_do              số điểm tuỳ ý
     so_diem                 số điểm vượt quá 4 trong phát biểu
+    dai_dong                số câu dựng hình (kể cả của bổ đề) vượt quá 4
+    kho_*                   độ khó theo bộ đuổi góc (lab/reason/angles.py): 1 vòng, 2 vòng, ≥ 3 vòng, không suy ra được,
+                            chưa đánh giá được
+    tu_nhien                độ tự nhiên của các đối tượng (0..1)
+    giao_thoa / noi_bo      nối phần của hai bổ đề / nằm gọn trong một bổ đề
+    he_qua                  hệ quả trực tiếp của một sự kiện đã báo trong cùng vòng
+
+Tầng (lọc có chọn lọc, không bỏ hết cái dễ): xem tier().
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ from itertools import combinations
 
 from .core.model import ancestors
 from .core.steps import STEP_TYPES
+from .present import BASE_IDS
 
 TYPE_FEATURE = {
     "tangent": "loai_tiep_xuc", "concurrent": "loai_dong_quy", "concyclic": "loai_dong_vien",
@@ -45,6 +54,10 @@ FEATURE_LABELS = {
     "do_dai_chung_minh": "độ dài chứng minh", "xa_nhau": "đối tượng xa nhau trong cây dựng",
     "dac_biet": "dính (O), (I), đường tròn Euler, O, I, H", "dac_biet_phu": "dính G, N", "it_buoc": "ít bước dựng",
     "diem_tu_do": "điểm tuỳ ý", "so_diem": "phát biểu dài",
+    "kho_1": "đuổi góc 1 bước", "kho_2": "đuổi góc 2 vòng", "kho_3": "đuổi góc ≥ 3 vòng",
+    "kho_khong": "đuổi góc không suy ra được", "kho_chua": "chưa đánh giá được độ khó",
+    "tu_nhien": "độ tự nhiên", "giao_thoa": "nối hai bổ đề", "noi_bo": "nằm gọn trong một bổ đề",
+    "he_qua": "hệ quả trực tiếp của sự kiện khác", "dai_dong": "phát biểu dài dòng (số câu dựng hình quá 4)",
 }
 
 MAIN_SPECIAL = {"O", "I", "H", "circumcircle", "incircle", "ninepoint"}
@@ -89,8 +102,57 @@ def features(fact: dict, max_steps: int = 6) -> dict:
     npts = sum(1 for i in fact["ids"] if any(s["id"] == i and STEP_TYPES.get(s["type"]) and STEP_TYPES[s["type"]].kind == "point"
                                              for s in doc["steps"]))
     f["so_diem"] = float(max(0, npts - 4))
+    # phát biểu dài dòng: số câu dựng hình (kể cả bước của bổ đề) ngoài cấu hình gốc, quá 4 câu
+    n_all = sum(1 for s in doc["steps"] if s["id"] not in BASE_IDS and not s.get("hidden")
+                and s["type"] not in ("polygon", "angle_mark", "segment_mark"))
+    f["dai_dong"] = float(max(0, n_all - 4))
     fact["so_buoc"] = n
+    if "kho" in fact:
+        k = fact["kho"]
+        key = {1: "kho_1", 2: "kho_2", None: "kho_khong", "?": "kho_chua"}.get(k, "kho_3")
+        f[key] = 1.0
+    if "tu_nhien" in fact:
+        f["tu_nhien"] = float(fact["tu_nhien"])
+    if fact.get("giao_thoa"):
+        f["giao_thoa"] = 1.0
+    if fact.get("noi_bo"):
+        f["noi_bo"] = 1.0
+    if fact.get("he_qua"):
+        f["he_qua"] = 1.0
     return f
+
+
+TIER_LABELS = {"kho": "Khó", "vua": "Vừa", "de": "Dễ nhưng đẹp", "loai": "Đã lọc bỏ"}
+
+
+def tier(fact, cfg_loc=None):
+    """Tầng của sự kiện trong báo cáo. Lọc CÓ CHỌN LỌC: bỏ hệ quả trực tiếp và đối tượng gượng ép; giữ cái dễ
+    nếu tự nhiên và (nối hai bổ đề hoặc dính đối tượng đặc biệt)."""
+    loc = {"nguong_tu_nhien": 0.65, "nguong_tu_nhien_de": 0.8}
+    loc.update(cfg_loc or {})
+    nat = fact.get("tu_nhien", 1.0)
+    feats = fact.get("dac_trung", {})
+    if fact.get("he_qua") or nat < loc["nguong_tu_nhien"] or fact.get("phan_hoi") == "chan":
+        return "loai"
+    nc = (fact.get("newclid") or {}).get("status")
+    k = fact.get("kho", "?")
+    if nc == "chung-minh-duoc" and k in (None, "?"):
+        k = 2  # Newclid chứng minh được: không "khó"
+    if k is None or (isinstance(k, int) and k >= 3) or nc in ("khong-chung-minh-duoc", "het-gio"):
+        return "kho"
+    if k == 2 or k == "?":
+        return "vua"
+    special = feats.get("dac_biet", 0) + feats.get("dac_biet_phu", 0)
+    if nat >= loc["nguong_tu_nhien_de"] and (fact.get("giao_thoa") or special >= 1):
+        return "de"
+    return "loai"
+
+
+def skeleton(fact, base_ids=()):
+    """"Bộ xương" của sự kiện để gom các biến thể cùng một ý: loại quan hệ + các loại bước mới + các bổ đề."""
+    base = set(base_ids)
+    steps = sorted(s["type"] for s in fact["doc"]["steps"] if s["id"] not in base and not s.get("hidden"))
+    return (fact["type"], tuple(steps), tuple(fact.get("nguon") or ()), tuple(sorted(fact.get("cau_hinh") or ())))
 
 
 def score(feats: dict, weights: dict) -> float:

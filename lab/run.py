@@ -2,8 +2,10 @@
 
     python -m lab chay --gio 7
 
-* Mỗi vòng: vũ trụ mới từ cấu hình gốc + các TRẠM (đối tượng mới trong các sự kiện điểm cao / được đánh "hay"),
-  hạt giống khác nhau → hướng tìm khác nhau.
+* Mỗi vòng: GHÉP hai cấu hình kinh điển (lab/library) – ưu tiên cặp có chung đối tượng (H, ω, I…) và cặp chưa
+  thử – rồi mở rộng bằng các phép dựng (đối xứng, giao điểm, chân đường vuông góc…). Một phần nhỏ các vòng
+  (ghep.xac_suat_cau_hinh_goc) chạy từ cấu hình gốc. Cả hai kiểu đều thêm các TRẠM (đối tượng mới trong các sự
+  kiện điểm cao / được đánh "hay"); hạt giống khác nhau → hướng tìm khác nhau.
 * Sự kiện điểm sơ bộ cao được gửi Newclid (chạy song song trong tiến trình con, có giới hạn thời gian), chấm lại.
 * Tiến độ lưu định kỳ vào lab/du-lieu/lan-chay/<mã>/ (ghi tệp tạm rồi đổi tên – không hỏng khi mất điện giữa chừng).
   Tắt giữa chừng (Ctrl+C, tắt máy) → lần sau `python -m lab chay` chạy tiếp lần chạy dở đó.
@@ -25,7 +27,9 @@ from datetime import datetime
 from .config import DATA_DIR, load_config
 from .core.model import sub_doc
 from .feedback import effective_weights, load_feedback
-from .score import features, score
+from .library import BY_KEY
+from .library.compose import choose_pair
+from .score import features, score, tier
 from .search.base import build_base_doc, make_samples
 from .search.epoch import Epoch, base_facts
 from .search.facts import FactPipeline
@@ -143,12 +147,13 @@ class Lab:
 
     # ------------------------------------------------------------------ sự kiện
     def rescore(self, f):
-        f["base_ids"] = BASE_IDS
+        f.setdefault("base_ids", BASE_IDS)
         f["dac_trung"] = features(f, self.cfg["chay"]["so_buoc_toi_da"])
         f["score"] = score(f["dac_trung"], self.weights)
         fb = self.feedback.get(f["key"])
         if fb:
             f["phan_hoi"] = fb.get("danh_gia")
+        f["tang"] = tier(f, self.cfg.get("loc"))
         return f
 
     def on_fact(self, f):
@@ -287,12 +292,20 @@ class Lab:
                 seed = int(hashlib.blake2b(f"{self.state['id']}|{e}".encode(), digest_size=4).hexdigest(), 16)
                 rnd = random.Random(seed)
                 st_w, st_specs = self.stations(rnd)
+                keys = None
+                if rnd.random() >= float(self.cfg["ghep"]["xac_suat_cau_hinh_goc"]):
+                    keys = choose_pair(rnd, self.state.setdefault("cap_da_ghep", {}))
+                    k = "+".join(keys)
+                    self.state["cap_da_ghep"][k] = self.state["cap_da_ghep"].get(k, 0) + 1
                 ep = Epoch(cfg | {"trong_so_phep_dung": self.cfg["trong_so_phep_dung"]}, seed, self.pipeline,
-                           stations=st_w, station_specs=st_specs, log=self.log)
+                           stations=st_w, station_specs=st_specs if keys is None else st_specs[:2], log=self.log, keys=keys)
                 n0 = len(self.facts)
+                if keys:
+                    ep.start_facts(self.on_fact)
                 deadline = time.time() + min(cfg["thoi_gian_vong"], max(1.0, self.remaining()))
                 stats = ep.run(deadline, self.on_fact)
-                self.log(f"Vòng {e}: {len(self.facts) - n0} sự kiện mới (thử {stats['thu']} phép dựng, "
+                ten = " + ".join(BY_KEY[k].ten for k in keys) if keys else "cấu hình gốc"
+                self.log(f"Vòng {e} [{ten}]: {len(self.facts) - n0} sự kiện mới (thử {stats['thu']} phép dựng, "
                          f"{len(st_specs)} trạm). Tổng {len(self.facts)}; Newclid đã kiểm {sum(1 for f in self.facts if f.get('newclid'))}, "
                          f"đang chờ {len(self.pending)}. Còn {max(0, self.remaining()) / 60:.0f} phút.")
                 self.tick(force=True)
