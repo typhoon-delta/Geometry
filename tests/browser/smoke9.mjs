@@ -63,6 +63,15 @@ export async function run({ page, ok, shot }) {
   const ebc = v && ang({ x: v.x + 3, y: v.y }, { x: 7, y: 0 });
   ok(s.type === 'angle_point' && v && Math.abs(ebc - bae) < 1e-6 && Math.abs(v.x + v.y - 4) < 1e-9, 'điểm E trên AC với ∠EBC = ∠BAC');
 
+  // ---- bấm (không kéo) vào điểm tự do: hiện quầng chọn ngay ----
+  await load(tri);
+  await clickAt(pts.A);
+  ok(await page.evaluate(() => __app.selection.has('A') && __app.renderer.items.find((it) => it.s.id === 'A').sel), 'bấm vào điểm tự do A (không kéo): A hiện đang chọn trên hình');
+  await page.keyboard.down('Shift');
+  await clickAt(pts.B);
+  await page.keyboard.up('Shift');
+  ok(await page.evaluate(() => ['A', 'B'].every((id) => __app.renderer.items.find((it) => it.s.id === id).sel)), 'Shift + bấm B: cả A và B hiện đang chọn');
+
   // ---- điểm trong tam giác ----
   await load(tri);
   await page.evaluate(() => __app.setTool('point_in'));

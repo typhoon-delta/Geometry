@@ -1399,7 +1399,12 @@ export class App {
       else this.selection.add(id);
     } else this.selection = new Set([id]);
     if (rerender) this.refresh();
-    else this.renderPanels();
+    else {
+      // sắp kéo điểm: không dựng lại cảnh (đặt nhãn…) cho nhẹ, chỉ đánh dấu lại đối tượng đang chọn rồi vẽ lại
+      for (const it of this.renderer.items) it.sel = this.selection.has(it.s.id);
+      this.view.requestDraw();
+      this.renderPanels();
+    }
   }
 
   // ================= sửa đối tượng =================

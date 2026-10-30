@@ -20697,7 +20697,11 @@ ${tk.v}
         else this.selection.add(id);
       } else this.selection = /* @__PURE__ */ new Set([id]);
       if (rerender) this.refresh();
-      else this.renderPanels();
+      else {
+        for (const it of this.renderer.items) it.sel = this.selection.has(it.s.id);
+        this.view.requestDraw();
+        this.renderPanels();
+      }
     }
     // ================= sửa đối tượng =================
     async renameStep(id) {
