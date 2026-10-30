@@ -24,7 +24,9 @@ mạng: bộ vẽ canvas tự viết, toàn bộ mã nằm trong `dist/app.js`).
   lịch sử mọi lần sửa, mất mạng thì tự lưu sau – xem [`docs/KHO_BAI.md`](docs/KHO_BAI.md).
 * Chia sẻ bằng link, lưu/mở tệp `.json` (một hình hoặc **mọi tab trong một tệp**), tự lưu nháp mọi tab kèm lịch sử để
   khôi phục.
-* **Khám phá**: tự tìm các quan hệ ẩn (thẳng hàng, đồng viên, đồng quy, tiếp xúc…).
+* **Khám phá**: tự tìm các quan hệ ẩn (thẳng hàng, đồng viên, đồng quy, tiếp xúc, đoạn/góc bằng nhau…), phân biệt
+  quan hệ *hiển nhiên* / *chứng minh được* / *sâu*, giải thích "vì sao" bằng biến đổi góc – độ dài, đặt **mục tiêu** và
+  **tự tìm điểm phụ** giúp chứng minh mục tiêu.
 * Xuất mã **TikZ** để dán vào LaTeX.
 * **Phòng thí nghiệm** (`lab/`, Python, chạy trên máy cá nhân): tự khám phá qua đêm các sự kiện hình học "lạ"
   để chế đề, thử chứng minh bằng Newclid, sáng hôm sau có báo cáo HTML kèm link mở thẳng hình trong công cụ.
@@ -323,16 +325,43 @@ Chọn: kéo ảnh để dời, kéo ô vuông góc dưới phải để đổi 
 
 ### Khám phá hình
 
-Nút **🔍** (Khám phá) trên thanh trên. Chương trình xê dịch ngẫu nhiên các điểm tự do nhiều lần,
-chỉ giữ những quan hệ **đúng trên mọi lần**: thẳng hàng, đồng viên, đồng quy, song song, vuông góc, tiếp xúc
-(hai đường tròn, đường thẳng – đường tròn), điểm nằm trên đường thẳng/đường tròn, trùng nhau.
-Các quan hệ hiển nhiên từ cách dựng (vd giao điểm thì nằm trên hai đường đã cắt) bị loại. Kết quả xếp theo
-điểm: ưu tiên quan hệ dính tới đường tròn ngoại tiếp, nội tiếp, Euler và các điểm O, I, H (tự nhận ra cả khi
-bạn dựng chúng bằng tay). Bấm một kết quả để tô sáng các đối tượng liên quan (kèm đường tròn/đường thẳng
-phụ đứt nét).
+Nút **🔍** (Khám phá) trên thanh trên. Chương trình xê dịch ngẫu nhiên các điểm tự do nhiều lần, chỉ giữ những quan hệ
+**đúng trên mọi lần**: thẳng hàng, đồng viên, đồng quy, song song, vuông góc, tiếp xúc, điểm nằm trên đường thẳng/đường
+tròn, trùng nhau, **đoạn bằng nhau** (vd "O cách đều A, B, C") và **góc bằng nhau**. Nhiều điểm cùng thuộc một đường tròn
+được gom thành một dòng ("D, E, F, M, K, L cùng thuộc một đường tròn"). Hình đổi thì tự khám phá lại sau chưa tới một giây.
 
-> Đây là kiểm tra bằng số, không phải chứng minh. Kết quả rất đáng tin (đúng tới sai số 10⁻⁶ trên 12 cấu
-> hình ngẫu nhiên) nhưng vẫn là *giả thuyết* cần chứng minh.
+**Trạng thái** của mỗi quan hệ do một bộ máy suy luận (biến đổi góc có hướng và độ dài, kiểu AlphaGeometry, viết bằng JS,
+chạy ngay trong trình duyệt) xác định:
+
+* **hiển nhiên** – suy ra ngay từ cách dựng, không cần biến đổi gì (ẩn sẵn; đánh dấu *hiện … quan hệ hiển nhiên* cuối danh sách để xem);
+* **chứng minh được** – suy ra được bằng biến đổi góc/độ dài, tứ giác nội tiếp, tam giác đồng dạng, phương tích, trục
+  đẳng phương… Bấm **Vì sao?** để xem các bước (giả thiết → từng bước, mỗi bước ghi quy tắc);
+* **sâu** – đúng về số nhưng bộ máy chưa chứng minh được: thường là chỗ đáng để học sinh suy nghĩ, hoặc cần điểm phụ.
+
+Bấm một quan hệ để tô sáng các đối tượng liên quan (kèm đường tròn/đường thẳng phụ đứt nét). Mỗi quan hệ có thêm *Đặt làm
+mục tiêu* và *Chèn vào lời giải* (thêm phát biểu, kèm các bước nếu chứng minh được, vào khung lời giải).
+
+**Mục tiêu.** Gõ điều cần chứng minh vào ô trên cùng, cùng cú pháp với lệnh kiểm tra (vd `X, Y, H thẳng hàng`,
+`D thuộc ω1`, `OP ⊥ QR`, `góc ABC = góc ADC`), hoặc chọn các đối tượng trên hình rồi bấm *Lấy từ đối tượng đang chọn*.
+Thẻ mục tiêu cho biết đúng hay không (kiểm tra bằng số), chứng minh được hay chưa; các quan hệ dính tới mục tiêu được đưa
+lên đầu (bước đệm).
+
+**Tìm điểm phụ.** Khi mục tiêu chưa chứng minh được, bấm *Tìm điểm phụ*: chương trình dựng thử (trong vài giây) các điểm
+phụ quen thuộc – giao điểm thứ hai của một đường với một đường tròn, trung điểm, chân đường vuông góc, điểm đối tâm, giao
+điểm của hai đường tròn ngoại tiếp (điểm Miquel), tâm đồng dạng quay… – rồi xếp hạng: điểm nào làm mục tiêu **chứng minh
+được** đứng đầu, sau đó là điểm sinh ra nhiều quan hệ mới không hiển nhiên. Rê chuột lên một gợi ý để xem trước điểm trên
+hình, bấm *Dựng* để thêm vào (hoàn tác được). Vd IMO 2013/4: gợi ý đầu tiên là giao điểm thứ hai của XY và (BWN), và với
+điểm đó bộ máy chứng minh được X, Y, H thẳng hàng bằng trục đẳng phương – đúng như lời giải chính thức.
+
+> Quan hệ được *tìm* bằng số (đúng tới sai số 10⁻⁶ trên 12 cấu hình ngẫu nhiên) – vẫn là giả thuyết. Quan hệ *chứng minh
+> được* thì có chứng minh thật (với giả thiết hình không suy biến), nhưng bộ máy chỉ biết biến đổi góc/độ dài và các quy tắc
+> kể trên: "sâu" không có nghĩa là khó, chỉ là bộ máy chưa đủ sức.
+
+Đo chất lượng trên 23 bài mẫu (28 kết luận, 8 bổ đề then chốt) – xem `tests/kham-pha/de-bai.mjs`:
+
+```bash
+node tests/kham-pha/do.mjs --chi-tiet --diem-phu
+```
 
 ### Xuất TikZ
 

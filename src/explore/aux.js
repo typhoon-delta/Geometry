@@ -11,13 +11,15 @@
 // gồm các điểm của mục tiêu, đường tròn qua ba điểm (và giao điểm của nó với các đường tròn đã có – điểm Miquel),
 // tâm đồng dạng quay của hai đoạn thẳng.
 
-import { evaluate, kinds, stepById, clone } from '../core/model.js';
+import { evaluate, kinds, stepById, clone, describe } from '../core/model.js';
 import { addSpecs } from '../core/apply.js';
 import * as G from '../core/geom.js';
 import { Deducer } from './deduce.js';
 import { makeSampler, rng, figureScale } from './explorer.js';
 
 const nm = (doc, id) => stepById(doc, id)?.name || '?';
+// đường thẳng / đường tròn: tả theo cách dựng ("XY", "(BWN)") – dễ hiểu hơn tên tự động d6, ω1
+const cv = (doc, id) => { const d = describe(doc, id); return d && d !== id ? d : nm(doc, id); };
 
 /** Các điểm "liên quan" tới mục tiêu: các điểm của mục tiêu và tổ tiên gần của chúng. */
 function focusPoints(doc, ids, k) {
@@ -64,7 +66,7 @@ export function auxCandidates(doc, focusIds = []) {
       if (exists(R)) return;
       const other = roots.length === 2 ? pts.find((q) => G.dist(vals.get(q), roots[1 - w]) < e) : null;
       const specs = other ? [{ type: 'intersection_other', args: [a, b, other] }] : [{ type: 'intersection', args: [a, b], params: { which: w } }];
-      push(`giao điểm ${roots.length === 2 && other ? 'thứ hai ' : ''}của ${nm(doc, a)} và ${nm(doc, b)}`, specs, R, 3 + touches([a, b]));
+      push(`giao điểm ${roots.length === 2 && other ? 'thứ hai ' : ''}của ${cv(doc, a)} và ${cv(doc, b)}`, specs, R, 3 + touches([a, b]));
     });
   }
   const F = focus.length ? focus : pts.slice(0, 8);
@@ -78,7 +80,7 @@ export function auxCandidates(doc, focusIds = []) {
     if (G.distPointLine(P, L) < e) continue;
     const u = G.unit(L.d);
     const Fp = G.add(L.p, G.mul(u, G.dot(G.sub(P, L.p), u)));
-    push(`chân đường vuông góc từ ${nm(doc, p)} xuống ${nm(doc, l)}`, [{ type: 'projection', args: [p, l] }], Fp, 2);
+    push(`chân đường vuông góc từ ${nm(doc, p)} xuống ${cv(doc, l)}`, [{ type: 'projection', args: [p, l] }], Fp, 2);
   }
   // điểm đối tâm trên các đường tròn có tâm là điểm của hình
   for (const c of circles) {
@@ -88,7 +90,7 @@ export function auxCandidates(doc, focusIds = []) {
     for (const p of pts) {
       const P = vals.get(p);
       if (Math.abs(G.dist(P, C.c) - C.r) > e || !(fset.has(p) || !focus.length)) continue;
-      push(`điểm đối tâm của ${nm(doc, p)} trên ${nm(doc, c)}`, [{ type: 'reflect', args: [p, center] }], G.sub(G.mul(C.c, 2), P), 2);
+      push(`điểm đối tâm của ${nm(doc, p)} trên ${cv(doc, c)}`, [{ type: 'reflect', args: [p, center] }], G.sub(G.mul(C.c, 2), P), 2);
     }
   }
   // tâm ngoại tiếp / trực tâm / đường tròn qua ba điểm của mục tiêu (và giao của nó với các đường tròn có sẵn)
@@ -107,7 +109,7 @@ export function auxCandidates(doc, focusIds = []) {
           if (exists(R)) return;
           const other = roots.length === 2 ? pts.find((q) => G.dist(vals.get(q), roots[1 - w]) < e) : null;
           const specs = [{ type: 'circumcircle', args: T, hidden: true }, other ? { type: 'intersection_other', args: ['$0', c, other] } : { type: 'intersection', args: ['$0', c], params: { which: w } }];
-          push(`giao điểm của (${tn}) với ${nm(doc, c)}`, specs, R, 1);
+          push(`giao điểm của (${tn}) với ${cv(doc, c)}`, specs, R, 1);
         });
       }
     }

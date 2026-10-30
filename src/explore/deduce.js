@@ -927,7 +927,8 @@ export class Deducer {
     for (const u of uses) visit(u);
     const premises = order.filter((f) => f.rule === 'premise');
     const derived = order.filter((f) => f.rule !== 'premise' && f.rule !== 'concyclic-angle');
-    return { premises: premises.map((f) => f.text), steps: derived.map((f) => ({ text: f.text, rule: f.rule })) };
+    const uniq = (arr) => arr.filter((x, i) => arr.findIndex((y) => y.text === x.text) === i);
+    return { premises: [...new Set(premises.map((f) => f.text))], steps: uniq(derived).map((f) => ({ text: f.text, rule: f.rule })) };
   }
 }
 
