@@ -9,6 +9,8 @@ import { matchContext, relationImplies } from '../../src/explore/match.js';
 import { checkClaim } from '../../src/explore/check.js';
 import { DE_BAI } from './de-bai.mjs';
 import { proveClaim } from '../../src/explore/deduce.js';
+import { rankAux } from '../../src/explore/aux.js';
+import { addSpecs } from '../../src/core/apply.js';
 
 /** Áp các lệnh dựng (setup / điểm phụ) lên bản sao hình. */
 function withCommands(doc, cmds = []) {
@@ -39,7 +41,22 @@ function rankOf(doc, res, claim) {
   return i < 0 ? null : i + 1;
 }
 
-export function measure({ explore: run = explore, prove = null } = {}) {
+/** Hạng của điểm phụ (trong danh sách gợi ý) trùng về số với điểm phụ của bổ đề. */
+function auxRank(base, ranked, auxDoc) {
+  const target = evaluate(auxDoc);
+  const last = auxDoc.steps[auxDoc.steps.length - 1];
+  const P = target.get(last.id);
+  if (!P || P.kind !== 'point') return null;
+  const i = ranked.findIndex((r) => {
+    const d = clone(base);
+    const ids = addSpecs(d, r.specs.map((x) => ({ ...x })));
+    const v = evaluate(d).get(ids[ids.length - 1]);
+    return v && v.kind === 'point' && Math.hypot(v.x - P.x, v.y - P.y) < 1e-6;
+  });
+  return i < 0 ? null : i + 1;
+}
+
+export function measure({ explore: run = explore, prove = null, aux = false } = {}) {
   const rows = [];
   for (const spec of DE_BAI) {
     const lib = THU_VIEN.find((t) => t.id === spec.id);
@@ -55,14 +72,25 @@ export function measure({ explore: run = explore, prove = null } = {}) {
       const claim = claimOf(d, g);
       const rank = rankOf(d, res, claim);
       const proof = prove ? prove(d, claim) : null;
-      row.goals.push({ text: g, rank, proved: proof ? proof.status : null });
+      let proved = proof ? proof.status : null, auxProof = null;
+      if (aux && proved !== 'proved') {
+        const r = rankAux(d, claim, { budgetMs: 6000 });
+        const j = r.results.findIndex((x) => x.proved);
+        if (j >= 0) { proved = 'proved_aux'; auxProof = { rank: j + 1, label: r.results[j].label }; }
+      }
+      row.goals.push({ text: g, rank, proved, auxProof });
     }
     for (const L of spec.lemmas) {
       const d = withCommands(base, L.aux || []);
       const r2 = L.aux && L.aux.length ? run(d) : res;
       const claim = claimOf(d, L.claim);
       const proof = prove ? prove(d, claim) : null;
-      row.lemmas.push({ text: L.claim, aux: L.aux || [], rank: rankOf(d, r2, claim), proved: proof ? proof.status : null });
+      let auxR = null;
+      if (aux && L.aux && L.aux.length) {
+        const goalClaim = spec.goal.length ? claimOf(clone(base), spec.goal[0]) : null;
+        auxR = auxRank(base, rankAux(base, goalClaim, { budgetMs: 8000 }).results, d);
+      }
+      row.lemmas.push({ text: L.claim, aux: L.aux || [], rank: rankOf(d, r2, claim), proved: proof ? proof.status : null, auxRank: auxR });
     }
     rows.push(row);
   }
@@ -76,17 +104,18 @@ export function measure({ explore: run = explore, prove = null } = {}) {
     lemmas: lemmas.length,
     lemmaFound: lemmas.filter((l) => l.rank).length,
     lemmaProved: lemmas.filter((l) => l.proved === 'proved').length,
+    auxSuggested: lemmas.filter((l) => l.auxRank && l.auxRank <= 5).length,
     msTotal: rows.reduce((s, r) => s + r.ms, 0),
   };
   return { rows, summary };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { rows, summary } = measure({ prove: (d, claim) => proveClaim(d, claim) });
+  const { rows, summary } = measure({ prove: (d, claim) => proveClaim(d, claim), aux: process.argv.includes('--diem-phu') });
   if (process.argv.includes('--chi-tiet')) for (const r of rows) {
     console.log(`${r.id.padEnd(16)} ${String(r.count).padStart(3)} quan hệ ${String(r.ms).padStart(5)} ms`);
-    for (const g of r.goals) console.log(`   KL  ${g.rank ? '#' + g.rank : '—'}  ${g.proved || ''}  ${g.text}`);
-    for (const l of r.lemmas) console.log(`   BĐ  ${l.rank ? '#' + l.rank : '—'}  ${l.proved || ''}  ${l.text}${l.aux.length ? '  [' + l.aux.join('; ') + ']' : ''}`);
+    for (const g of r.goals) console.log(`   KL  ${g.rank ? '#' + g.rank : '—'}  ${g.proved || ''}  ${g.text}${g.auxProof ? `  [điểm phụ #${g.auxProof.rank}: ${g.auxProof.label}]` : ''}`);
+    for (const l of r.lemmas) console.log(`   BĐ  ${l.rank ? '#' + l.rank : '—'}  ${l.proved || ''}  ${l.text}${l.aux.length ? '  [' + l.aux.join('; ') + (l.auxRank ? ` – gợi ý #${l.auxRank}` : ' – không gợi ý') + ']' : ''}`);
   }
   console.log(JSON.stringify(summary));
 }
