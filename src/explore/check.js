@@ -38,6 +38,12 @@ export const CLAIMS = {
     title: 'Góc bằng nhau', text: (n) => `∠${n[0]}${n[1]}${n[2]} = ∠${n[3]}${n[4]}${n[5]}`,
     res: ([A, B, C, D, E, F]) => { const a = angleAt(A, B, C), b = angleAt(D, E, F); return a == null || b == null ? null : Math.abs(a - b) / 180; },
   },
+  sup_angle: {
+    title: 'Hai góc bù nhau', text: (n) => `∠${n[0]}${n[1]}${n[2]} + ∠${n[3]}${n[4]}${n[5]} = 180°`,
+    res: ([A, B, C, D, E, F]) => { const a = angleAt(A, B, C), b = angleAt(D, E, F); return a == null || b == null ? null : Math.abs(a + b - 180) / 180; },
+  },
+  same_line: { title: 'Trùng nhau', text: (n, d) => `${d[0]} trùng ${d[1]}`, res: ([l1, l2], s) => Math.abs(G.cross(G.unit(l1.d), G.unit(l2.d))) + G.distPointLine(l2.p, l1) / s },
+  same_circle: { title: 'Trùng nhau', text: (n, d) => `${d[0]} trùng ${d[1]}`, res: ([c1, c2], s) => (G.dist(c1.c, c2.c) + Math.abs(c1.r - c2.r)) / s },
   on_line: { title: 'Điểm thuộc đường thẳng', text: (n, d) => `${n[0]} nằm trên ${d[1]}`, res: ([P, l], s) => G.distPointLine(P, l) / s },
   on_circle: { title: 'Điểm thuộc đường tròn', text: (n, d) => `${n[0]} nằm trên ${d[1]}`, res: ([P, c], s) => Math.abs(G.dist(P, c.c) - c.r) / s },
   perpendicular: { title: 'Vuông góc', text: (n, d) => `${d[0]} ⊥ ${d[1]}`, res: ([l1, l2]) => Math.abs(G.dot(G.unit(l1.d), G.unit(l2.d))) },

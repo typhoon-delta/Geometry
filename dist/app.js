@@ -4566,6 +4566,16 @@
         return a == null || b == null ? null : Math.abs(a - b) / 180;
       }
     },
+    sup_angle: {
+      title: "Hai g\xF3c b\xF9 nhau",
+      text: (n) => `\u2220${n[0]}${n[1]}${n[2]} + \u2220${n[3]}${n[4]}${n[5]} = 180\xB0`,
+      res: ([A, B, C2, D2, E, F]) => {
+        const a = angleAt(A, B, C2), b = angleAt(D2, E, F);
+        return a == null || b == null ? null : Math.abs(a + b - 180) / 180;
+      }
+    },
+    same_line: { title: "Tr\xF9ng nhau", text: (n, d) => `${d[0]} tr\xF9ng ${d[1]}`, res: ([l1, l2], s) => Math.abs(cross(unit(l1.d), unit(l2.d))) + distPointLine(l2.p, l1) / s },
+    same_circle: { title: "Tr\xF9ng nhau", text: (n, d) => `${d[0]} tr\xF9ng ${d[1]}`, res: ([c1, c2], s) => (dist(c1.c, c2.c) + Math.abs(c1.r - c2.r)) / s },
     on_line: { title: "\u0110i\u1EC3m thu\u1ED9c \u0111\u01B0\u1EDDng th\u1EB3ng", text: (n, d) => `${n[0]} n\u1EB1m tr\xEAn ${d[1]}`, res: ([P2, l], s) => distPointLine(P2, l) / s },
     on_circle: { title: "\u0110i\u1EC3m thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n", text: (n, d) => `${n[0]} n\u1EB1m tr\xEAn ${d[1]}`, res: ([P2, c], s) => Math.abs(dist(P2, c.c) - c.r) / s },
     perpendicular: { title: "Vu\xF4ng g\xF3c", text: (n, d) => `${d[0]} \u22A5 ${d[1]}`, res: ([l1, l2]) => Math.abs(dot(unit(l1.d), unit(l2.d))) },
@@ -20370,7 +20380,7 @@ ${tk.v}
       if (own) return own.id;
       const p = this.vals.get(P2), q = this.vals.get(Q);
       const tol = 1e-9 * (1 + dist(p, q));
-      const any = this.doc.steps.find((s) => this.k.get(s.id) === "line" && this.vals.get(s.id) && distPointLine(p, this.vals.get(s.id)) < tol && distPointLine(q, this.vals.get(s.id)) < tol);
+      const any = !this.strict && this.doc.steps.find((s) => this.k.get(s.id) === "line" && this.vals.get(s.id) && distPointLine(p, this.vals.get(s.id)) < tol && distPointLine(q, this.vals.get(s.id)) < tol);
       if (any) return any.id;
       return this.add("line", [P2, Q], { aux: true });
     }
@@ -20548,6 +20558,7 @@ ${tk.v}
     [/^(.+) thang hang$/, (m, c) => ({ type: "collinear", ids: c.pointIds(m[1], 3) })],
     [/^(.+) (?:dong vien|cung thuoc (?:mot )?duong tron)$/, (m, c) => ({ type: "concyclic", ids: c.pointIds(m[1], 4) })],
     [/^goc (\S+) = goc (\S+)$/, (m, c) => ({ type: "equal_angle", ids: [...c.pointIds(m[1], 3), ...c.pointIds(m[2], 3)] })],
+    [/^goc (\S+) \+ goc (\S+) = 180(?: ?(?:do|°))?$/, (m, c) => ({ type: "sup_angle", ids: [...c.pointIds(m[1], 3), ...c.pointIds(m[2], 3)] })],
     [/^(\S+) (?:vuong goc|⊥)(?: voi)? (\S+)$/, (m, c) => ({ type: "perpendicular", ids: [c.line(m[1]), c.line(m[2])] })],
     [/^(\S+) song song(?: voi)? (\S+)$/, (m, c) => ({ type: "parallel", ids: [c.line(m[1]), c.line(m[2])] })],
     [/^(\S+) , (\S+) , (\S+) dong quy$/, (m, c) => ({ type: "concurrent", ids: [c.line(m[1]), c.line(m[2]), c.line(m[3])] })],
@@ -20556,7 +20567,11 @@ ${tk.v}
       const P2 = c.pointIds(m[1], 1)[0], X = c.curve(m[2]);
       return { type: c.k.get(X) === "circle" ? "on_circle" : "on_line", ids: [P2, X] };
     }],
-    [/^(\S+) trung(?: voi)? (\S+)$/, (m, c) => ({ type: "coincide", ids: [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]] })],
+    [/^(\S+) trung(?: voi)? (\S+)$/, (m, c) => {
+      if (c.byName(m[1], "point")) return { type: "coincide", ids: [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]] };
+      const a = c.curve(m[1]), b = c.curve(m[2]);
+      return { type: c.k.get(a) === "circle" ? "same_circle" : "same_line", ids: [a, b] };
+    }],
     [/^(\S+) = (\S+)$/, (m, c) => ({ type: "equal_len", ids: [...c.pointIds(m[1], 2), ...c.pointIds(m[2], 2)] })]
   ];
   function parseCommand(doc2, text2, ctx = {}) {
@@ -20566,6 +20581,7 @@ ${tk.v}
       const c = new Ctx(d, ctx);
       const chk = /^kiem tra (.+?)\??$/.exec(t2);
       if (chk) {
+        c.strict = true;
         const r = CHECK_RULES.find(([re]) => re.test(chk[1]));
         if (!r) fail("Ki\u1EC3m tra: th\u1EB3ng h\xE0ng, \u0111\u1ED3ng vi\xEAn, AB = CD, g\xF3c ABC = g\xF3c DEF, d1 vu\xF4ng g\xF3c d2, song song, \u0111\u1ED3ng quy, ti\u1EBFp x\xFAc, thu\u1ED9c, tr\xF9ng");
         return { kind: "check", claim: r[1](r[0].exec(chk[1]), c) };
