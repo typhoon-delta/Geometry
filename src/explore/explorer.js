@@ -8,6 +8,7 @@ import { STEP_TYPES } from '../core/steps.js';
 import * as G from '../core/geom.js';
 import { Knowledge } from './knowledge.js';
 
+export { rng, figureScale };
 export const DEFAULTS = {
   samples: 12, // số cấu hình ngẫu nhiên hợp lệ cần có (ngoài cấu hình gốc)
   maxAttempts: 150, // số lần thử tối đa (cấu hình suy biến bị loại)
@@ -194,10 +195,12 @@ const T = {
 /**
  * Khám phá. Trả về {relations:[{type, ids, text, score, ...}], stats}.
  */
-export function explore(doc, options = {}) {
-  const opts = { ...DEFAULTS, ...options };
-  const t0 = Date.now();
-  const kindOf = kinds(doc);
+/**
+ * Bộ lấy mẫu cấu hình ngẫu nhiên hợp lệ của một hình (dùng chung cho khám phá và kiểm tra nhận định).
+ * sample(rand) → {ov, vals, why}: why ≠ null nếu cấu hình suy biến / đổi dạng so với hình gốc.
+ */
+export function makeSampler(doc, opts = DEFAULTS, kindOf = kinds(doc)) {
+  opts = { ...DEFAULTS, ...opts };
   const base = evaluate(doc);
   const pointIds = [], lineIds = [], circleIds = [];
   for (const s of doc.steps) {
@@ -217,8 +220,6 @@ export function explore(doc, options = {}) {
     for (let j = i + 1; j < pointIds.length; j++)
       if (G.dist(base.get(pointIds[i]), base.get(pointIds[j])) < opts.tol * scale0) sameClassPairs.add(pointIds[i] + '|' + pointIds[j]);
 
-  // ---- lấy mẫu ----
-  const rand = rng(opts.seed);
   const triangles = findTriangles(doc, kindOf);
   const baseDist = pointIds.map((a) => pointIds.map((b) => G.dist(base.get(a), base.get(b))));
   const shapeTriangles = findTriangles(doc, kindOf, { drawn: true });
@@ -229,15 +230,33 @@ export function explore(doc, options = {}) {
     return r.length === 2 && G.dist(r[0], r[1]) < 1e-6 * scale0;
   })()).map((s) => s.id));
   const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments: pointsOnSegments(doc, base), tangentAtBase };
+  return {
+    base, kindOf, pointIds, lineIds, circleIds, curveIds, scale0, sameClassPairs,
+    baseDegenerate: () => degenerate(doc, base, { ...ctx, baseDist: null, baseShape: null, onSegments: null }),
+    sample(rand, perturb = opts.perturb) {
+      const ov = randomOverrides(doc, base, scale0, rand, perturb);
+      const vals = evaluate(doc, ov);
+      return { ov, vals, why: degenerate(doc, vals, ctx) };
+    },
+  };
+}
+
+export function explore(doc, options = {}) {
+  const opts = { ...DEFAULTS, ...options };
+  const t0 = Date.now();
+  const kindOf = kinds(doc);
+  const S = makeSampler(doc, opts, kindOf);
+  const { base, pointIds, lineIds, circleIds, curveIds, scale0, sameClassPairs } = S;
+
+  // ---- lấy mẫu ----
+  const rand = rng(opts.seed);
   const samples = [{ vals: base, scale: scale0 }];
   let attempts = 0;
   const rejected = {};
-  const baseDegenerate = degenerate(doc, base, { ...ctx, baseDist: null, baseShape: null, onSegments: null });
+  const baseDegenerate = S.baseDegenerate();
   while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
     attempts++;
-    const ov = randomOverrides(doc, base, scale0, rand, opts.perturb);
-    const vals = evaluate(doc, ov);
-    const why = degenerate(doc, vals, ctx);
+    const { vals, why } = S.sample(rand);
     if (why) { rejected[why] = (rejected[why] || 0) + 1; continue; }
     samples.push({ vals, scale: figureScale(vals, pointIds) });
   }

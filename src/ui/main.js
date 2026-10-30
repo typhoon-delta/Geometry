@@ -12,6 +12,7 @@ import * as codec from '../io/codec.js';
 import { setupExplore, drawRelationOverlay } from './explorePanel.js';
 import { explore } from '../explore/explorer.js';
 import { toTikZ } from '../export/tikz.js';
+import { toAsymptote } from '../export/asy.js';
 import { textDialog, toast } from './dialog.js';
 import { THU_VIEN } from '../core/thu-vien.js';
 import { setupTabBar } from './tabbar.js';
@@ -78,6 +79,14 @@ function start() {
       `<div class="modal-body">Theo bộ kiểu đang chọn (<b>${app.theme === 'mono' ? 'Đơn sắc' : 'Sách giáo khoa'}</b>). Dán vào tài liệu LaTeX (chỉ cần <code>\\usepackage{tikz}</code>). Đổi kích thước bằng cách sửa <code>x=…, y=…</code>.</div>`);
   };
 
+  // bản 1.8: xuất Asymptote (AoPS: dán giữa [asy] … [/asy])
+  document.getElementById('btn-asy').onclick = () => {
+    const vis = app.visibleSet();
+    const doc = vis ? { ...app.doc, steps: app.doc.steps.map((s) => (vis.has(s.id) ? s : { ...s, hidden: true })) } : app.doc;
+    textDialog('Mã Asymptote', toAsymptote(doc, { values: app.values, theme: app.theme, trimLines: app.renderer.trimLines }),
+      '<div class="modal-body">Asymptote thuần (không cần gói thêm). Trên AoPS: dán giữa <code>[asy]</code> và <code>[/asy]</code>. Đổi kích thước bằng cách sửa <code>unitsize</code>.</div>');
+  };
+
   // Lưu / mở / chia sẻ
   document.getElementById('btn-share').onclick = () => shareLink(app);
   document.getElementById('btn-save').onclick = () => saveFile(app);
@@ -105,7 +114,7 @@ function start() {
 
   // Cho phép dùng từ console / test tự động
   window.__app = app;
-  window.GeoCore = { ...core, Builder, EXAMPLES, THU_VIEN, codec, explore, toTikZ };
+  window.GeoCore = { ...core, Builder, EXAMPLES, THU_VIEN, codec, explore, toTikZ, toAsymptote };
   return app;
 }
 

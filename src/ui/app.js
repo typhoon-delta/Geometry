@@ -1206,7 +1206,7 @@ export class App {
     const step = stepById(this.doc, info.id);
     const P0 = this.values.get(info.id);
     if (info.kind === 'point' && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
-    if (info.kind === 'point') this.dragUpdater = makeUpdater(this.doc, [info.id]);
+    if (info.kind === 'point') this.dragUpdater = makeUpdater(this.doc, [info.id], { track: true });
     let pending = null;
     const anchors = info.kind === 'point' && step.type === 'free_point' ? this.dragAnchors(info.id) : [];
     const apply = () => {
@@ -1511,6 +1511,16 @@ export class App {
       if (!s) return;
       if (value === false || value == null) delete s[key];
       else s[key] = value;
+    });
+  }
+
+  /** Đặt tham số mới cho nhiều bậc tự do một lần ({id: params}) – trường hợp đặc biệt, phản ví dụ; hoàn tác được. */
+  applyOverrides(patch) {
+    this.commit((doc) => {
+      for (const [id, p] of Object.entries(patch)) {
+        const s = stepById(doc, id);
+        if (s) s.params = { ...(s.params || {}), ...p };
+      }
     });
   }
 

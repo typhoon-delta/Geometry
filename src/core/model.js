@@ -69,16 +69,37 @@ export function computeStep(s, vals, overrides = null, doc = null) {
  * chỉ cần tính lại chúng và các bước phụ thuộc. Trả về hàm update(vals) sửa trực tiếp Map giá trị
  * (theo đúng thứ tự dựng). Dùng khi kéo: lập kế hoạch một lần lúc nhấn chuột, gọi mỗi khung hình.
  */
-export function makeUpdater(doc, changedIds) {
+export function makeUpdater(doc, changedIds, { track = false } = {}) {
   const need = dependents(doc, changedIds);
   for (const id of changedIds) need.add(id);
   const plan = doc.steps.filter((s) => need.has(s.id));
   const update = (vals) => {
-    for (const s of plan) vals.set(s.id, computeStep(s, vals, null, doc));
+    for (const s of plan) {
+      if (track && TRACKED[s.type]) trackRoot(s, vals);
+      vals.set(s.id, computeStep(s, vals, null, doc));
+    }
     return vals;
   };
   update.size = plan.length;
   return update;
+}
+
+// Bám nghiệm khi kéo (bản 1.8): giao điểm / tiếp điểm có hai nghiệm chọn theo thứ tự chuẩn (which = 0/1); thứ tự này
+// có thể đảo khi hình đổi (vd hướng đường thẳng lật lại) làm điểm nhảy sang nghiệm kia. Khi kéo, nếu nghiệm đang chọn
+// ở xa vị trí cũ còn nghiệm kia ở sát vị trí cũ thì đổi which (ghi vào hình) – điểm đi liên tục như mắt thấy.
+const TRACKED = {
+  intersection: (s, vals) => G.intersect(vals.get(s.args[0]), vals.get(s.args[1])),
+  tangent_point: (s, vals) => G.tangentPoints(vals.get(s.args[0]), vals.get(s.args[1])),
+};
+
+function trackRoot(s, vals) {
+  const prev = vals.get(s.id);
+  if (!prev) return;
+  const roots = TRACKED[s.type](s, vals);
+  if (!roots || roots.length !== 2) return;
+  const w = paramsOf(s).which || 0;
+  const dCur = G.dist(roots[w], prev), dAlt = G.dist(roots[1 - w], prev);
+  if (dCur > 3 * dAlt && dCur > 1e-9) s.params = { ...(s.params || {}), which: 1 - w };
 }
 
 // ======================= DỜI THỬ (bản 1.7): điểm cố định, quỹ tích =======================
