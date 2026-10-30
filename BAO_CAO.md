@@ -1126,3 +1126,22 @@ cần tỉ số – đúng là khó với đuổi góc).
 * "Bộ xương" gom nhóm còn khá mịn (cùng ý nhưng khác phép dựng phụ vẫn là hai nhóm).
 * Thư viện 26 cấu hình là bộ khởi đầu; thêm cấu hình mới: viết một hàm trong `lab/library/__init__.py` (dùng
   `Builder.add`, `Builder.kl`) và thêm một dòng vào `CONFIGS`, kiểm thử tự kiểm kết luận.
+
+## 3. Sau lần chạy thật đầu tiên (phản hồi của thầy/cô)
+
+Năm bài đứng đầu tầng Khó của lần chạy 30 phút: bốn bài thực ra dễ, mỗi bài lộ một lỗ hổng – đã sửa, cả năm thành
+kiểm thử hồi quy (`test_suy_luan.py`):
+
+| Lỗ hổng | Sửa |
+|---|---|
+| Kết luận bổ đề viết theo đường tròn (vd "X trên (BHC)") bị vứt khi hình của sự kiện không chứa chính đường tròn đó | Viết thêm dạng theo điểm (`point_form`: "B, H, C, X đồng viên") |
+| Không hiểu đường tròn đối xứng qua một đường thẳng | Tâm = đối xứng của tâm; đi qua giao với trục, ảnh của các điểm trên đường tròn; đối xứng của (ABC) qua BC đi qua H |
+| Thiếu hệ thức lượng trong tam giác vuông, hệ thức trực tâm | XP² = PM·PQ…; FU·FX = FV·FW (X trực tâm, F chân đường cao) |
+| Sylvester chỉ dùng khi tâm ngoại tiếp được dựng đúng bằng bước "tâm ngoại tiếp" | Dùng mọi điểm đã biết cách đều ba đỉnh (vd O với tam giác PBC, P trên (O)); chân đường vuông góc từ điểm cách đều U, V là trung điểm UV |
+| Kết luận bổ đề dạng gộp ("ba điểm đối xứng của H trên (O)") không nhận ra phần lẻ; bổ đề không có mặt trong vòng bị "phát hiện lại" | Ghi nhớ cả các phần lẻ; nạp kết luận của cả 26 bổ đề ngay đầu lần chạy |
+| **Điểm chỉ để trang trí** (vd đường thẳng Euler mà mọi đường qua O đều đúng; "Q xuyên tâm đối của A" mà mọi Q trên (O) đều đúng) | `lab/reason/generalize.py`: nới lỏng từng điểm (thành điểm tuỳ ý, hoặc tuỳ ý trên đường/đường tròn chứa nó; H, N, G thành điểm trên một đường bất kỳ qua O), kiểm lại bằng số. Đúng ⇒ báo cáo trình bày **bản tổng quát** (ngắn hơn, trung thực hơn; phát biểu gốc trong mục mở rộng), đo lại độ khó trên bản đó, trừ điểm; cái dễ thì lọc |
+| Bài dễ với điểm tuỳ ý (tính chất chung) lọt vào "Dễ nhưng đẹp" | Chỉ giữ khi nối hai bổ đề |
+
+Chạy thử 6 phút sau khi sửa (4000 sự kiện giữ lại): Khó 26 %, Vừa 20 %, Dễ nhưng đẹp 1 %, lọc bỏ 53 %; khoảng 60 % sự
+kiện được tổng quát hoá (có điểm thừa). Còn lại trong tầng Khó: các bài cần một điểm phụ kinh điển mà hình không có
+(vd trung điểm AH), hoặc cần đồng dạng tổng quát – bộ suy luận chưa tự thêm điểm phụ.

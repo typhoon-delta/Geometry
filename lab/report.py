@@ -16,7 +16,8 @@ from datetime import datetime
 from .config import REPORTS_DIR, load_config
 from .core.codec import share_url
 from .feedback import load_feedback
-from .present import display_doc, statement, statement_text
+from .present import Namer, display_doc, label_html, statement, statement_text
+from .reason.generalize import describe
 from .render_svg import render_svg
 from .run import RUNS_DIR, _read_json, list_runs
 from .library import BY_KEY
@@ -221,7 +222,7 @@ def _card(i, f, cfg, weights, variants=()):
     if f.get("giao_thoa"):
         chips.append('<span class="chip kho-mid">nối hai bổ đề</span>')
     if f.get("tong_quat"):
-        chips.append(f'<span class="chip kho-hard" title="{html.escape(f["tong_quat"])}">điểm đặc biệt chỉ để trang trí</span>')
+        chips.append('<span class="chip kho-hard">có điểm chỉ để trang trí</span>')
     if nc.get("goals_total", 0) > 1:
         chips.append(f'<span class="chip">{nc.get("goals_proved", 0)}/{nc["goals_total"]} mục tiêu</span>')
     parts = explain(f.get("dac_trung", {}), weights)
@@ -236,8 +237,17 @@ def _card(i, f, cfg, weights, variants=()):
         src += " · kết luận dính phần của: " + html.escape(", ".join(BY_KEY[k].ten if k in BY_KEY else k for k in f["nguon"]))
     src += "</p>"
     if f.get("tong_quat"):
-        src += f'<p class="meta">Thực chất: {html.escape(f["tong_quat"])}.</p>'
+        nm = Namer(doc, label_html)
+        lead = "Bản tổng quát (máy đã nới lỏng giả thiết)" if f.get("doc_goc") else "Thực chất"
+        src += f'<p class="meta">{lead}: {describe(f["tong_quat"], nm.n, nm.curve)}.</p>'
     det = [_variants(variants, cfg)] if variants else []
+    if f.get("doc_goc"):
+        try:
+            g = dict(f, doc=f["doc_goc"])
+            det.append(f"<details><summary>Phát biểu gốc (trước khi tổng quát hoá)</summary><p>"
+                       f"{html.escape(statement_text(g, display_doc(g, title='')))}</p></details>")
+        except Exception:  # noqa: BLE001
+            pass
     det += [f'<details><summary>Thành phần điểm</summary><table class="pts">{expl}</table></details>']
     if proof:
         det.append(f"<details><summary>Chứng minh của Newclid ({nc.get('proof_lines', 0)} dòng)</summary><pre>{html.escape(proof)}</pre></details>")
@@ -302,7 +312,7 @@ def build_report(run_id=None, cfg=None):
                          f'<p class="tier-note">{note}</p>' + ("".join(cards) or "<p>Chưa có.</p>")))
     dropped = [f for f in facts if f["tang"] == "loai"]
     why = {"hệ quả trực tiếp của sự kiện khác": 0, "đối tượng gượng ép (độ tự nhiên thấp)": 0,
-           "dễ (đuổi góc 1 bước) và không đặc sắc": 0, "điểm đặc biệt chỉ để trang trí": 0, "bị đánh Chán": 0}
+           "dễ (đuổi góc 1 bước) và không đặc sắc": 0, "có điểm chỉ để trang trí": 0, "bị đánh Chán": 0}
     for f in dropped:
         if f.get("phan_hoi") == "chan":
             why["bị đánh Chán"] += 1
@@ -311,7 +321,7 @@ def build_report(run_id=None, cfg=None):
         elif f.get("tu_nhien", 1.0) < (loc or {}).get("nguong_tu_nhien", 0.65):
             why["đối tượng gượng ép (độ tự nhiên thấp)"] += 1
         elif f.get("tong_quat"):
-            why["điểm đặc biệt chỉ để trang trí"] += 1
+            why["có điểm chỉ để trang trí"] += 1
         else:
             why["dễ (đuổi góc 1 bước) và không đặc sắc"] += 1
     dropped.sort(key=lambda f: -f["score"])

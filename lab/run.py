@@ -31,7 +31,7 @@ from .library import BY_KEY
 from .library.compose import choose_pair
 from .score import features, score, tier
 from .search.base import build_base_doc, make_samples
-from .search.epoch import Epoch, base_facts
+from .search.epoch import Epoch, base_facts, library_knowledge
 from .search.facts import FactPipeline
 
 RUNS_DIR = os.path.join(DATA_DIR, "lan-chay")
@@ -224,7 +224,7 @@ class Lab:
             fp = (f.get("fingerprints") or {}).get(nid)
             if fp:
                 weights[tuple(fp)] = 3.0 if f.get("phan_hoi") == "hay" else 2.0
-            sd = sub_doc(f["doc"], [nid])
+            sd = sub_doc(f.get("doc_goc") or f["doc"], [nid])  # hình gốc (bản tổng quát có điểm tuỳ ý)
             steps = [s for s in sd["steps"] if s["id"] not in base]
             if not steps or len(steps) > 8:
                 continue
@@ -287,6 +287,10 @@ class Lab:
             self.log("Trọng số đã chỉnh theo phản hồi: " + ", ".join(f"{k} {v:+}" for k, v in self.deltas.items()))
         interrupted = False
         try:
+            t0 = time.time()
+            n_kl = library_knowledge(cfg, self.pipeline)
+            if n_kl:
+                self.log(f"Đã nạp kết luận của các bổ đề trong thư viện ({n_kl} quan hệ, {time.time() - t0:.0f} giây).")
             if self.state["vong"] == 0:
                 for f in base_facts(self.pipeline, make_samples(cfg["mau"], cfg["hat_giong_mau"])):
                     self.on_fact(f)

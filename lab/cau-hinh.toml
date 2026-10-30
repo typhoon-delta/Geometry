@@ -63,7 +63,7 @@ it_buoc = 2.5            # ít bước dựng (1 = rất ít, 0 = nhiều)
 diem_tu_do = -0.3        # mỗi điểm tuỳ ý (điểm trên đường) trong hình
 so_diem = -0.15          # mỗi điểm trong phát biểu quá 4 điểm (sự kiện dài dòng)
 dai_dong = -0.7          # mỗi câu dựng hình quá 4 câu (kể cả câu của bổ đề)
-gia_dac_biet = -3.0      # O, H, I, G, N chỉ để trang trí (vẫn đúng khi thay bằng điểm bất kỳ / đường bất kỳ qua O)
+gia_dac_biet = -1.5      # có điểm chỉ để trang trí (báo cáo trình bày bản tổng quát: điểm đó thành điểm tuỳ ý)
 
 [loc]
 # Lọc có chọn lọc cho báo cáo: bỏ hệ quả trực tiếp và đối tượng gượng ép; giữ cái dễ nếu đẹp.

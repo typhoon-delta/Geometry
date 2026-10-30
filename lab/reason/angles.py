@@ -99,8 +99,10 @@ class AngleChaser:
         self.leqs = []
         self.lspan = Span(0)
         self._pow_done = set()
+        self._alt_done = set()
         self.tangents = []  # (đường tròn, tiếp điểm, đường tiếp tuyến hoặc None, điểm ngoài hoặc None)
         self._build()
+        self._reflected_circles()
         self._affine()
         self._axis_points()
         self._perp_bisectors()
@@ -477,6 +479,19 @@ class AngleChaser:
                 for V in s1 & s2:
                     self.add_center_point(V, t1)
                     self.add_center_point(V, t2)
+        # trực tâm X của UVW, F chân đường cao từ U (điểm có sẵn): FU·FX = FV·FW
+        for s_ in steps:
+            if s_["type"] != "orthocenter" or self.vals.get(s_["id"]) is None:
+                continue
+            X = s_["id"]
+            for U, V, W in itertools.permutations(s_["args"], 3):
+                if V > W or any(self.vals.get(z) is None for z in (U, V, W)):
+                    continue
+                Fp = G.project(self.vals[U], G.line_through(self.vals[V], self.vals[W]))
+                F = next((z for z in self.pts if G.dist(self.vals[z], Fp) < self.eps), None)
+                if F is None or F in (U, V, W, X):
+                    continue
+                self.lequation([(self.L(F, U), 1), (self.L(F, X), 1), (self.L(F, V), -1), (self.L(F, W), -1)])
         # vị tự (trung điểm / đối xứng qua cùng một tâm): ảnh song song với gốc
         groups = {}
         for s in steps:
@@ -543,6 +558,8 @@ class AngleChaser:
                     U, V = a[1], a[2]
                 f = self._virtual_foot(a[0], U, V, sid)
                 self.reflections.append((a[0], sid, U, V))
+                if f is not None and f not in co and {U, V} <= self.centers.get(a[0], set()):
+                    co[f] = comb((0.5, U), (0.5, V))  # P cách đều U, V ⇒ chân đường vuông góc là trung điểm UV
                 if f is not None:
                     co[sid] = comb((2.0, f), (-1.0, a[0]))
                     self.mids.append((f, a[0], sid))
@@ -559,6 +576,8 @@ class AngleChaser:
                     self.mids.append((sid, O, H))
             elif t == "orthocenter":
                 O = next((x["id"] for x in steps if x["type"] == "circumcenter" and sorted(x["args"]) == sorted(a)), None)
+                if O is None:  # tâm ngoại tiếp đã biết khác: điểm cách đều ba đỉnh (vd O với tam giác PBC, P trên (O))
+                    O = next((o for o, eq in self.centers.items() if set(a) <= eq and o in self.vals), None)
                 if O:  # Sylvester: OH = OA + OB + OC
                     co[sid] = comb((1.0, a[0]), (1.0, a[1]), (1.0, a[2]), (-2.0, O))
         pts = [p for p in self.pts if p in ids or p.startswith("_f")]
@@ -602,6 +621,88 @@ class AngleChaser:
                 self.add_center_point(X, P)
                 self.add_center_point(X, P2)
                 added += 1
+        return added
+
+    def _reflected_circles(self):
+        """Đường tròn đối xứng của c qua đường UV: tâm là đối xứng của tâm (điểm có sẵn trùng bằng số, hoặc điểm ảo);
+        đi qua các giao điểm của c với UV và ảnh của các điểm trên c; đối xứng của (ABC) qua BC đi qua trực tâm H."""
+        steps = self.doc["steps"]
+        for s in steps:
+            t, a, sid = s["type"], s["args"], s["id"]
+            if t != "reflect" or self.kind.get(sid) != "circle" or self.kind.get(a[1]) != "line":
+                continue
+            pts = self._points_on_line_obj(a[1])
+            if len(pts) < 2 or any(self.vals.get(x) is None for x in pts[:2]):
+                continue
+            U, V = pts[:2]
+            e0, e = self.circle_entity(a[0]), self.circle_entity(sid)
+            src = by_args = next((x for x in steps if x["id"] == a[0]), None)
+            on0 = set(e0[0]) | (set(by_args["args"]) if src and src["type"] in ("circumcircle", "circle_3pts") else set())
+            for X in on0:
+                if X in self.vals and self._num_col(U, V, X):
+                    self.on_circle(X, sid)  # điểm chung của c với trục
+            for x in steps:  # ảnh của các điểm trên c
+                if x["type"] in ("reflect", "reflect_pts") and self.kind.get(x["id"]) == "point" and x["args"][0] in on0:
+                    axis = x["args"][1:] if x["type"] == "reflect_pts" else self._points_on_line_obj(x["args"][1])
+                    if len(axis) >= 2 and self._num_col(U, V, axis[0]) and self._num_col(U, V, axis[1]):
+                        self.on_circle(x["id"], sid)
+            if src and src["type"] in ("circumcircle", "circle_3pts"):
+                tri = frozenset(src["args"])
+                on_ax = [X for X in src["args"] if self._num_col(U, V, X)]
+                if len(on_ax) == 2:
+                    H = next((x["id"] for x in steps if x["type"] == "orthocenter" and frozenset(x["args"]) == tri), None)
+                    if H:
+                        self.on_circle(H, sid)
+            o = e0[1]
+            if o is None or self.vals.get(o) is None:
+                continue
+            Oc = G.reflect_point_over_line(self.vals[o], G.line_through(self.vals[U], self.vals[V]))
+            c2 = next((x for x in self.pts if G.dist(self.vals[x], Oc) < self.eps), None)
+            if c2 is None:
+                c2 = "_c" + sid
+                self.vals[c2], self.kind[c2] = Oc, "point"
+                self.pts.append(c2)
+            e[1] = c2
+            for X in list(e[0]):
+                self.add_center_point(c2, X)
+            f = self._virtual_foot(o, U, V, "c" + sid)
+            self.reflections.append((o, c2, U, V))
+            if f is not None:
+                self.mids.append((f, o, c2))
+
+    def _right_altitude(self):
+        """Tam giác XPQ vuông tại X (suy ra được), M chân đường cao từ X trên PQ ⇒ XP² = PM·PQ, XQ² = QM·QP,
+        XM² = MP·MQ (hệ thức lượng – dùng cho phương tích, tiếp tuyến…)."""
+        added = 0
+        n = len(self.pts)
+        if n < 4:
+            return 0
+        Pm = np.array([[self.vals[p].x, self.vals[p].y] for p in self.pts])
+        tol = 1e-7 * self.scale * self.scale
+        for i, X in enumerate(self.pts):
+            d = Pm - Pm[i]
+            dots = d @ d.T
+            for j, k in zip(*np.nonzero(np.abs(np.triu(dots, 1)) < tol)):
+                if i in (j, k) or np.hypot(*d[j]) < self.eps or np.hypot(*d[k]) < self.eps:
+                    continue
+                P, Q = self.pts[j], self.pts[k]
+                for M in self.pts:
+                    if M in (X, P, Q) or (X, P, Q, M) in self._alt_done:
+                        continue
+                    if not self._num_col(P, Q, M):
+                        continue
+                    if abs(G.dot(G.sub(self.vals[M], self.vals[X]), G.sub(self.vals[Q], self.vals[P]))) > tol:
+                        continue
+                    if not (self.derivable([(self.pair(X, P), 1), (self.pair(X, Q), -1)]) and
+                            self._goal_ok(self.col_any(P, Q, M)) and
+                            self.derivable([(self.pair(X, M), 1), (self.pair(P, Q), -1)])):
+                        continue
+                    self._alt_done.add((X, P, Q, M))
+                    L = self.L
+                    self.lequation([(L(X, P), 2), (L(P, M), -1), (L(P, Q), -1)])
+                    self.lequation([(L(X, Q), 2), (L(Q, M), -1), (L(P, Q), -1)])
+                    self.lequation([(L(X, M), 2), (L(M, P), -1), (L(M, Q), -1)])
+                    added += 1
         return added
 
     def _perp_bisectors(self):
@@ -862,6 +963,7 @@ class AngleChaser:
             added += self._parallelograms()
             added += self._axis_points()
             added += self._perp_bisectors()
+            added += self._right_altitude()
             added += self._power()
             added += self._isosceles()
             # góc vuông suy ra được + trung điểm cạnh huyền → điểm cách đều trung điểm
@@ -881,6 +983,22 @@ class AngleChaser:
             if not added:
                 return None
         return None
+
+
+def point_form(doc, rtype, ids):
+    """Sự kiện (dạng Knowledge) của một quan hệ, kèm bản viết theo ĐIỂM khi đường tròn/đường thẳng được dựng từ điểm
+    (vd "X trên đường tròn (BHC)" → "B, H, C, X đồng viên") – để kiến thức vẫn dùng được trong hình không có chính đối
+    tượng đường tròn đó."""
+    from ..scan.knowledge import relation_facts
+
+    out = relation_facts(rtype, ids)
+    by = {s["id"]: s for s in doc["steps"]}
+    st = by.get(ids[0]) if ids else None
+    if st and rtype == "on_circle" and st["type"] in ("circle_3pts", "circumcircle"):
+        out += relation_facts("concyclic", list(dict.fromkeys(list(st["args"]) + list(ids[1:]))))
+    if st and rtype == "on_line" and st["type"] in LINE_TYPES:
+        out += relation_facts("collinear", list(dict.fromkeys(list(st["args"]) + list(ids[1:]))))
+    return out
 
 
 def difficulty(doc, rtype, ids, known=(), max_rounds=5):

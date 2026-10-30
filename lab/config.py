@@ -31,7 +31,7 @@ DEFAULTS = {
         "loai_trung_nhau": 1.5, "loai_trung_duong": 0.3,
         "newclid_chung_minh_duoc": -2.0, "newclid_mot_phan": 1.0, "newclid_khong_chung_minh_duoc": 2.0,
         "newclid_het_gio": 1.5, "do_dai_chung_minh": 0.04,
-        "xa_nhau": 3.0, "dac_biet": 1.2, "dac_biet_phu": 0.4, "it_buoc": 2.5, "diem_tu_do": -0.3, "so_diem": -0.15, "dai_dong": -0.7, "gia_dac_biet": -3.0,
+        "xa_nhau": 3.0, "dac_biet": 1.2, "dac_biet_phu": 0.4, "it_buoc": 2.5, "diem_tu_do": -0.3, "so_diem": -0.15, "dai_dong": -0.7, "gia_dac_biet": -1.5,
         "kho_1": -0.5, "kho_2": 1.0, "kho_3": 2.5, "kho_khong": 3.0, "kho_chua": 0.5, "tu_nhien": 8.0,
         "giao_thoa": 2.5, "noi_bo": -1.0, "he_qua": -3.0,
     },

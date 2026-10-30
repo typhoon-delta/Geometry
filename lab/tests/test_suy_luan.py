@@ -87,11 +87,76 @@ class TestSuyLuan(unittest.TestCase):
         d = mk([{"id": "lOH", "type": "line", "args": ["O", "H"]}, {"id": "P", "type": "intersection", "args": ["CA", "lOH"]},
                 {"id": "lHN", "type": "line", "args": ["H", "N"]}, {"id": "Q", "type": "reflect", "args": ["A", "lHN"]}],
                ["C", "O", "P", "Q"])
-        self.assertIn("mọi đường thẳng qua O", decorative(d, "concyclic", ["C", "O", "P", "Q"], S))
+        self.assertEqual(decorative(d, "concyclic", ["C", "O", "P", "Q"], S), {"loai": "euler"})
         # chính đường thẳng Euler, đối xứng của H qua BC trên (O), trung điểm AH trên đường tròn Euler: cần thật
         self.assertIsNone(decorative(mk([], ["O", "G", "H"]), "collinear", ["O", "G", "H"], S))
         self.assertIsNone(decorative(mk([{"id": "X", "type": "reflect", "args": ["H", "BC"]}], ["w", "X"]), "on_circle", ["w", "X"], S))
         self.assertIsNone(decorative(mk([{"id": "X", "type": "midpoint", "args": ["A", "H"]}], ["e", "X"]), "on_circle", ["e", "X"], S))
+
+    def test_nam_bai_thay_co_gui(self):
+        """Năm bài đứng đầu tầng Khó của một lần chạy thật, thầy/cô gửi lại: bốn bài thực ra dễ, một bài khó thật."""
+        import copy
+
+        from lab.reason.angles import point_form
+        from lab.reason.generalize import decorative
+        from lab.search.base import build_base_doc, make_samples
+
+        def mk(extra):
+            d = copy.deepcopy(build_base_doc())
+            d["steps"] += [dict(id=i, type=t, args=a, **({"params": p} if p else {})) for i, t, a, p in extra]
+            return d
+
+        humpty = [("hX", "foot", ["H", "A", "Ma"], None), ("hc", "circle_3pts", ["B", "H", "C"], None)]
+        bai = {
+            # Q là điểm Humpty (đã biết: nằm trên (BHC)), R trực tâm PBC cũng trên (BHC)
+            1: (humpty + [("P", "point_on", ["w"], {"t": 2.2}), ("R", "orthocenter", ["C", "P", "B"], None)],
+                "concyclic", ["B", "C", "H", "hX", "R"], [("on_circle", ["hc", "hX"])], 1),
+            # đường tròn đối xứng của (O) qua BC là (BHC)
+            2: ([("P", "circumcenter", ["B", "H", "C"], None), ("w1", "reflect", ["w", "BC"], None),
+                 ("Q", "intersection_other", ["CA", "w1", "C"], None), ("R", "circumcenter", ["Q", "B", "A"], None),
+                 ("U", "reflect", ["R", "BC"], None)], "concyclic", ["B", "O", "P", "R", "U"], [], 1),
+            # phương tích + hệ thức lượng: PM·PO = PB² = PQ·PR
+            3: ([("d1", "tangent_at", ["w", "B"], None), ("d2", "tangent_at", ["w", "C"], None),
+                 ("P", "intersection", ["d1", "d2"], None), ("Q", "reflect", ["A", "O"], None), ("PQ", "line", ["P", "Q"], None),
+                 ("R", "intersection_other", ["PQ", "w", "Q"], None)], "concyclic", ["O", "Ma", "Q", "R"], [], 2),
+            4: ([("w1", "reflect", ["w", "BC"], None), ("P", "intersection_other", ["CA", "w1", "C"], None),
+                 ("Q", "circumcenter", ["P", "B", "A"], None)], "collinear", ["B", "H", "E", "Q"], [], 1),
+            # đối xứng của điểm Humpty qua BC trên đường tròn đường kính OP: khó thật
+            5: ([("d1", "tangent_at", ["w", "A"], None), ("P", "intersection", ["d1", "BC"], None),
+                 ("w1", "circle_tangent_at", ["B", "C", "A"], None), ("w2", "circle_tangent_at", ["C", "B", "A"], None),
+                 ("Q", "intersection_other", ["w1", "w2", "A"], None), ("R", "reflect", ["Q", "BC"], None)],
+                "concyclic", ["A", "O", "Ma", "P", "R"], [("collinear", ["A", "Q", "Ma"])], None),
+        }
+        S = make_samples(6, 11)
+        for k, (extra, rt, ids, kls, want) in bai.items():
+            full = mk(extra)
+            known = [x for r2, i2 in kls for x in point_form(full, r2, i2)]
+            d = sub_doc(full, ids, title="")
+            self.assertEqual(difficulty(d, rt, ids, known=known), want, f"bài #{k}")
+        # bài #3: điểm xuyên tâm đối Q chỉ để trang trí – mọi Q trên (O) đều đúng
+        extra, rt, ids, _, _ = bai[3]
+        d = sub_doc(mk(extra), ids, title="")
+        self.assertEqual(decorative(d, rt, ids, S), {"loai": "tren", "diem": "Q", "duong": "w"})
+
+    def test_dang_thuc_vecto_va_truc_tam(self):
+        import copy
+
+        from lab.search.base import build_base_doc
+
+        def mk(extra, ids):
+            d = copy.deepcopy(build_base_doc())
+            d["steps"] += [dict(id=i, type=t, args=a) for i, t, a in extra]
+            return sub_doc(d, ids, title="")
+
+        # P xuyên tâm đối của A; trực tâm PBC = B + C − A (Sylvester với tâm O của (PBC)); đối xứng của O qua BC = B + C − O
+        d = mk([("P", "reflect", ["A", "O"]), ("Q", "reflect", ["O", "BC"]), ("R", "orthocenter", ["P", "C", "B"])], ["H", "Q", "R"])
+        self.assertEqual(difficulty(d, "collinear", ["H", "Q", "R"]), 1)
+        d = mk([("P", "reflect", ["A", "O"]), ("Q", "orthocenter", ["P", "C", "B"]), ("R", "reflect", ["H", "A"])], ["O", "Q", "R"])
+        self.assertEqual(difficulty(d, "collinear", ["O", "Q", "R"]), 1)
+        # trực tâm Q của BOC: M_aO·M_aQ = M_aB·M_aC; P, R trên BC với M_aP·M_aR = M_aB²
+        d = mk([("P", "midpoint", ["Ma", "B"]), ("Q", "orthocenter", ["C", "B", "O"]), ("R", "reflect", ["Ma", "B"])],
+               ["O", "P", "Q", "R"])
+        self.assertEqual(difficulty(d, "concyclic", ["O", "P", "Q", "R"]), 1)
 
 
 if __name__ == "__main__":

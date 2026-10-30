@@ -134,6 +134,47 @@ def free_param_samples(doc, samples):
     return out
 
 
+def library_knowledge(cfg, pipeline, log=print):
+    """Ghi nhớ kết luận chính (và các phần lẻ) của MỌI bổ đề trong thư viện: người giải coi chúng là đã biết, dù
+    vòng hiện tại không ghép bổ đề đó (vd "tâm bàng tiếp nằm trên AS_a" không phải phát hiện mới)."""
+    from ..library import CONFIGS
+    from ..library.compose import start_doc
+
+    samples = make_samples(cfg["mau"], cfg["hat_giong_mau"])
+    n = 0
+    for c in CONFIGS:
+        try:
+            doc0, prov, kls = start_doc([c.key])
+            U = Universe(doc0, free_param_samples(doc0, samples), tol=cfg["dung_sai"], fp_samples=make_fp_samples(samples),
+                         provenance=prov)
+        except Exception:  # noqa: BLE001
+            continue
+        for _, rtype, ids in kls:
+            for rt, sub in atomic_parts(rtype, ids):
+                try:
+                    k = key_str(canonical(U, rt, sub))
+                except (KeyError, AttributeError):
+                    continue
+                if k not in pipeline.seen:
+                    pipeline.seen[k] = "ket-luan-bo-de"
+                    n += 1
+    return n
+
+
+def atomic_parts(rtype, ids, limit=40):
+    """Quan hệ và các phần lẻ của nó (một điểm trên đường; 3 điểm thẳng hàng; 4 điểm đồng viên)."""
+    from itertools import combinations
+
+    out = [(rtype, list(ids))]
+    if rtype in ("on_circle", "on_line") and len(ids) > 2:
+        out += [(rtype, [ids[0], p]) for p in ids[1:]]
+    elif rtype == "collinear" and len(ids) > 3:
+        out += [(rtype, list(c)) for c in combinations(ids, 3)][:limit]
+    elif rtype == "concyclic" and len(ids) > 4:
+        out += [(rtype, list(c)) for c in combinations(ids, 4)][:limit]
+    return out
+
+
 def _fact_sig(x):
     (k, v), = x.items()
     return k, tuple(v) if k == "on" else tuple(sorted(v))
@@ -173,13 +214,14 @@ class Epoch:
         # kết luận chính của các bổ đề: coi là đã biết (không báo lại, dùng làm kiến thức)
         self.kl_keys = set()
         for key, rtype, ids in self.kls:
-            try:
-                k = key_str(canonical(self.U, rtype, ids))
-            except (KeyError, AttributeError):
-                continue
-            self.kl_keys.add(k)
-            pipeline.seen.setdefault(k, "ket-luan-bo-de")
             pipeline.remember(rtype, ids)
+            for rt, sub in atomic_parts(rtype, ids):  # cả các phần lẻ: "X trên (O)" khi kết luận là "X, Y, Z trên (O)"
+                try:
+                    k = key_str(canonical(self.U, rt, sub))
+                except (KeyError, AttributeError):
+                    continue
+                self.kl_keys.add(k)
+                pipeline.seen.setdefault(k, "ket-luan-bo-de")
 
     def start_facts(self, on_fact):
         """Quan hệ ngay trong cấu hình xuất phát (lớp 0): với hai bổ đề ghép lại, đây là chỗ hai bổ đề "gặp nhau"."""
@@ -283,12 +325,12 @@ class Epoch:
         closure_nats = [U.objs[i].nat for i in ids_in if i in U.objs and U.objs[i].depth > 0 and not U.objs[i].aux]
         f["tu_nhien"] = round(min(nats + closure_nats) if (nats or closure_nats) else 1.0, 3)
         # độ khó theo bộ đuổi góc; kết luận chính của các bổ đề được dùng như kiến thức đã biết
-        from ..reason.angles import difficulty
+        from ..reason.angles import difficulty, point_form
         from ..scan.knowledge import relation_facts
 
         known = []
         for _, rtype, ids in self.kls:
-            known += relation_facts(rtype, ids)
+            known += point_form(U.doc, rtype, ids)
         # kiến thức "của người giải": kết luận chính của các bổ đề + các sự kiện kinh điển của cấu hình gốc
         known += self.pipeline.base_known
         f["kho"] = difficulty(f["doc"], f["type"], f["ids"], known=known)
@@ -303,7 +345,21 @@ class Epoch:
 
         if not hasattr(self, "_gen_samples"):
             self._gen_samples = make_samples(5, 77)
-        f["tong_quat"] = decorative(f["doc"], f["type"], f["ids"], self._gen_samples, seed=self.seed % 1000)
+        try:
+            f["tong_quat"] = decorative(f["doc"], f["type"], f["ids"], self._gen_samples, seed=self.seed % 1000)
+        except Exception:  # noqa: BLE001 – phép thử phụ, không được làm đổ vòng khám phá
+            f["tong_quat"] = None
+        # trình bày BẢN TỔNG QUÁT (điểm thừa thành điểm tuỳ ý), đo lại độ khó trên bản đó
+        if f["tong_quat"]:
+            from ..reason.generalize import generalized_doc
+
+            try:
+                g = generalized_doc(f["doc"], f["ids"], f["tong_quat"])
+            except Exception:  # noqa: BLE001
+                g = None
+            if g is not None:
+                f["doc_goc"], f["doc"] = f["doc"], g
+                f["kho"] = difficulty(g, f["type"], f["ids"], known=known)
         on_fact(f)
         # đối tượng trong sự kiện được ưu tiên hơn trong phần còn lại của vòng
         for i in f["ids"]:

@@ -59,7 +59,7 @@ FEATURE_LABELS = {
     "kho_khong": "đuổi góc không suy ra được", "kho_chua": "chưa đánh giá được độ khó",
     "tu_nhien": "độ tự nhiên", "giao_thoa": "nối hai bổ đề", "noi_bo": "nằm gọn trong một bổ đề",
     "he_qua": "hệ quả trực tiếp của sự kiện khác", "dai_dong": "phát biểu dài dòng (số câu dựng hình quá 4)",
-    "gia_dac_biet": "điểm đặc biệt chỉ để trang trí (vẫn đúng khi thay bằng điểm bất kỳ)",
+    "gia_dac_biet": "có điểm chỉ để trang trí (nới lỏng vẫn đúng)",
 }
 
 MAIN_SPECIAL = {"O", "I", "H", "circumcircle", "incircle", "ninepoint"}
@@ -150,6 +150,10 @@ def tier(fact, cfg_loc=None):
     special = feats.get("dac_biet", 0) + feats.get("dac_biet_phu", 0)
     if fact.get("tong_quat"):
         return "loai"  # dễ, và cái "đặc biệt" chỉ là trang trí
+    free = any(st["type"] == "point_on" or (st["type"] == "free_point" and st["id"] not in ("A", "B", "C"))
+               for st in fact["doc"]["steps"])
+    if free and not fact.get("giao_thoa"):
+        return "loai"  # bài tập dễ với điểm tuỳ ý: tính chất chung, không đặc sắc
     if nat >= loc["nguong_tu_nhien_de"] and (fact.get("giao_thoa") or special >= 1):
         return "de"
     return "loai"
