@@ -183,7 +183,7 @@ export function toTikZ(doc, opts = {}) {
   }
 
   const L = [];
-  L.push(`% ${doc.title ? doc.title + ' — ' : ''}xuất từ Hình học động`);
+  L.push(`% ${doc.title ? doc.title + ' — ' : ''}xuất từ TyphoonDelta Geometry`);
   L.push('% Cần trong phần mở đầu: \\usepackage{tikz}');
   L.push('% Đổi kích thước hình: sửa x=…, y=… (đơn vị của một ô toạ độ).');
   if (doc.images && doc.images.length) L.push(`% (${doc.images.length} ảnh dán vào hình không được xuất sang TikZ)`);

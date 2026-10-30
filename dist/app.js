@@ -3506,8 +3506,13 @@
       "Qu\u1EF9 t\xEDch",
       "\u223F",
       ["point", "point"],
-      ["Ch\u1ECDn \u0111i\u1EC3m c\u1EA7n v\u1EBD qu\u1EF9 t\xEDch (vd trung \u0111i\u1EC3m N)", "Ch\u1ECDn \u0111i\u1EC3m ch\u1EA1y (\u0111i\u1EC3m n\u1EB1m tr\xEAn m\u1ED9t \u0111\u01B0\u1EDDng, d\u1EF1ng b\u1EB1ng c\xF4ng c\u1EE5 \u0110i\u1EC3m b\u1EA5m l\xEAn \u0111\u01B0\u1EDDng)"],
-      (p) => [{ type: "locus", args: p }],
+      ["Ch\u1ECDn \u0111i\u1EC3m ch\u1EA1y (vd D ch\u1EA1y tr\xEAn BC) v\xE0 \u0111i\u1EC3m c\u1EA7n v\u1EBD qu\u1EF9 t\xEDch \u2013 th\u1EE9 t\u1EF1 n\xE0o c\u0169ng \u0111\u01B0\u1EE3c", "Ch\u1ECDn n\u1ED1t \u0111i\u1EC3m c\xF2n l\u1EA1i"],
+      // tự nhận ra điểm chạy: điểm trên đường mà điểm kia phụ thuộc vào (bấm D rồi K hay K rồi D đều được)
+      ([a, b], app) => {
+        const on = (id) => app.doc.steps.find((s) => s.id === id)?.type === "point_on";
+        const driverFirst = on(a) && (!on(b) || dependents(app.doc, [a]).has(b));
+        return [{ type: "locus", args: driverFirst ? [b, a] : [a, b] }];
+      },
       { after: "locus" }
     ),
     T2("measure_len", "\u0110o \u0111\u1ED9 d\xE0i", "\u0110o", "|\u2194|", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("measure_len"), { segmentShortcut: true }),
@@ -4889,6 +4894,7 @@
     if (specials.length) html += `<div class="row special-row">\u0110\u01B0a v\u1EC1 ${specials.map((c, i) => `<button class="mini" data-special="${i}" title="${esc3(c.label)}">${esc3(shortLabel(c))}</button>`).join("")}</div>`;
     if (one2 && (kind === "line" || kind === "circle")) html += `<label class="row" title="\u0110\u01B0\u1EDDng ph\u1EE5: n\xE9t \u0111\u1EE9t, \u1EA9n/hi\u1EC7n t\u1EA5t c\u1EA3 c\xF9ng l\xFAc b\u1EB1ng Ctrl+Shift+D. B\u1ECF ch\u1ECDn: \u0111\u01B0\u1EDDng ch\xEDnh."><input id="p-aux" type="checkbox" ${s.aux ? "checked" : ""}> \u0110\u01B0\u1EDDng ph\u1EE5 (b\u1ECF ch\u1ECDn: \u0111\u01B0\u1EDDng ch\xEDnh)</label>`;
     if (one2 && kind !== "mark") html += `<label class="row"><input id="p-trace" type="checkbox" ${app.traceIds.has(s.id) ? "checked" : ""}> \u0110\u1EC3 l\u1EA1i v\u1EBFt khi k\xE9o</label>`;
+    if (one2 && s.type === "free_point") html += `<div class="row"><button id="p-attach" class="mini wide" title="Cho \u0111i\u1EC3m ch\u1EA1y tr\xEAn m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng / \u0111\u01B0\u1EDDng tr\xF2n (vd D di \u0111\u1ED9ng tr\xEAn BC); m\u1ECDi th\u1EE9 d\u1EF1ng t\u1EEB \u0111i\u1EC3m n\xE0y gi\u1EEF nguy\xEAn">G\u1EAFn l\xEAn \u0111\u01B0\u1EDDng\u2026</button></div>`;
     if (one2 && s.args.length && STEP_TYPES[s.type] && !["locus", "fixed_point"].includes(s.type)) {
       html += `<div class="row redef">D\u1EF1ng t\u1EEB ${s.args.map((a, i) => `<button class="mini" data-redef="${i}" title="Thay \u0111\u1ED1i t\u01B0\u1EE3ng n\xE0y (c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng ph\u1EE5 thu\u1ED9c gi\u1EEF nguy\xEAn)">${labelHTML(stepById(app.doc, a)?.name || "?")}</button>`).join("")}</div>`;
     }
@@ -4921,6 +4927,7 @@
     });
     if (q("#p-aux")) q("#p-aux").onchange = (e) => app.setStepProp(s.id, "aux", e.target.checked);
     if (q("#p-trace")) q("#p-trace").onchange = (e) => app.toggleTrace(s.id, e.target.checked);
+    if (q("#p-attach")) q("#p-attach").onclick = () => app.startAttach(s.id);
     host.querySelectorAll("[data-redef]").forEach((b) => b.onclick = () => app.startRedefine(s.id, +b.dataset.redef));
     if (q("#p-hidden")) q("#p-hidden").onchange = (e) => app.setStepProp(s.id, "hidden", e.target.checked);
     if (q("#p-join")) q("#p-join").onchange = (e) => app.setStepProp(s.id, "joinPrev", e.target.checked);
@@ -21813,15 +21820,54 @@ ${tk.v}
     afterTool(kind, ids) {
       const vals = evaluate(this.doc);
       const bad = ids.filter((id) => !vals.get(id));
+      const why = kind === "locus" && bad.length ? this.locusProblem(stepById(this.doc, bad[0])) : null;
       if (bad.length) this.doc.steps = removeSteps(this.doc, bad).doc.steps;
       const left = ids.filter((id) => !bad.includes(id));
       if (kind === "fixedPoint") {
         if (!left.length) toast("Kh\xF4ng t\xECm th\u1EA5y \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh: \u0111\u01B0\u1EDDng n\xE0y kh\xF4ng \u0111i qua \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh n\xE0o khi \u0111i\u1EC3m \u0111\xE3 ch\u1ECDn thay \u0111\u1ED5i (ho\u1EB7c \u0111i\u1EC3m \u0111\xF3 kh\xF4ng \u0111\u1ED5i \u0111\u01B0\u1EE3c)", 5e3);
         else toast(left.length === 1 ? `\u0110i\u1EC3m c\u1ED1 \u0111\u1ECBnh: ${this.name(left[0])}` : `C\xF3 hai \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh: ${left.map((id) => this.name(id)).join(", ")}`);
       } else if (kind === "locus" && !left.length) {
-        toast("\u0110i\u1EC3m ch\u1EA1y ph\u1EA3i l\xE0 \u0111i\u1EC3m n\u1EB1m tr\xEAn m\u1ED9t \u0111\u01B0\u1EDDng (d\u1EF1ng b\u1EB1ng c\xF4ng c\u1EE5 \u0110i\u1EC3m b\u1EA5m l\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng/\u0111\u01B0\u1EDDng tr\xF2n), v\xE0 \u0111i\u1EC3m c\u1EA7n v\u1EBD qu\u1EF9 t\xEDch ph\u1EA3i ph\u1EE5 thu\u1ED9c v\xE0o n\xF3", 5500);
+        toast(why, 7e3);
       }
       return left;
+    }
+    /** Vì sao không vẽ được quỹ tích (args: [điểm vẽ quỹ tích, điểm chạy]) – lời nhắc cụ thể. */
+    locusProblem(s) {
+      const [X, D2] = s.args;
+      const sd = stepById(this.doc, D2), sx = stepById(this.doc, X);
+      const n = (st) => st?.name || "?";
+      if (sd.type !== "point_on" && sx.type !== "point_on") {
+        const free = [sd, sx].find((st) => st.type === "free_point");
+        return `C\u1EA7n m\u1ED9t \u0111i\u1EC3m ch\u1EA1y tr\xEAn m\u1ED9t \u0111\u01B0\u1EDDng, nh\u01B0ng ${n(sx)} v\xE0 ${n(sd)} \u0111\u1EC1u kh\xF4ng ph\u1EA3i.` + (free ? ` ${n(free)} \u0111ang l\xE0 \u0111i\u1EC3m t\u1EF1 do: ch\u1ECDn ${n(free)}, b\u1EA5m "G\u1EAFn l\xEAn \u0111\u01B0\u1EDDng\u2026" \u1EDF th\u1EBB thu\u1ED9c t\xEDnh r\u1ED3i b\u1EA5m v\xE0o \u0111\u01B0\u1EDDng (vd BC) \u2013 c\xE1c th\u1EE9 d\u1EF1ng t\u1EEB ${n(free)} v\u1EABn gi\u1EEF nguy\xEAn.` : "");
+      }
+      if (!dependents(this.doc, [D2]).has(X)) return `${n(sx)} kh\xF4ng ph\u1EE5 thu\u1ED9c ${n(sd)} n\xEAn kh\xF4ng thay \u0111\u1ED5i khi ${n(sd)} ch\u1EA1y \u2013 kh\xF4ng c\xF3 qu\u1EF9 t\xEDch.`;
+      return `Kh\xF4ng v\u1EBD \u0111\u01B0\u1EE3c qu\u1EF9 t\xEDch: ${n(sx)} kh\xF4ng x\xE1c \u0111\u1ECBnh khi ${n(sd)} ch\u1EA1y tr\xEAn \u0111\u01B0\u1EDDng c\u1EE7a n\xF3.`;
+    }
+    /** "Gắn lên đường…": biến điểm tự do thành điểm chạy trên một đường thẳng / đường tròn (lần bấm tiếp theo). */
+    startAttach(id) {
+      this.attach = { id };
+      this.showHint(`B\u1EA5m v\xE0o \u0111\u01B0\u1EDDng th\u1EB3ng ho\u1EB7c \u0111\u01B0\u1EDDng tr\xF2n \u0111\u1EC3 g\u1EAFn ${this.name(id)} l\xEAn (Esc: hu\u1EF7)`);
+      this.stage.classList.add("tool-active");
+    }
+    attachTo(id, curve) {
+      const s = stepById(this.doc, id);
+      if (!s || s.type !== "free_point") return false;
+      if (curve === id || dependents(this.doc, [id]).has(curve)) {
+        toast("Kh\xF4ng g\u1EAFn \u0111\u01B0\u1EE3c: \u0111\u01B0\u1EDDng n\xE0y d\u1EF1ng t\u1EEB ch\xEDnh \u0111i\u1EC3m \u0111\xF3");
+        return false;
+      }
+      const c = this.values.get(curve), P2 = this.values.get(id);
+      if (!c || !P2) return false;
+      const t2 = Math.round(paramOf(c, P2) * 1e9) / 1e9;
+      this.commit((doc2) => {
+        const st = stepById(doc2, id);
+        st.type = "point_on";
+        st.args = [curve];
+        st.params = { t: t2 };
+        doc2.steps = topoOrder(doc2.steps);
+      });
+      toast(`${s.name} gi\u1EDD ch\u1EA1y tr\xEAn ${describe(this.doc, curve)} \u2013 k\xE9o ${s.name} ho\u1EB7c v\u1EBD qu\u1EF9 t\xEDch theo ${s.name}`, 4e3);
+      return true;
     }
     /** Phía của đường tạo góc theo chỗ chuột (extraPos): cùng phía với chuột so với đường OX. */
     extraFlip(O, X, A, B, C2) {
@@ -21988,6 +22034,19 @@ ${tk.v}
           toast(`\u0110\xE3 \u1EA9n ${s.name || "\u0111\u1ED1i t\u01B0\u1EE3ng"} \u2013 Ctrl+Z \u0111\u1EC3 hi\u1EC7n l\u1EA1i`);
           return;
         }
+      }
+      if (this.attach) {
+        e.stopPropagation();
+        e.preventDefault();
+        const { id } = this.attach;
+        const h2 = this.hitTest(sx, sy).find((x) => x.kind === "line" || x.kind === "circle");
+        this.attach = null;
+        this.stage.classList.toggle("tool-active", this.toolId !== "move");
+        if (h2) this.attachTo(id, h2.id);
+        this.selection = /* @__PURE__ */ new Set([id]);
+        this.refresh();
+        this.showHint();
+        return;
       }
       if (this.redefine) {
         e.stopPropagation();
@@ -22650,7 +22709,11 @@ ${tk.v}
           return;
         }
         if (e.key === "Escape") {
-          if (this.redefine) {
+          if (this.attach) {
+            this.attach = null;
+            this.stage.classList.toggle("tool-active", this.toolId !== "move");
+            this.showHint();
+          } else if (this.redefine) {
             this.redefine = null;
             this.stage.classList.toggle("tool-active", this.toolId !== "move");
             this.showHint();
@@ -23951,7 +24014,7 @@ ${tk.v}
       }
     }
     const L = [];
-    L.push(`% ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
+    L.push(`% ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB TyphoonDelta Geometry`);
     L.push("% C\u1EA7n trong ph\u1EA7n m\u1EDF \u0111\u1EA7u: \\usepackage{tikz}");
     L.push("% \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc h\xECnh: s\u1EEDa x=\u2026, y=\u2026 (\u0111\u01A1n v\u1ECB c\u1EE7a m\u1ED9t \xF4 to\u1EA1 \u0111\u1ED9).");
     if (doc2.images && doc2.images.length) L.push(`% (${doc2.images.length} \u1EA3nh d\xE1n v\xE0o h\xECnh kh\xF4ng \u0111\u01B0\u1EE3c xu\u1EA5t sang TikZ)`);
@@ -25290,7 +25353,7 @@ ${tk.v}
       }
     }
     const L = [];
-    L.push(`// ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
+    L.push(`// ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB TyphoonDelta Geometry`);
     L.push("// Asymptote thu\u1EA7n; tr\xEAn AoPS d\xE1n gi\u1EEFa [asy] v\xE0 [/asy]. \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc: s\u1EEDa unitsize.");
     L.push(`unitsize(${f32(unit2)}cm);`);
     L.push(`defaultpen(fontsize(10pt)+linewidth(${f32(baseWidth * PT_PER_PX2)}));`);

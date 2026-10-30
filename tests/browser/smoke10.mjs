@@ -138,6 +138,32 @@ export async function run({ page, ok, shot }) {
   a = await v('A');
   ok(Math.abs(Dv.x - a.x) < 1e-7, 'D về chân đường cao từ A');
 
+  // ---- quỹ tích: bấm điểm chạy trước cũng được; điểm tự do → "Gắn lên đường…" ----
+  await load([...tri, S('D', 'point_on', ['bc'], { t: 0.4 }, 'D'), S('K', 'midpoint', ['A', 'D'], null, 'K')]);
+  await page.evaluate(() => __app.setTool('locus'));
+  await page.mouse.click(...Object.values(await scr(await v('D'))));
+  await page.mouse.click(...Object.values(await scr(await v('K'))));
+  let L = await page.evaluate(() => __app.doc.steps.find((s) => s.type === 'locus'));
+  ok(L && L.args.join() === 'K,D' && (await page.evaluate((id) => !!__app.values.get(id), L.id)), 'quỹ tích: bấm D (điểm chạy) rồi K vẫn đúng');
+  await load([...tri, S('D', 'free_point', [], { x: 1, y: 0.3 }, 'D'), S('K', 'midpoint', ['A', 'D'], null, 'K')]);
+  await page.evaluate(() => __app.setTool('locus'));
+  await page.mouse.click(...Object.values(await scr(await v('D'))));
+  await page.mouse.click(...Object.values(await scr(await v('K'))));
+  ok(!(await page.evaluate(() => __app.doc.steps.some((s) => s.type === 'locus'))) && /D đang là điểm tự do.*Gắn lên đường/.test(await page.textContent('#toast')), 'D là điểm tự do: không vẽ, báo cách sửa "Gắn lên đường…"');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { __app.selection = new Set(['D']); __app.refresh(); });
+  await page.click('#p-attach');
+  await page.mouse.click(...Object.values(await scr({ x: 2, y: 0 })));
+  const Dst = await page.evaluate(() => __app.doc.steps.find((s) => s.id === 'D'));
+  ok(Dst.type === 'point_on' && Dst.args[0] === 'bc' && Math.abs((await v('D')).y) < 1e-6 && Math.abs((await v('D')).x - 1) < 1e-6, '"Gắn lên đường…" rồi bấm BC: D thành điểm chạy trên BC (chiếu xuống BC)');
+  ok(await page.evaluate(() => __app.doc.steps.findIndex((s) => s.id === 'D') > __app.doc.steps.findIndex((s) => s.id === 'bc') && !!__app.values.get('K')), 'sắp lại thứ tự dựng, K vẫn dựng từ D');
+  await page.evaluate(() => __app.setTool('locus'));
+  await page.mouse.click(...Object.values(await scr(await v('K'))));
+  await page.mouse.click(...Object.values(await scr(await v('D'))));
+  L = await page.evaluate(() => __app.doc.steps.find((s) => s.type === 'locus'));
+  ok(L && (await page.evaluate((id) => __app.values.get(id)?.pts.length > 100, L.id)), 'sau khi gắn: vẽ được quỹ tích của K');
+  await page.evaluate(() => __app.setTool('move'));
+
   // ---- xuất Asymptote ----
   await page.evaluate(() => document.getElementById('btn-asy').click());
   await page.waitForSelector('.modal textarea, .modal pre');
