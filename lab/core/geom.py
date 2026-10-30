@@ -380,6 +380,58 @@ def invert_point(P, c):
     return Pt(c.c.x + k * dx, c.c.y + k * dy)
 
 
+# ---- Nghịch đảo đường thẳng / đường tròn, góc và đồng dạng lấy trên hình (bản 1.2) ----
+def _passes_through(X, O):
+    if X.kind == "line":
+        return dist_point_line(O, X) <= 1e-7 * max(norm(X.d), dist(O, X.p))
+    return abs(dist(O, X.c) - X.r) <= 1e-7 * X.r
+
+
+def invert_to_line(X, c):
+    """Ảnh của đường thẳng/đường tròn X đi qua tâm nghịch đảo: một đường thẳng (None nếu không qua tâm)."""
+    if X is None or c is None:
+        return None
+    O = c.c
+    if not _passes_through(X, O):
+        return None
+    if X.kind == "line":
+        return line(X.p, X.d)
+    P = invert_point(Pt(2 * X.c.x - O.x, 2 * X.c.y - O.y), c)
+    return line(P, perp(sub(X.c, O))) if P is not None else None
+
+
+def invert_to_circle(X, c):
+    """Ảnh của đường thẳng/đường tròn X không qua tâm nghịch đảo: một đường tròn."""
+    if X is None or c is None:
+        return None
+    O, k2 = c.c, c.r * c.r
+    if _passes_through(X, O):
+        return None
+    if X.kind == "line":
+        F = invert_point(project(O, X), c)
+        return circle(mid(O, F), dist(O, F) / 2) if F is not None else None
+    v = sub(X.c, O)
+    s = k2 / (dot(v, v) - X.r * X.r)
+    return circle(Pt(O.x + s * v.x, O.y + s * v.y), abs(s) * X.r)
+
+
+def directed_angle(A, B, C):
+    u, v = sub(A, B), sub(C, B)
+    if norm(u) < EPS or norm(v) < EPS:
+        return None
+    return math.atan2(cross(u, v), dot(u, v)) * 180 / math.pi
+
+
+def spiral_point(P, O, A, B):
+    a, b = sub(A, O), sub(B, O)
+    a2 = dot(a, a)
+    if a2 < EPS * EPS:
+        return None
+    re, im = dot(a, b) / a2, cross(a, b) / a2
+    x, y = P.x - O.x, P.y - O.y
+    return Pt(O.x + re * x - im * y, O.y + im * x + re * y)
+
+
 def map_object(X, f):
     """Áp phép biến đổi điểm f cho điểm / đường thẳng / đường tròn (phép đồng dạng)."""
     if X is None:
@@ -542,3 +594,86 @@ def mixtilinear(A, B, C, external=False):
     if not (t > 0):
         return None
     return circle(Pt(A.x + t * u.x, A.y + t * u.y), t * s)
+
+
+# ======================= ĐIỂM THOẢ ĐIỀU KIỆN (bản 1.8) – giống hệt solvePoint trong src/core/geom.js =======================
+SOLVE_ITERS = 60
+
+
+def _cond_angle(A, B, C):
+    a = directed_angle(A, B, C)
+    return math.nan if a is None else abs(a) * math.pi / 180
+
+
+def _cond_residual(c, P, objs):
+    a = c["a"]
+
+    def g(i):
+        return P if i < 0 else objs[i]
+
+    t = c["t"]
+    if t == "on":
+        X = objs[a[0]]
+        if X.kind == "line":
+            return cross(unit(X.d), sub(P, X.p))
+        return dist(P, X.c) - X.r
+    if t == "len":
+        return dist(g(a[0]), g(a[1])) - dist(g(a[2]), g(a[3]))
+    if t == "ang":
+        return _cond_angle(g(a[0]), g(a[1]), g(a[2])) - _cond_angle(g(a[3]), g(a[4]), g(a[5]))
+    if t == "angv":
+        return _cond_angle(g(a[0]), g(a[1]), g(a[2])) - c["v"] * math.pi / 180
+    return math.nan
+
+
+def solve_point(objs, conds, x0, y0):
+    n = len(conds)
+    if n < 1 or n > 2:
+        return None
+    S = 0.0
+    for o in objs:
+        q = o if o.kind == "point" else (o.c if o.kind == "circle" else o.p)
+        S = max(S, math.hypot(q.x - x0, q.y - y0))
+        if o.kind == "circle":
+            S = max(S, o.r)
+    if not S > 0:
+        S = 1.0
+    h = 1e-6 * S
+
+    def R(x, y):
+        P = pt(x, y)
+        return [_cond_residual(c, P, objs) for c in conds]
+
+    x, y = x0, y0
+    for _ in range(SOLVE_ITERS):
+        r = R(x, y)
+        if any(not math.isfinite(v) for v in r):
+            return None
+        rx1, rx0, ry1, ry0 = R(x + h, y), R(x - h, y), R(x, y + h), R(x, y - h)
+        J = [[(rx1[i] - rx0[i]) / (2 * h), (ry1[i] - ry0[i]) / (2 * h)] for i in range(n)]
+        if n == 1:
+            g2 = J[0][0] * J[0][0] + J[0][1] * J[0][1]
+            if not g2 > 1e-300:
+                return None
+            dx = (r[0] * J[0][0]) / g2
+            dy = (r[0] * J[0][1]) / g2
+        else:
+            det = J[0][0] * J[1][1] - J[0][1] * J[1][0]
+            if not abs(det) > 1e-300:
+                return None
+            dx = (r[0] * J[1][1] - r[1] * J[0][1]) / det
+            dy = (J[0][0] * r[1] - J[1][0] * r[0]) / det
+        L = math.hypot(dx, dy)
+        if L > 0.5 * S:
+            dx *= (0.5 * S) / L
+            dy *= (0.5 * S) / L
+        x -= dx
+        y -= dy
+        if L < 1e-13 * S:
+            break
+    r = R(x, y)
+    for c, v in zip(conds, r):
+        lim = 1e-9 if c["t"] in ("ang", "angv") else 1e-9 * S
+        if not (math.isfinite(v) and abs(v) < lim):
+            return None
+    return pt(x, y)

@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dùng thử bản 1.2</title>
+<style>
+:root { --bg: #fafaf9; --card: #fff; --ink: #1c1917; --muted: #78716c; --line: #e7e5e4; --accent: #2563eb; --good: #15803d; --bad: #b91c1c; --warn: #b45309; --hi: #fee2e2; --mid: #fef3c7; --lo: #e0f2fe; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1c1917; --card: #292524; --ink: #f5f5f4; --muted: #a8a29e; --line: #44403c; --accent: #60a5fa; --good: #4ade80; --bad: #f87171; --warn: #fbbf24; --hi: #7f1d1d; --mid: #78350f; --lo: #0c4a6e; } :root:not([data-theme="light"]) .card img { filter: invert(.9) hue-rotate(180deg); } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 28px 16px 60px; }
+h1 { font-size: 26px; margin: 0 0 6px; } h2 { font-size: 20px; margin: 36px 0 10px; } h3 { font-size: 17px; margin: 0 0 6px; }
+.lead { color: var(--muted); max-width: 900px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 18px 0; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.stat b { display: block; font-size: 22px; } .stat span { color: var(--muted); font-size: 13px; }
+table.iss-t { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.iss-t td, .iss-t th { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+.iss-t th { font-size: 13px; color: var(--muted); font-weight: 600; }
+.num { color: var(--muted); width: 28px; } .sub { color: var(--muted); font-size: 13px; }
+.lv, .st, .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 99px; white-space: nowrap; }
+.lv-hi { background: var(--hi); } .lv-mid { background: var(--mid); } .lv-lo { background: var(--lo); }
+.st-ok { color: var(--good); border: 1px solid currentColor; } .st-part { color: var(--warn); border: 1px solid currentColor; } .st-no { color: var(--bad); border: 1px solid currentColor; } .st-na { color: var(--muted); border: 1px solid currentColor; }
+.tag { background: var(--line); color: var(--ink); font-weight: 500; }
+.cards { display: grid; gap: 16px; }
+.card { display: grid; grid-template-columns: minmax(0, 46%) minmax(0, 1fr); gap: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.card figure { margin: 0; } .card figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.card img { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; display: block; }
+.de { margin: 0 0 8px; }
+table.kv { border-collapse: collapse; width: 100%; font-size: 14px; } .kv th { text-align: left; color: var(--muted); font-weight: 500; padding: 3px 10px 3px 0; white-space: nowrap; vertical-align: top; } .kv td { padding: 3px 0; }
+.good { color: var(--good); } .bad { color: var(--bad); }
+ul.iss { margin: 10px 0 0; padding-left: 0; list-style: none; font-size: 14px; } ul.iss li { margin: 4px 0; }
+a { color: var(--accent); }
+@media (max-width: 760px) { .card { grid-template-columns: 1fr; } .iss-t td:nth-child(1) { display: none; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Dùng thử bản 1.2</h1>
+<p class="lead">Dựng 23 bài hình Olympic HOÀN TOÀN QUA GIAO DIỆN bằng một “người dùng ảo” (Chromium headless bấm biểu tượng công cụ, bấm lên bảng vẽ vào điểm, lên đường, vào chỗ hai đường cắt nhau, gõ tên điểm) – không ghi JSON trực tiếp. Mỗi bài được dựng hai lần với cùng kịch bản: trên bản 1.1 (trước khi sửa) và bản 1.2. Kết luận của đề được kiểm chứng bằng số trên hình vừa dựng và trên 30 cấu hình xê dịch. Mã: <code>tests/browser/dung-thu/</code>; chạy lại: <code>node tests/browser/dung-thu/chay.mjs</code>.</p>
+<div class="stats">
+  <div class="stat"><b>23/23</b><span>bài kết luận đúng trên hình dựng (sai số ≤ 10⁻⁷)</span></div>
+  <div class="stat"><b>1277 → 1027</b><span>tổng thao tác (−20%)</span></div>
+  <div class="stat"><b>1960 → 1200</b><span>tổng lần bấm chuột (−39%)</span></div>
+  <div class="stat"><b>107 → 21</b><span>chỗ nhãn đè (nhãn–nhãn, nhãn–điểm, nhãn–đường)</span></div>
+  <div class="stat"><b>14 → 15</b><span>bài bộ khám phá tự tìm ra kết luận</span></div>
+  <div class="stat"><b>≤ 0.53 ms</b><span>mỗi khung khi kéo (JS), không nhảy nghiệm</span></div>
+</div>
+<p class="sub">Thao tác = chọn một công cụ, một lần bấm lên hình, đặt một tên, hoặc một lệnh menu/phím. Nhãn đè đo trên ảnh chụp sau khi “Thu phóng vừa hình”. Thời gian khung đo trên Chromium headless không GPU.</p>
+
+<h2>Các vấn đề, xếp theo mức ảnh hưởng tới việc dạy</h2>
+<table class="iss-t"><thead><tr><th>#</th><th>Mức</th><th>Vấn đề</th><th>Đã sửa chưa</th></tr></thead><tbody>
+<tr id="vd-nghich-dao">
+  <td class="num">1</td>
+  <td><span class="lv lv-hi">Cao</span><div class="sub">Thiếu công cụ – đúng toán</div></td>
+  <td><b>Phép nghịch đảo chỉ áp cho điểm</b><div class="sub">Bài nghịch đảo √(bc): phải lấy 3 điểm trên đường tròn, nghịch đảo từng điểm rồi dựng đường tròn qua 3 ảnh (97 thao tác); ảnh của (O) đi qua tâm nghịch đảo là đường thẳng nên &quot;đường tròn qua 3 điểm&quot; không xác định, phải tự biết mà vẽ đường thẳng.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Công cụ Nghịch đảo nhận điểm, đường thẳng, đường tròn và tự chọn ảnh là đường thẳng (qua tâm) hay đường tròn; hai loại bước mới invert_line, invert_circle. Bài √(bc): 47 thao tác.</div></td>
+</tr><tr id="vd-goc-ti-so">
+  <td class="num">2</td>
+  <td><span class="lv lv-hi">Cao</span><div class="sub">Thiếu công cụ – đúng toán</div></td>
+  <td><b>Góc quay, tỉ số vị tự phải gõ số</b><div class="sub">Tâm đồng dạng xoắn S: phép quay góc ∠ASC rồi vị tự tỉ số SC/SA không dựng được – góc gõ tay đúng ở một vị trí, kéo hình là sai.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Thêm &quot;Quay theo góc trên hình&quot; (góc ABC), &quot;Vị tự theo tỉ số trên hình&quot; (AB/CD, có dấu) và &quot;Đồng dạng tâm O biến A thành B&quot;; cho chọn lại cùng một điểm (vd tâm S cũng là đỉnh góc ASC).</div></td>
+</tr><tr id="vd-ten-tam">
+  <td class="num">3</td>
+  <td><span class="lv lv-hi">Cao</span><div class="sub">Đặt tên – dễ nhầm</div></td>
+  <td><b>Tâm đường tròn tự đặt tên chiếm chữ cái của đề</b><div class="sub">Mỗi đường tròn qua 3 điểm dựng kèm tâm, tâm lấy chữ cái trống kế tiếp (D, K, L, A, E…): IMO 2015 không đặt được tên K, L; IMO 2017 mất tên A; &quot;tứ giác nội tiếp&quot; đặt đỉnh thứ tư là E vì tâm đã lấy D; tâm tên &quot;D&quot;, &quot;L&quot; giữa hình làm học sinh nhầm.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Tâm tự đặt tên O, rồi O₁, O₂… (đường tròn ngoại tiếp/nội tiếp/Euler/bàng tiếp vẫn là O, I, N, I_A).</div></td>
+</tr><tr id="vd-the-che">
+  <td class="num">4</td>
+  <td><span class="lv lv-hi">Cao</span><div class="sub">Thao tác – bấm hụt</div></td>
+  <td><b>Thẻ thuộc tính che hình và chặn lần bấm</b><div class="sub">Sau mỗi lần dựng, đối tượng mới được chọn nên thẻ thuộc tính hiện ở góc phải, che đúng chỗ cần bấm tiếp (cú bấm rơi vào thẻ, không tạo được giao điểm). Bấm vào điểm gần góc phải thì thẻ hiện ĐÈ lên chính điểm đó nên nháy đúp không đổi tên được.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Thẻ thuộc tính chỉ hiện với công cụ Chọn (khi đang dựng thì không); nếu che đối tượng đang chọn thì tự dời xuống góc dưới.</div></td>
+</tr><tr id="vd-nhan">
+  <td class="num">5</td>
+  <td><span class="lv lv-hi">Cao</span><div class="sub">Nhãn đẹp</div></td>
+  <td><b>Nhãn đè lên điểm, lên đường, lên nhau</b><div class="sub">Nhãn đặt TÂM cách điểm 11 px nên nhãn rộng (M_c, I_A, S_{12}) đè lên chính điểm của nó; nhãn ở giao của nhiều đường nằm đè lên đường (IMO 2008: 8 chỗ, bài nghịch đảo: 21, VMO 2014: 15); hai điểm gần nhau (M_C và C′ trong hình dày) chồng nhãn.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Đặt nhãn theo khung chữ thật trên màn hình: khung chữ đặt sát điểm kiểu &quot;neo&quot; của TikZ, chấm điểm theo số đường cắt qua, điểm bị che, nhãn đã đặt bị đè, ra ngoài khung; nhãn khó đặt được ưu tiên; đặt lại khi phóng to/thu nhỏ.</div></td>
+</tr><tr id="vd-ten">
+  <td class="num">6</td>
+  <td><span class="lv lv-hi">Cao</span><div class="sub">Thao tác – dựng nhanh</div></td>
+  <td><b>Đặt tên một điểm tốn 3–5 thao tác</b><div class="sub">Muốn đặt tên điểm vừa dựng phải: về công cụ Chọn, nháy đúp vào điểm, gõ tên trong hộp thoại, rồi chọn lại công cụ đang dùng. Đề Olympic nào cũng có 5–13 điểm cần tên đúng đề.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Điểm vừa dựng được chọn sẵn: gõ chữ là đặt tên ngay tại chỗ (ô nhỏ cạnh nhãn, Enter để lưu), công cụ vẫn giữ nguyên. F2 hoặc nháy đúp để sửa tên. Thanh trạng thái nhắc &quot;Gõ chữ để đặt tên&quot;.</div></td>
+</tr><tr id="vd-ten-trung">
+  <td class="num">7</td>
+  <td><span class="lv lv-mid">Vừa</span><div class="sub">Thao tác – dựng nhanh</div></td>
+  <td><b>Đổi sang tên đã có bị từ chối</b><div class="sub">Tam giác vuông dựng góc vuông ở đỉnh bấm đầu (tên A) nhưng đề cần vuông tại C: phải đổi tên C thành tên tạm, A thành C, rồi tên tạm thành A.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Đổi sang tên đang thuộc điểm khác thì hai điểm đổi chỗ tên cho nhau (có thông báo).</div></td>
+</tr><tr id="vd-chon-cong-cu">
+  <td class="num">8</td>
+  <td><span class="lv lv-mid">Vừa</span><div class="sub">Thao tác – dựng nhanh</div></td>
+  <td><b>Chọn công cụ trong menu &quot;Công cụ&quot; cần 3 lần bấm</b><div class="sub">Khoảng 40% thao tác là chọn công cụ; công cụ trong menu nhiều tầng (Tâm nội tiếp, Đường tròn ngoại tiếp, Chân đường cao…) cần bấm biểu tượng → nhóm → công cụ, và bài nào cũng đổi qua lại giữa vài công cụ.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Dải &quot;công cụ vừa dùng&quot; (6 công cụ) ở cuối thanh dọc: chọn lại bằng một lần bấm.</div></td>
+</tr><tr id="vd-duong-thang">
+  <td class="num">9</td>
+  <td><span class="lv lv-mid">Vừa</span><div class="sub">Nét đẹp</div></td>
+  <td><b>Đường thẳng kéo tới tận mép màn hình</b><div class="sub">Hình nhiều đường thẳng (VMO 2014, nghịch đảo √(bc)) có các nét dài cắt ngang toàn màn hình, khác hẳn hình trong sách.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">&quot;Đường thẳng vừa đủ (kiểu sách)&quot; (mặc định, tắt ở menu Hiển thị): đường thẳng/tia chỉ vẽ qua các điểm nằm trên nó, nhô ra một đoạn ngắn; khi đang dùng công cụ dựng, phần kéo dài hiện mờ để vẫn thấy và bấm được chỗ cắt. Xuất TikZ theo cùng kiểu.</div></td>
+</tr><tr id="vd-kham">
+  <td class="num">10</td>
+  <td><span class="lv lv-mid">Vừa</span><div class="sub">Khám phá – đúng toán</div></td>
+  <td><b>Bộ khám phá bỏ sót kết luận của đề</b><div class="sub">Bộ khám phá xê dịch hình tới 30% nên có mẫu phá giả thiết (E chạy ra ngoài đoạn AC, tam giác hết nhọn) → IMO 2018 (DE ∥ FG), VMO 2016 (đường tròn AMN qua D) không được báo. Hình có tiếp điểm (mixtilinear) thì mọi mẫu bị loại vì &quot;gần tiếp xúc&quot; (0 mẫu).</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Khi lấy mẫu giữ đúng cấu hình của hình gốc: tam giác vẽ trên hình giữ chiều và góc nhọn/tù; giao điểm với một đoạn thẳng phải còn trong đoạn; tiếp điểm theo cách dựng không bị coi là suy biến. Bản Python của phòng thí nghiệm sửa giống hệt (test đối chiếu vẫn khớp).</div></td>
+</tr><tr id="vd-trung-diem">
+  <td class="num">11</td>
+  <td><span class="lv lv-mid">Vừa</span><div class="sub">Thao tác – chọn</div></td>
+  <td><b>Hai điểm trùng nhau: luôn chọn điểm dựng trước</b><div class="sub">Bài √(bc): ảnh nghịch đảo của B trùng C′; bấm hay nháy đúp vào đó luôn chọn C′ (dựng trước, nằm dưới), không đặt tên được cho điểm vừa dựng.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Khi nhiều đối tượng cách chỗ bấm như nhau, đối tượng dựng sau (vẽ đè lên trên) được chọn.</div></td>
+</tr><tr id="vd-ba-duong">
+  <td class="num">12</td>
+  <td><span class="lv lv-mid">Vừa</span><div class="sub">Đúng toán – cách dựng</div></td>
+  <td><b>Bấm vào chỗ ba đường cùng đi qua: chọn cặp bất kỳ</b><div class="sub">IMO 2010: bấm vào chỗ DG cắt EI (đúng nằm trên Γ) thì chương trình có thể dựng X là giao của EI với Γ – đúng về số nhưng hình lưu lại đã &quot;chứa sẵn&quot; kết luận, bộ khám phá chỉ báo &quot;X nằm trên DG&quot;.</div></td>
+  <td><span class="st st-ok">đã sửa</span><div class="sub">Nhiều cặp đường cắt nhau tại cùng chỗ bấm: lấy cặp đường dựng sau cùng (thường đúng ý người dựng).</div></td>
+</tr><tr id="vd-khung-nhin">
+  <td class="num">13</td>
+  <td><span class="lv lv-mid">Vừa</span><div class="sub">Thao tác – khung nhìn</div></td>
+  <td><b>Điểm vừa dựng nằm ngoài khung nhìn</b><div class="sub">Ảnh đối xứng, tâm vị tự, giao điểm ở xa (IMO 2014: M, N; Monge: S₁₂, S₁₃; Brocard: Q, R) nằm ngoài màn hình: phải tìm &quot;Thu phóng vừa hình&quot; trong menu mới thấy để bấm, đặt tên.</div></td>
+  <td><span class="st st-part">đỡ hơn</span><div class="sub">Phím Home thu phóng vừa hình; thông báo khi điểm vừa dựng nằm ngoài khung nhìn. Không tự đổi khung nhìn để không làm mất chỗ khi đang giảng.</div></td>
+</tr><tr id="vd-giao-xa">
+  <td class="num">14</td>
+  <td><span class="lv lv-lo">Thấp</span><div class="sub">Thao tác – chọn</div></td>
+  <td><b>Giao điểm ở rất xa: phải chọn lần lượt hai đường</b><div class="sub">Khi chỗ cắt vẫn ở ngoài màn hình sau khi thu phóng (hai đường gần song song), phải chọn lần lượt hai đường; công cụ Giao điểm tạo cả hai giao điểm (đường thẳng – đường tròn) nên đôi khi phải xoá một điểm thừa.</div></td>
+  <td><span class="st st-no">chưa sửa</span><div class="sub">Chưa sửa: ít gặp, cách làm hiện tại vẫn dùng được.</div></td>
+</tr><tr id="vd-ban-kinh-tu-do">
+  <td class="num">15</td>
+  <td><span class="lv lv-lo">Thấp</span><div class="sub">Kéo thả</div></td>
+  <td><b>Kéo A ở IMO 2015 làm mất 11 đối tượng</b><div class="sub">Γ dựng bằng tâm A và một điểm bán kính tự do: kéo A xa BC thì Γ không cắt BC nữa, các điểm phụ thuộc biến mất (đúng về toán).</div></td>
+  <td><span class="st st-na">không phải lỗi</span><div class="sub">Không phải lỗi công cụ. Hình trong thư viện dựng chắc hơn: lấy D trên BC rồi vẽ đường tròn tâm A qua D.</div></td>
+</tr><tr id="vd-kham-doan">
+  <td class="num">16</td>
+  <td><span class="lv lv-lo">Thấp</span><div class="sub">Khám phá</div></td>
+  <td><b>Bộ khám phá chưa tìm đoạn bằng nhau, góc bằng nhau</b><div class="sub">Kết luận dạng MK = ML (IMO 2012), tổng độ dài (IMO 2021), ∠KIL + ∠YPX = 180° (IMO 2024), phân giác (IMO 2023), EF = BC/2 (VMO 2014) không được bộ khám phá báo; vẫn kiểm chứng được bằng số.</div></td>
+  <td><span class="st st-no">chưa sửa</span><div class="sub">Chưa làm: tính năng lớn, phải sửa đồng thời bản Python của phòng thí nghiệm để hai bên vẫn cho kết quả giống hệt; ghi vào gợi ý tiếp theo.</div></td>
+</tr>
+</tbody></table>
+
+<h2>Từng bài</h2>
+<div class="cards">
+<article class="card" id="imo2008-1">
+  <figure><a href="dung-thu/anh/imo2008-1.png" target="_blank"><img src="dung-thu/anh/imo2008-1.png" alt="Hình IMO 2008 – Bài 1 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2008-1.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2008 – Bài 1 <span class="tag">IMO</span></h3>
+    <p class="de">Tam giác nhọn ABC, trực tâm H. Đường tròn tâm là trung điểm BC đi qua H cắt đường thẳng BC tại A₁, A₂; tương tự B₁, B₂ (với CA) và C₁, C₂ (với AB). Chứng minh sáu điểm A₁, A₂, B₁, B₂, C₁, C₂ cùng thuộc một đường tròn.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>64</s> → <b>46</b> <span class="sub">(chọn công cụ 12, bấm lên hình 24, đặt tên 9, khác 1) · lần bấm chuột <s>97</s> → 46</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>8</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#4: B_2, C_1, C_2 nằm trên (A_1A_2B_1)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.42 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 8 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 9 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2010-2">
+  <figure><a href="dung-thu/anh/imo2010-2.png" target="_blank"><img src="dung-thu/anh/imo2010-2.png" alt="Hình IMO 2010 – Bài 2 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2010-2.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2010 – Bài 2 <span class="tag">IMO</span></h3>
+    <p class="de">I là tâm nội tiếp tam giác ABC, Γ là đường tròn ngoại tiếp. AI cắt Γ lần nữa tại D. E thuộc cung BDC, F thuộc cạnh BC sao cho ∠BAF = ∠CAE. G là trung điểm IF. Chứng minh DG và EI cắt nhau trên Γ.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>44</s> → <b>40</b> <span class="sub">(chọn công cụ 12, bấm lên hình 25, đặt tên 2, khác 1) · lần bấm chuột <s>65</s> → 50</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#1: X nằm trên (ABC)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.36 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2012-5">
+  <figure><a href="dung-thu/anh/imo2012-5.png" target="_blank"><img src="dung-thu/anh/imo2012-5.png" alt="Hình IMO 2012 – Bài 5 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2012-5.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2012 – Bài 5 <span class="tag">IMO</span></h3>
+    <p class="de">Tam giác ABC vuông tại C, D là chân đường cao từ C. X nằm trong đoạn CD. K thuộc đoạn AX với BK = BC; L thuộc đoạn BX với AL = AC. M là giao điểm của AL và BK. Chứng minh MK = ML.</p><p class="sub">Nhãn đè tăng 1 → 2: nhãn C và K nằm ở chỗ có nhiều đường và hai đường tròn lớn đi qua, không còn hướng nào trống hẳn (vẫn đọc rõ, không đè điểm hay nhãn khác).</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>55</s> → <b>40</b> <span class="sub">(chọn công cụ 13, bấm lên hình 21, đặt tên 5, khác 1) · lần bấm chuột <s>87</s> → 46</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>1</s> → <b>2</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 4·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
+      <tr><th>Kéo thử</th><td>X: 0.27 ms/khung<br>B: 0.3 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> Tên &quot;C&quot; đã bị chiếm (điểm khác) – phải đổi tên điểm kia trước <a href="#vd-ten-trung" class="sub">→ vấn đề 7</a></li><li><span class="st st-ok">đã sửa</span> Đặt 8 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2013-4">
+  <figure><a href="dung-thu/anh/imo2013-4.png" target="_blank"><img src="dung-thu/anh/imo2013-4.png" alt="Hình IMO 2013 – Bài 4 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2013-4.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2013 – Bài 4 <span class="tag">IMO</span></h3>
+    <p class="de">Tam giác nhọn ABC, trực tâm H, W thuộc cạnh BC. M, N là chân đường cao từ B, C. ω₁ là đường tròn (BWN), X ∈ ω₁ với WX là đường kính; ω₂ là đường tròn (CWM), Y ∈ ω₂ với WY là đường kính. Chứng minh X, Y, H thẳng hàng.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>57</s> → <b>43</b> <span class="sub">(chọn công cụ 10, bấm lên hình 25, đặt tên 7, khác 1) · lần bấm chuột <s>92</s> → 48</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>3</s> → <b>1</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#2: H nằm trên XY</td></tr>
+      <tr><th>Kéo thử</th><td>W: 0.37 ms/khung<br>A: 0.36 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 1 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 7 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2014-4">
+  <figure><a href="dung-thu/anh/imo2014-4.png" target="_blank"><img src="dung-thu/anh/imo2014-4.png" alt="Hình IMO 2014 – Bài 4 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2014-4.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2014 – Bài 4 <span class="tag">IMO</span></h3>
+    <p class="de">P, Q thuộc cạnh BC của tam giác nhọn ABC sao cho ∠PAB = ∠BCA và ∠CAQ = ∠ABC. M, N thuộc AP, AQ sao cho P là trung điểm AM, Q là trung điểm AN. Chứng minh BM và CN cắt nhau trên đường tròn ngoại tiếp ABC.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>51</s> → <b>41</b> <span class="sub">(chọn công cụ 11, bấm lên hình 23, đặt tên 5, khác 2) · lần bấm chuột <s>82</s> → 46</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>3</s> → <b>2</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#1: X nằm trên (ABC)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.38 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (M) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2015-4">
+  <figure><a href="dung-thu/anh/imo2015-4.png" target="_blank"><img src="dung-thu/anh/imo2015-4.png" alt="Hình IMO 2015 – Bài 4 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2015-4.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2015 – Bài 4 <span class="tag">IMO</span></h3>
+    <p class="de">Tam giác ABC nội tiếp Ω tâm O. Đường tròn Γ tâm A cắt BC tại D, E (B, D, E, C theo thứ tự) và cắt Ω tại F, G (A, F, B, C, G theo thứ tự). Đường tròn (BDF) cắt AB lần nữa tại K, (CGE) cắt CA lần nữa tại L. FK và GL cắt nhau tại X. Chứng minh X thuộc AO.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>61</s> → <b>43</b> <span class="sub">(chọn công cụ 13, bấm lên hình 27, đặt tên 2, khác 1) · lần bấm chuột <s>91</s> → 51</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>7</s> → <b>2</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁴ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#1: X nằm trên AO</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.44 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> Tên &quot;L&quot; đã bị chiếm (tâm đường tròn tự đặt tên) – phải đổi tên điểm kia trước <a href="#vd-ten-tam" class="sub">→ vấn đề 3</a></li><li><span class="st st-ok">đã sửa</span> 7 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 8 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2017-4">
+  <figure><a href="dung-thu/anh/imo2017-4.png" target="_blank"><img src="dung-thu/anh/imo2017-4.png" alt="Hình IMO 2017 – Bài 4 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2017-4.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2017 – Bài 4 <span class="tag">IMO</span></h3>
+    <p class="de">R, S thuộc đường tròn Ω, RS không là đường kính; ℓ là tiếp tuyến của Ω tại R. T sao cho S là trung điểm RT. J thuộc cung nhỏ RS sao cho đường tròn Γ ngoại tiếp JST cắt ℓ tại hai điểm; A là giao điểm gần R hơn. AJ cắt Ω lần nữa tại K. Chứng minh KT tiếp xúc Γ.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>54</s> → <b>38</b> <span class="sub">(chọn công cụ 14, bấm lên hình 17, đặt tên 6, khác 1) · lần bấm chuột <s>86</s> → 46</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>4</s> → <b>2</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 4·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#1: KT tiếp xúc (JST)</td></tr>
+      <tr><th>Kéo thử</th><td>S: 0.53 ms/khung<br>J: 0.31 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> Tên &quot;A&quot; đã bị chiếm (tâm đường tròn tự đặt tên) – phải đổi tên điểm kia trước <a href="#vd-ten-tam" class="sub">→ vấn đề 3</a></li><li><span class="st st-part">đỡ hơn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (Z1) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 4 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 9 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2018-1">
+  <figure><a href="dung-thu/anh/imo2018-1.png" target="_blank"><img src="dung-thu/anh/imo2018-1.png" alt="Hình IMO 2018 – Bài 1 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2018-1.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2018 – Bài 1 <span class="tag">IMO</span></h3>
+    <p class="de">Γ là đường tròn ngoại tiếp tam giác nhọn ABC. D, E thuộc các đoạn AB, AC với AD = AE. Trung trực của BD và CE cắt các cung nhỏ AB, AC của Γ tại F, G. Chứng minh DE ∥ FG (hoặc trùng).</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>35</s> → <b>33</b> <span class="sub">(chọn công cụ 11, bấm lên hình 20, đặt tên 1, khác 1) · lần bấm chuột <s>51</s> → 42</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#1: DE ∥ FG</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.32 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Bộ khám phá không tìm thấy kết luận → bản 1.2 xếp hạng #1: “DE ∥ FG” <a href="#vd-kham" class="sub">→ vấn đề 10</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2019-6">
+  <figure><a href="dung-thu/anh/imo2019-6.png" target="_blank"><img src="dung-thu/anh/imo2019-6.png" alt="Hình IMO 2019 – Bài 6 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2019-6.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2019 – Bài 6 <span class="tag">IMO</span></h3>
+    <p class="de">I là tâm nội tiếp tam giác nhọn ABC (AB ≠ AC), ω tiếp xúc BC, CA, AB tại D, E, F. Đường thẳng qua D vuông góc EF cắt ω lần nữa tại R. AR cắt ω lần nữa tại P. Đường tròn (PCE) và (PBF) cắt nhau lần nữa tại Q. Chứng minh DI và PQ cắt nhau trên đường thẳng qua A vuông góc AI.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>65</s> → <b>59</b> <span class="sub">(chọn công cụ 17, bấm lên hình 38, đặt tên 3, khác 1) · lần bấm chuột <s>94</s> → 69</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>4</s> → <b>1</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 4·10⁻⁸ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#5: DI, PQ, d10 (⊥ AI qua A) đồng quy</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.42 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 4 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 1 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 3 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2021-4">
+  <figure><a href="dung-thu/anh/imo2021-4.png" target="_blank"><img src="dung-thu/anh/imo2021-4.png" alt="Hình IMO 2021 – Bài 4 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2021-4.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2021 – Bài 4 <span class="tag">IMO</span></h3>
+    <p class="de">Đường tròn Γ tâm I tiếp xúc bốn cạnh của tứ giác lồi ABCD. Ω là đường tròn (AIC). Tia đối của AB… cắt Ω tại X (BA kéo dài qua A), Z (BC kéo dài qua C); AD, CD kéo dài qua D cắt Ω tại Y, T. Chứng minh AD + DT + TX + XA = CD + DY + YZ + ZC.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>72</s> → <b>54</b> <span class="sub">(chọn công cụ 16, bấm lên hình 25, đặt tên 11, khác 2) · lần bấm chuột <s>112</s> → 53</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>2</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 1·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
+      <tr><th>Kéo thử</th><td>T_1: 0.42 ms/khung<br>U: 0.41 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (chỗ cắt) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 2 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 11 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2023-2">
+  <figure><a href="dung-thu/anh/imo2023-2.png" target="_blank"><img src="dung-thu/anh/imo2023-2.png" alt="Hình IMO 2023 – Bài 2 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2023-2.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2023 – Bài 2 <span class="tag">IMO</span></h3>
+    <p class="de">Tam giác nhọn ABC, AB &lt; AC, Ω ngoại tiếp. S là điểm chính giữa cung CB chứa A. Đường vuông góc từ A xuống BC cắt BS tại D, cắt Ω lần nữa tại E. Đường qua D song song BC cắt BE tại L. ω = (BDL) cắt Ω lần nữa tại P. Chứng minh tiếp tuyến của ω tại P cắt BS trên phân giác trong góc BAC.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>56</s> → <b>48</b> <span class="sub">(chọn công cụ 14, bấm lên hình 29, đặt tên 4, khác 1) · lần bấm chuột <s>84</s> → 58</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>3</s> → <b>2</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁴ trên 30 cấu hình xê dịch (bỏ 3 cấu hình trái giả thiết)</td></tr>
+      <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.41 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 4 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2024-4">
+  <figure><a href="dung-thu/anh/imo2024-4.png" target="_blank"><img src="dung-thu/anh/imo2024-4.png" alt="Hình IMO 2024 – Bài 4 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2024-4.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2024 – Bài 4 <span class="tag">IMO</span></h3>
+    <p class="de">Tam giác ABC với AB &lt; AC &lt; BC, tâm nội tiếp I, đường tròn nội tiếp ω. X ≠ C thuộc BC sao cho đường qua X song song AC tiếp xúc ω; Y ≠ B thuộc BC sao cho đường qua Y song song AB tiếp xúc ω. AI cắt (ABC) lần nữa tại P. K, L là trung điểm AC, AB. Chứng minh ∠KIL + ∠YPX = 180°.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>59</s> → <b>49</b> <span class="sub">(chọn công cụ 15, bấm lên hình 28, đặt tên 5, khác 1) · lần bấm chuột <s>90</s> → 56</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁶ trên 30 cấu hình xê dịch (bỏ 36 cấu hình trái giả thiết)</td></tr>
+      <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.35 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="imo2025-2">
+  <figure><a href="dung-thu/anh/imo2025-2.png" target="_blank"><img src="dung-thu/anh/imo2025-2.png" alt="Hình IMO 2025 – Bài 2 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/imo2025-2.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>IMO 2025 – Bài 2 <span class="tag">IMO</span></h3>
+    <p class="de">Ω tâm M và Γ tâm N (bán kính Ω nhỏ hơn) cắt nhau tại A, B. MN cắt Ω tại C, cắt Γ tại D (C, M, N, D theo thứ tự). P là tâm ngoại tiếp ACD. AP cắt Ω lần nữa tại E, cắt Γ lần nữa tại F. H là trực tâm PMN. Chứng minh đường qua H song song AP tiếp xúc đường tròn (BEF).</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>52</s> → <b>50</b> <span class="sub">(chọn công cụ 19, bấm lên hình 25, đặt tên 5, khác 1) · lần bấm chuột <s>77</s> → 63</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>3</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 1·10⁻¹³ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#6: d3 (∥ AP qua H) tiếp xúc (BEF)</td></tr>
+      <tr><th>Kéo thử</th><td>N: 0.34 ms/khung<br>U: 0.31 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li></ul>
+  </div>
+</article>
+<article class="card" id="vmo2014-4">
+  <figure><a href="dung-thu/anh/vmo2014-4.png" target="_blank"><img src="dung-thu/anh/vmo2014-4.png" alt="Hình VMO 2014 – Bài 4 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/vmo2014-4.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>VMO 2014 – Bài 4 <span class="tag">VMO</span></h3>
+    <p class="de">Tam giác nhọn ABC (AB &lt; AC) nội tiếp (O); I là điểm chính giữa cung BC không chứa A. K ≠ C thuộc AC với IK = IC. BK cắt (O) tại D (D ≠ B), cắt AI tại E. DI cắt AC tại F. a) EF = BC/2. b) M thuộc DI với CM ∥ AD; KM cắt BC tại N; (BKN) cắt (O) tại P ≠ B. Chứng minh PK đi qua trung điểm AD.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>76</s> → <b>67</b> <span class="sub">(chọn công cụ 21, bấm lên hình 39, đặt tên 6, khác 1) · lần bấm chuột <s>112</s> → 74</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>17</s> → <b>2</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.44 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 17 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="vmo2016-3">
+  <figure><a href="dung-thu/anh/vmo2016-3.png" target="_blank"><img src="dung-thu/anh/vmo2016-3.png" alt="Hình VMO 2016 – Bài 3 dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/vmo2016-3.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>VMO 2016 – Bài 3 <span class="tag">VMO</span></h3>
+    <p class="de">B, C cố định, A thay đổi (tam giác ABC nhọn). D là trung điểm BC; E, F là hình chiếu của D trên AB, AC. O là tâm ngoại tiếp; EF cắt AO, BC tại M, N. a) Đường tròn (AMN) luôn đi qua một điểm cố định. b) Tiếp tuyến tại E, F của (AEF) cắt nhau tại T; T thuộc một đường thẳng cố định.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>55</s> → <b>49</b> <span class="sub">(chọn công cụ 14, bấm lên hình 29, đặt tên 3, khác 3) · lần bấm chuột <s>83</s> → 59</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>7</s> → <b>3</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 7·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#2: D nằm trên (AMN)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.4 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (N) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-part">còn</span> Chỗ cắt nằm ngoài khung nhìn – phải chọn lần lượt hai đường <a href="#vd-giao-xa" class="sub">→ vấn đề 14</a></li><li><span class="st st-ok">đã sửa</span> 7 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 3 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 3 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="noi-bang-tiep">
+  <figure><a href="dung-thu/anh/noi-bang-tiep.png" target="_blank"><img src="dung-thu/anh/noi-bang-tiep.png" alt="Hình Bổ đề tâm nội tiếp – bàng tiếp dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/noi-bang-tiep.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>Bổ đề tâm nội tiếp – bàng tiếp <span class="tag">Cấu hình</span></h3>
+    <p class="de">S là điểm chính giữa cung BC không chứa A của (ABC). Chứng minh B, C, I, I_A cùng nằm trên đường tròn tâm S (S là trung điểm II_A).</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>30</s> → <b>28</b> <span class="sub">(chọn công cụ 7, bấm lên hình 19, đặt tên 1, khác 1) · lần bấm chuột <s>46</s> → 40</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>0</s> → <b>1</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 1·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#1: C, I, I_A nằm trên (S, SB)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.32 ms/khung</td></tr>
+    </table>
+    <p class="sub">Không gặp vấn đề riêng.</p>
+  </div>
+</article>
+<article class="card" id="euler-feuerbach">
+  <figure><a href="dung-thu/anh/euler-feuerbach.png" target="_blank"><img src="dung-thu/anh/euler-feuerbach.png" alt="Hình Đường tròn Euler – định lý Feuerbach dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/euler-feuerbach.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>Đường tròn Euler – định lý Feuerbach <span class="tag">Cấu hình</span></h3>
+    <p class="de">Đường tròn Euler của tam giác ABC tiếp xúc với đường tròn nội tiếp và ba đường tròn bàng tiếp.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>30</s> → <b>28</b> <span class="sub">(chọn công cụ 7, bấm lên hình 19, đặt tên 1, khác 1) · lần bấm chuột <s>46</s> → 37</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 5·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#1: đường tròn Euler ABC tiếp xúc đường tròn nội tiếp ABC</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.37 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li></ul>
+  </div>
+</article>
+<article class="card" id="mixtilinear">
+  <figure><a href="dung-thu/anh/mixtilinear.png" target="_blank"><img src="dung-thu/anh/mixtilinear.png" alt="Hình Đường tròn mixtilinear dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/mixtilinear.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>Đường tròn mixtilinear <span class="tag">Cấu hình</span></h3>
+    <p class="de">Đường tròn mixtilinear nội ứng với A tiếp xúc AB, AC tại K, L và tiếp xúc trong (O) tại T. Chứng minh I là trung điểm KL và T, I và điểm chính giữa cung BAC thẳng hàng.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>50</s> → <b>40</b> <span class="sub">(chọn công cụ 10, bấm lên hình 24, đặt tên 5, khác 1) · lần bấm chuột <s>78</s> → 50</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>0</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 4·10⁻⁸ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.38 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="nghich-dao-bc">
+  <figure><a href="dung-thu/anh/nghich-dao-bc.png" target="_blank"><img src="dung-thu/anh/nghich-dao-bc.png" alt="Hình Nghịch đảo √(bc) dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/nghich-dao-bc.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>Nghịch đảo √(bc) <span class="tag">Cấu hình</span></h3>
+    <p class="de">Phép nghịch đảo tâm A bán kính √(AB·AC) hợp với phép đối xứng qua phân giác góc A đổi chỗ B và C, biến (ABC) thành đường thẳng BC và biến đường tròn mixtilinear nội thành đường tròn bàng tiếp góc A.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>97</s> → <b>46</b> <span class="sub">(chọn công cụ 13, bấm lên hình 31, đặt tên 1, khác 1) · lần bấm chuột <s>155</s> → 63</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>27</s> → <b>1</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 6·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.47 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> Nghịch đảo chỉ áp cho điểm: ảnh của (O) và của đường tròn mixtilinear phải dựng qua ảnh của 3 điểm <a href="#vd-nghich-dao" class="sub">→ vấn đề 1</a></li><li><span class="st st-ok">đã sửa</span> Hai điểm trùng toạ độ: bấm/nháy đúp luôn chọn điểm dựng trước, không chọn được điểm vừa dựng để đặt tên &quot;B_1&quot; <a href="#vd-trung-diem" class="sub">→ vấn đề 11</a></li><li><span class="st st-part">đỡ hơn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (X') <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 27 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 1 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 10 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="brocard">
+  <figure><a href="dung-thu/anh/brocard.png" target="_blank"><img src="dung-thu/anh/brocard.png" alt="Hình Tứ giác nội tiếp – định lý Brocard dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/brocard.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>Tứ giác nội tiếp – định lý Brocard <span class="tag">Cấu hình</span></h3>
+    <p class="de">Tứ giác ABCD nội tiếp (O). P = AC ∩ BD, Q = AB ∩ CD, R = AD ∩ BC. Chứng minh O là trực tâm tam giác PQR.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>47</s> → <b>35</b> <span class="sub">(chọn công cụ 8, bấm lên hình 21, đặt tên 3, khác 3) · lần bấm chuột <s>71</s> → 36</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>2</s> → <b>2</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁴ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#1: P nằm trên d10 (⊥ QR qua O)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.39 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (Q) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-part">còn</span> Chỗ cắt nằm ngoài khung nhìn – phải chọn lần lượt hai đường <a href="#vd-giao-xa" class="sub">→ vấn đề 14</a></li><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="monge">
+  <figure><a href="dung-thu/anh/monge.png" target="_blank"><img src="dung-thu/anh/monge.png" alt="Hình Tiếp tuyến chung – định lý Monge dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/monge.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>Tiếp tuyến chung – định lý Monge <span class="tag">Cấu hình</span></h3>
+    <p class="de">Ba đường tròn có bán kính khác nhau. Hai tiếp tuyến chung ngoài của mỗi cặp cắt nhau tại tâm vị tự ngoài; ba tâm vị tự ngoài thẳng hàng.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>54</s> → <b>47</b> <span class="sub">(chọn công cụ 20, bấm lên hình 16, đặt tên 9, khác 2) · lần bấm chuột <s>90</s> → 56</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>3</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#6: S_{13} nằm trên S_{12}S_{23}</td></tr>
+      <tr><th>Kéo thử</th><td>O_1: 0.33 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (S_{13}) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 9 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+<article class="card" id="dong-dang-xoan">
+  <figure><a href="dung-thu/anh/dong-dang-xoan.png" target="_blank"><img src="dung-thu/anh/dong-dang-xoan.png" alt="Hình Tâm đồng dạng xoắn (quay + vị tự) dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/dong-dang-xoan.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>Tâm đồng dạng xoắn (quay + vị tự) <span class="tag">Cấu hình</span></h3>
+    <p class="de">X = AB ∩ CD; (XAC) và (XBD) cắt nhau lần nữa tại S. Phép quay tâm S góc ∠ASC rồi vị tự tâm S tỉ số SC/SA biến A thành C và B thành D.</p><p class="sub">Bản 1.1 không có phép quay/vị tự lấy góc, tỉ số trên hình nên kịch bản dừng ở việc dựng S (kiểm chứng bằng công thức); bản 1.2 dựng thêm D′ = ảnh của B và kiểm chứng D′ ≡ D – vì vậy nhiều thao tác hơn.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>39</s> → <b>50</b> <span class="sub">(chọn công cụ 14, bấm lên hình 31, đặt tên 4, khác 1) · lần bấm chuột <s>56</s> → 56</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 1·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.38 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> Phép quay/vị tự chỉ nhận góc/tỉ số là hằng số gõ tay – không lấy được góc ASC và tỉ số SC/SA trên hình (kéo hình là sai) <a href="#vd-goc-ti-so" class="sub">→ vấn đề 2</a></li><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li></ul>
+  </div>
+</article>
+<article class="card" id="hinh-day">
+  <figure><a href="dung-thu/anh/hinh-day.png" target="_blank"><img src="dung-thu/anh/hinh-day.png" alt="Hình Tam giác với ba tâm bàng tiếp (hình dày) dựng bằng bản 1.2" loading="lazy"></a>
+  <figcaption>Bản 1.2 · <a href="dung-thu/anh-truoc/hinh-day.png" target="_blank">ảnh cùng kịch bản trên bản 1.1</a></figcaption></figure>
+  <div class="body">
+    <h3>Tam giác với ba tâm bàng tiếp (hình dày) <span class="tag">Hình dày</span></h3>
+    <p class="de">Tam giác ABC, tâm nội tiếp I, ba tâm bàng tiếp I_A, I_B, I_C, đường tròn ngoại tiếp và ba đường tròn bàng tiếp. (O) là đường tròn Euler của tam giác I_AI_BI_C, I là trực tâm của nó, trung điểm M_A của II_A nằm trên (O). Kèm nhãn có chỉ số dưới và dấu phẩy.</p>
+    <table class="kv">
+      <tr><th>Thao tác</th><td><s>74</s> → <b>53</b> <span class="sub">(chọn công cụ 15, bấm lên hình 31, đặt tên 6, khác 1) · lần bấm chuột <s>115</s> → 55</span></td></tr>
+      <tr><th>Nhãn đè</th><td><s>8</s> → <b>0</b></td></tr>
+      <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 6·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
+      <tr><th>Khám phá</th><td>#1: M_A, M_B, M_C, A', B', C' nằm trên (ABC)</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.46 ms/khung</td></tr>
+    </table>
+    <ul class="iss"><li><span class="st st-ok">đã sửa</span> 8 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 9 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
+  </div>
+</article>
+</div>
+</main>
+</body>
+</html>

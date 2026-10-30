@@ -32,6 +32,9 @@ khám phá, xuất TikZ, và các công cụ dòng lệnh trong `scripts/`.
 | `format`, `version` | Luôn là `"hinh-hoc-dong"`, `1`. |
 | `title` | Tên hình (tuỳ chọn). |
 | `view.bbox` | Khung nhìn `[xTrái, yTrên, xPhải, yDưới]` (tuỳ chọn, chỉ để hiển thị). |
+| `images` | *(bản 1.3, tuỳ chọn)* Ảnh dán vào hình: `[{id, x, y, w, h, opacity?, locked?}]` – (x, y) là góc trên-trái theo toạ độ hình (y hướng lên), w × h theo đơn vị hình. Chỉ để hiển thị, không tham gia tính toán. |
+| `imageData` | *(bản 1.3, tuỳ chọn)* Dữ liệu ảnh `{id: "data:image/…;base64,…"}`. Có trong tệp `.json` và bản nháp, không có trong link chia sẻ. |
+| `boxes` | *(bản 1.4, tuỳ chọn)* Khung chữ nổi trên bảng vẽ: `[{id, role, title?, text, anchor, …}]`. `role`: `"de"` (đề bài), `"loigiai"`, `"ghichu"`. `text`: chữ + công thức LaTeX (`$…$`, `$$…$$`, `**đậm**`, `- ` gạch đầu dòng, `![](img:ID)` ảnh có dữ liệu trong `imageData`); dòng `---` (hoặc `--- @k`) chia bước để hiện dần khi trình bày. `anchor`: `"screen"` – `fx, fy` là góc trên-trái theo tỉ lệ khung vẽ (0–1); `"figure"` – `x, y` theo toạ độ hình; `"point"` – `pt` (id điểm), `dx, dy` độ lệch pixel. Thêm: `w`, `h` (px, `h` thiếu = tự cao), `font` (hệ số cỡ chữ), `collapsed`, `from` (khung trình bày 1-based bắt đầu hiện). Chỉ để hiển thị, không tham gia tính toán; bản Python bỏ qua. |
 | `steps[].id` | Mã định danh **bất biến** (không đổi khi đổi tên). Ứng dụng sinh dạng `s1, s2, …`. |
 | `steps[].type` | Loại bước (bảng dưới). |
 | `steps[].args` | Danh sách `id` của các bước trước, đúng kiểu yêu cầu. |
@@ -43,6 +46,18 @@ khám phá, xuất TikZ, và các công cụ dòng lệnh trong `scripts/`.
 
 Kiểu đối số: `point`, `line` (gồm đường thẳng, đoạn, tia), `circle`, `curve` (đường thẳng hoặc đường tròn),
 `obj` (điểm/đường thẳng/đường tròn), `pl` (điểm hoặc đường thẳng), `...point` (≥ 3 điểm).
+
+## Tệp nhiều hình (bản 1.5)
+
+*Tệp › Lưu tất cả các tab* ghi một tệp gồm nhiều hình:
+
+```json
+{"format": "hinh-hoc-dong-bo", "version": 1, "title": "Các hình ngày 2026-10-29", "active": 1,
+ "tabs": [ {…một hình như trên, có view và imageData…}, … ]}
+```
+
+`active` là chỉ số tab đang mở lúc lưu. *Mở tệp* nhận cả hai loại. Kho bài trên GitHub dùng định dạng riêng (một thư mục
+cho mỗi bài, ảnh tách tệp) – xem [`KHO_BAI.md`](KHO_BAI.md).
 
 ## Các loại bước
 
@@ -92,6 +107,11 @@ Kiểu đối số: `point`, `line` (gồm đường thẳng, đoạn, tia), `ci
 | `homothety` | `obj` X, O | `k` | Vị tự tâm O tỉ số k. |
 | `translate` | `obj` X, P, Q | – | Tịnh tiến theo vectơ PQ. |
 | `invert` | P, `circle` | – | Nghịch đảo điểm P qua đường tròn. |
+| `invert_line` | `curve` X, `circle` | – | *(bản 1.2)* Ảnh qua phép nghịch đảo của đường thẳng/đường tròn X **đi qua tâm** nghịch đảo – một **đường thẳng** (X không qua tâm → không xác định). |
+| `invert_circle` | `curve` X, `circle` | – | *(bản 1.2)* Ảnh của đường thẳng/đường tròn X **không qua tâm** nghịch đảo – một **đường tròn**. |
+| `rotate_by` | `obj` X, O, A, B, C | – | *(bản 1.2)* Quay X quanh O một góc bằng góc có hướng ∠ABC **trên hình** (từ tia BA sang BC) – kéo hình thì góc đổi theo. |
+| `homothety_by` | `obj` X, O, A, B, C, D | `negative` | *(bản 1.2)* Vị tự tâm O, tỉ số AB/CD **trên hình** (`negative: true`: tỉ số âm). |
+| `spiral` | `obj` X, O, A, B | – | *(bản 1.2)* Phép đồng dạng thuận tâm O biến A thành B (quay ∠AOB, vị tự OB/OA), áp cho X. |
 | `tangent_at` | `circle`, P | – | Tiếp tuyến tại P (đường qua P vuông góc bán kính). |
 | `tangent_point` | `circle`, P | `which` (0/1) | Tiếp điểm của tiếp tuyến kẻ từ P (thứ tự chuẩn như giao hai đường tròn). |
 | `common_tangent` | `circle`, `circle` | `internal`, `which` | Tiếp tuyến chung ngoài/trong (đường đi từ tiếp điểm trên đường tròn 1 tới tiếp điểm trên đường tròn 2). |
@@ -108,6 +128,31 @@ Kiểu đối số: `point`, `line` (gồm đường thẳng, đoạn, tia), `ci
 | `mixtilinear` | A, B, C | `external` | Đường tròn mixtilinear nội (tiếp xúc trong với (O)) / ngoại (tiếp xúc ngoài) ứng với A. |
 | `circle_diameter` | A, B | – | Đường tròn đường kính AB. |
 
+### Bổ sung bản 1.7
+
+| `type` | `args` | `params` | Ý nghĩa |
+|---|---|---|---|
+| `angle_line` | O, X, A, B, C | `flip` | Đường qua O tạo với tia OX góc bằng ∠ABC: quay X quanh O một góc bằng góc có hướng ∠ABC (`flip: true`: góc ngược dấu – phía bên kia OX). |
+| `angle_point` | O, X, A, B, C, `line` l | `flip` | Giao của đường `angle_line` (O, X, A, B, C) với l. |
+| `point_in` | A, B, C | `u`, `v` | Điểm A + u·AB + v·AC (**bậc tự do**, như `free_point`); giao diện giữ u, v ≥ 0, u + v ≤ 1 (ở trong tam giác). |
+| `fixed_point` | `curve` X, M | `which` | Điểm cố định của họ đường X khi điểm M (bậc tự do: `free_point`, `point_on`, `point_in`) thay đổi. Cách tính: dời thử M tới các vị trí cố định (bảng `FIX_*` trong `model.js`), tính lại X ở mỗi vị trí, giao vị trí hiện tại với hai vị trí đầu, giữ nghiệm nằm trên mọi vị trí; xếp theo x tăng, lấy nghiệm thứ `which`. Không có → không xác định. |
+| `locus` | P, D | `n` (mặc định 160) | *(dấu trang trí)* Quỹ tích của P khi D chạy trên đường của nó (D phải là `point_on`): giá trị `{kind: "locus", pts: [{x, y} \| null…], closed}` – `n + 1` mẫu đều theo tham số (đường tròn: một vòng, `closed: true`; đoạn [0, 1]; tia [0, max(4, 3t₀)]; đường thẳng [t₀ − 3, t₀ + 3]). |
+| `measure_len` | A, B | `dx`, `dy` | *(dấu trang trí)* Số đo AB: `{kind: "measure", m: "len", value, at}`; `dx`, `dy` dời chữ (px). |
+| `measure_angle` | A, B, C | `dx`, `dy` | *(dấu trang trí)* Số đo góc ABC theo độ (0–180). |
+| `measure_ratio` | A, B, C, D | `dx`, `dy` | *(dấu trang trí)* Tỉ số AB/CD. |
+
+Trường mới: `steps[].aux: true` – **đường phụ** (vẽ nét đứt, nhạt); `doc.hideAux: true` – đang tắt mọi đường phụ (không vẽ,
+không chọn được, không xuất TikZ; vẫn tính, vẫn dùng làm đối số). `fixed_point` và `locus` được tính bằng cách lấy mẫu
+cả hình (`SAMPLERS` trong `src/core/model.js`, `lab/core/model.py` – hai bản cho cùng một kết quả số).
+
+### Bổ sung bản 1.8
+
+| `type` | `args` | `params` | Ý nghĩa |
+|---|---|---|---|
+| `solve_point` | ≥ 1 đối tượng (điểm, đường thẳng, đường tròn) | `x`, `y`, `conds` | Điểm P thoả 1–2 điều kiện, giải bằng Newton (đạo hàm số) xuất phát từ (x, y). `conds`: `[{t, a, v?}]`, chỉ số trong `a` trỏ vào `args` (−1 = chính P): `on [i]` – P thuộc đường `args[i]`; `len [i, j, k, l]` – ij = kl; `ang [i, j, k, l, m, n]` – góc ijk = góc lmn (góc thường 0–180°); `angv [i, j, k]` + `v` – góc ijk = v độ. Không hội tụ / sai lệch > 10⁻⁹ → không xác định. Khi kéo, (x, y) được cập nhật theo nghiệm vừa tìm (đi liên tục). Thuật toán và hằng số giống hệt trong `src/core/geom.js` (`solvePoint`) và `lab/core/geom.py` (`solve_point`). |
+
+Kiểu đối số mới: `...obj` (danh sách điểm/đường thẳng/đường tròn, ít nhất `minArgs` phần tử).
+
 ### Dấu trang trí (không tham gia khám phá, không cần khi dịch sang hệ khác)
 
 | `type` | `args` | `style` |
@@ -115,6 +160,7 @@ Kiểu đối số: `point`, `line` (gồm đường thẳng, đoạn, tia), `ci
 | `polygon` | ≥ 3 điểm | `color`, `fill`, `border` |
 | `angle_mark` | A, B, C (đỉnh B) | `color`, `arcs` (1–3); góc vuông tự vẽ ô vuông |
 | `segment_mark` | A, B | `color`, `ticks` (1–3) |
+| `locus`, `measure_*` | xem *Bổ sung bản 1.7* | `color`, `width`, `dash` |
 
 ## Quy ước toán học quan trọng
 

@@ -7,13 +7,15 @@
 //   preview : kiểu xem trước khi đang chọn ('segment'|'line'|'ray'|'circle'|'polygon')
 
 import { STEP_TYPES } from '../core/steps.js';
+import { dependents } from '../core/model.js';
 import { LIBRARY, MENUS } from './library.js';
 
 const T = (id, label, group, icon, inputs, hints, make, extra = {}) => ({ id, label, group, icon, inputs, hints, make, ...extra });
 const one = (type, params, name) => (picks) => [{ type, args: picks, params, name }];
 /** Đường tròn kèm tâm (tâm là một điểm dựng được, dùng tiếp được). */
 // Nếu tâm đã có sẵn (vd đã dựng O trước khi vẽ đường tròn ngoại tiếp) thì không dựng thêm điểm trùng.
-const withCenter = (type, params, centerName) => (picks, app) => {
+// Tâm tự đặt tên O (O₁, O₂… nếu O đã có) – không chiếm các chữ A, B, C, D, K, L… mà đề bài thường dùng.
+const withCenter = (type, params, centerName = 'O') => (picks, app) => {
   const out = [{ type, args: picks, params }];
   let c = null;
   try { c = STEP_TYPES[type].compute(picks.map((id) => app.values.get(id)), { ...(STEP_TYPES[type].params || {}), ...(params || {}) }); } catch { c = null; }
@@ -24,7 +26,7 @@ const TRI = ['Chọn đỉnh thứ nhất', 'Chọn đỉnh thứ hai', 'Chọn 
 const VTX = ['Chọn đỉnh A (đỉnh đối diện cạnh cần xét)', 'Chọn đỉnh B', 'Chọn đỉnh C'];
 
 export const TOOLS = [
-  T('move', 'Chọn / kéo', 'Cơ bản', '↖', [], ['Kéo điểm hoặc nhãn; bấm để chọn đối tượng; kéo nền để dời hình, lăn chuột để phóng to/thu nhỏ'], null),
+  T('move', 'Chọn / kéo', 'Cơ bản', '↖', [], ['Kéo điểm hoặc nhãn (giữ Shift khi kéo: đoạn nối với điểm nằm ngang/thẳng đứng/bước 15°); bấm để chọn đối tượng; kéo nền để dời hình, lăn chuột để phóng to/thu nhỏ'], null),
   T('point', 'Điểm', 'Cơ bản', '•', ['point'], ['Bấm vào chỗ trống: điểm tự do · bấm lên đường/đường tròn: điểm trên đối tượng · bấm gần chỗ cắt nhau: giao điểm'], () => []),
   T('intersect', 'Giao điểm', 'Cơ bản', '✕', ['curve', 'curve'], ['Chọn đường thứ nhất (hoặc bấm ngay chỗ hai đường cắt nhau)', 'Chọn đường thứ hai'], null),
   T('midpoint', 'Trung điểm', 'Cơ bản', '◦', ['point', 'point'], ['Chọn điểm thứ nhất (hoặc bấm vào một đoạn thẳng)', 'Chọn điểm thứ hai'], one('midpoint'), { segmentShortcut: true }),
@@ -42,8 +44,46 @@ export const TOOLS = [
   T('circle_3pts', 'Qua 3 điểm', 'Đường tròn', '⊙', ['point', 'point', 'point'], TRI, withCenter('circle_3pts')),
   T('circle_radius', 'Compa (tâm, bán kính AB)', 'Đường tròn', '⌀', ['point', 'point', 'point'], ['Chọn tâm', 'Chọn đầu mút thứ nhất của bán kính', 'Chọn đầu mút thứ hai'], one('circle_radius')),
 
-  T('reflect', 'Đối xứng', 'Biến hình', '⇋', ['obj', 'pl'], ['Chọn đối tượng cần lấy đối xứng (điểm, đường, đường tròn)', 'Chọn tâm đối xứng (điểm) hoặc trục đối xứng (đường thẳng)'], one('reflect')),
+  T('reflect', 'Đối xứng', 'Biến hình', '⇋', ['obj', 'pl'], ['Chọn đối tượng cần lấy đối xứng (điểm, đường, đường tròn)', 'Chọn tâm đối xứng (điểm) hoặc trục đối xứng (đường thẳng)'], (p) => [{ type: 'reflect', args: p, prime: true }]),
   T('projection', 'Hình chiếu', 'Biến hình', '⊾', ['point', 'line'], ['Chọn điểm và đường thẳng (thứ tự bất kỳ)', 'Chọn nốt đối tượng còn lại'], (p) => [{ type: 'projection', args: p }], { anyOrder: true }),
+
+  // ---- bản 1.7 ----
+  T('angle_point', 'Điểm trên đường tạo góc bằng góc cho trước', 'Đường', '∠=', ['point', 'point', 'point', 'point', 'point', 'line'],
+    ['Góc mẫu: chọn điểm trên cạnh thứ nhất', 'Góc mẫu: chọn ĐỈNH', 'Góc mẫu: chọn điểm trên cạnh thứ hai', 'Chọn đỉnh O của góc cần dựng',
+      'Chọn điểm X trên cạnh có sẵn (tia OX)', 'Chọn đường chứa điểm cần dựng – bấm GẦN chỗ điểm cần lấy (để chọn phía)'],
+    ([A, B, C, O, X, l], app) => {
+      // hai phía của tia OX cho hai điểm: lấy điểm gần chỗ vừa bấm
+      const v = [O, X, A, B, C, l].map((id) => app.values.get(id));
+      const cand = [false, true].map((flip) => ({ flip, P: STEP_TYPES.angle_point.compute(v, { flip }) }));
+      const m = app.mouse;
+      const ok = cand.filter((c) => c.P).sort((a, b) => Math.hypot(a.P.x - m.x, a.P.y - m.y) - Math.hypot(b.P.x - m.x, b.P.y - m.y));
+      return [{ type: 'angle_point', args: [O, X, A, B, C, l], params: { flip: ok.length ? ok[0].flip : false } }];
+    }, { allowRepeat: true }),
+  T('angle_line', 'Đường tạo góc bằng góc cho trước', 'Đường', '∠/', ['point', 'point', 'point', 'point', 'point'],
+    ['Góc mẫu: chọn điểm trên cạnh thứ nhất', 'Góc mẫu: chọn ĐỈNH', 'Góc mẫu: chọn điểm trên cạnh thứ hai', 'Chọn đỉnh O của góc cần dựng', 'Chọn điểm X trên cạnh có sẵn (tia OX)'],
+    ([A, B, C, O, X], app) => [{ type: 'angle_line', args: [O, X, A, B, C], params: { flip: app.extraFlip(O, X, A, B, C) } }],
+    { allowRepeat: true, extraClick: 'Rê chuột sang phía muốn dựng rồi bấm', extraPreview: 'angle_line' }),
+  T('point_in', 'Điểm trong tam giác', 'Cơ bản', '◬', ['point', 'point', 'point'],
+    ['Chọn đỉnh thứ nhất của tam giác', 'Chọn đỉnh thứ hai', 'Chọn đỉnh thứ ba'],
+    (p, app) => [{ type: 'point_in', args: p, params: app.uvInTriangle(p, app.extraPos) }],
+    { extraClick: 'Bấm vào trong tam giác để đặt điểm (khi kéo, điểm luôn ở trong tam giác)' }),
+  T('solve_point', 'Điểm thoả điều kiện', 'Cơ bản', '⌖', ['point'],
+    ['Bấm vào chỗ GẦN điểm cần tìm, rồi gõ điều kiện (vd: góc PAB = góc PBC, góc PBC = góc PCA)'], () => []),
+  T('fixed_point', 'Điểm cố định', 'Quỹ tích', '⊛', ['curve', 'point'],
+    ['Chọn đường thẳng/đường tròn thay đổi và điểm thay đổi (điểm tự do, trên đường hoặc trong tam giác) – thứ tự bất kỳ', 'Chọn nốt đối tượng còn lại'],
+    (p) => [{ type: 'fixed_point', args: p, params: { which: 0 }, name: 'X' }, { type: 'fixed_point', args: p, params: { which: 1 }, name: 'Y' }],
+    { anyOrder: true, after: 'fixedPoint' }),
+  T('locus', 'Quỹ tích', 'Quỹ tích', '∿', ['point', 'point'],
+    ['Chọn điểm chạy (vd D chạy trên BC) và điểm cần vẽ quỹ tích – thứ tự nào cũng được', 'Chọn nốt điểm còn lại'],
+    // tự nhận ra điểm chạy: điểm trên đường mà điểm kia phụ thuộc vào (bấm D rồi K hay K rồi D đều được)
+    ([a, b], app) => {
+      const on = (id) => app.doc.steps.find((s) => s.id === id)?.type === 'point_on';
+      const driverFirst = on(a) && (!on(b) || dependents(app.doc, [a]).has(b));
+      return [{ type: 'locus', args: driverFirst ? [b, a] : [a, b] }];
+    }, { after: 'locus' }),
+  T('measure_len', 'Đo độ dài', 'Đo', '|↔|', ['point', 'point'], ['Chọn điểm thứ nhất (hoặc bấm vào một đoạn thẳng)', 'Chọn điểm thứ hai'], one('measure_len'), { segmentShortcut: true }),
+  T('measure_angle', 'Đo góc', 'Đo', '∠°', ['point', 'point', 'point'], ['Chọn điểm trên cạnh thứ nhất', 'Chọn ĐỈNH góc', 'Chọn điểm trên cạnh thứ hai'], one('measure_angle')),
+  T('measure_ratio', 'Đo tỉ số AB/CD', 'Đo', 'a/b', ['point', 'point', 'point', 'point'], ['Chọn A', 'Chọn B', 'Chọn C', 'Chọn D (tỉ số AB/CD)'], one('measure_ratio'), { allowRepeat: true }),
 
   T('angle_mark', 'Đánh dấu góc', 'Đánh dấu', '∡', ['point', 'point', 'point'], ['Chọn điểm trên cạnh thứ nhất', 'Chọn ĐỈNH góc', 'Chọn điểm trên cạnh thứ hai'], (p, app) => [{ type: 'angle_mark', args: p, style: { ...app.markStyle('angle') } }]),
   T('segment_mark', 'Đánh dấu đoạn', 'Đánh dấu', '⫽', ['point', 'point'], ['Chọn đầu mút thứ nhất (hoặc bấm vào một đoạn thẳng)', 'Chọn đầu mút thứ hai'], (p, app) => [{ type: 'segment_mark', args: p, style: { ...app.markStyle('segment') } }], { segmentShortcut: true }),
@@ -59,10 +99,11 @@ export const TOOL_BY_ID = Object.fromEntries([...TOOLS, ...LIBRARY].map((t) => [
  */
 export const TOOLBAR = [
   { id: 'move', label: 'Chọn / kéo', icon: 'move', tools: ['move'] },
-  { id: 'point', label: 'Điểm', icon: 'point', tools: ['point', 'intersect', 'midpoint'] },
+  { id: 'point', label: 'Điểm', icon: 'point', tools: ['point', 'intersect', 'midpoint', 'point_in', 'solve_point'] },
   { id: 'circle', label: 'Đường tròn', icon: 'circle', tools: ['circle', 'circle_3pts', 'circle_radius'] },
   { id: 'line', label: 'Đoạn, tia, đường thẳng', icon: 'line', tools: ['segment', 'ray', 'line'] },
-  { id: 'construct', label: 'Dựng', icon: 'construct', tools: ['perpendicular', 'parallel', 'perp_bisector', 'angle_bisector', 'ext_bisector', 'projection', 'reflect'] },
-  { id: 'mark', label: 'Đánh dấu', icon: 'mark', tools: ['angle_mark', 'segment_mark', 'polygon'] },
+  { id: 'construct', label: 'Dựng', icon: 'construct', tools: ['perpendicular', 'parallel', 'perp_bisector', 'angle_bisector', 'ext_bisector', 'projection', 'reflect', 'angle_point', 'angle_line'] },
+  { id: 'mark', label: 'Đánh dấu, đo', icon: 'mark', tools: ['angle_mark', 'segment_mark', 'polygon', 'measure_len', 'measure_angle', 'measure_ratio'] },
+  { id: 'locus', label: 'Quỹ tích, điểm cố định', icon: 'locus', tools: ['locus', 'fixed_point'] },
   { id: 'library', label: 'Công cụ', icon: 'tools', tools: LIBRARY.map((t) => t.id), submenus: MENUS },
 ];

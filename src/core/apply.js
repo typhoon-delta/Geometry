@@ -19,7 +19,7 @@ export function addSpecs(doc, specs, { join = true } = {}) {
     const kind = def.kind === 'same' ? k.get(args[0]) : def.kind;
     const step = { id, type: sp.type, args };
     if (sp.params && Object.keys(sp.params).length) step.params = { ...sp.params };
-    if (kind !== 'mark') step.name = sp.name && !used(sp.name) ? sp.name : nextName(doc, kind, sp.name);
+    if (kind !== 'mark') step.name = sp.name && !used(sp.name) ? sp.name : (sp.prime && kind === 'point' && primeName(doc, args[0])) || nextName(doc, kind, sp.name);
     if (sp.style && Object.keys(sp.style).length) step.style = { ...sp.style };
     if (sp.hidden) step.hidden = true;
     if (i > 0 && join) step.joinPrev = true;
@@ -28,6 +28,18 @@ export function addSpecs(doc, specs, { join = true } = {}) {
     ids.push(id);
   });
   return ids;
+}
+
+/**
+ * Tên cho ảnh của một điểm qua phép biến hình (bản 1.3): tên tạo ảnh thêm dấu phẩy – A → A′, A′ → A″, I_A → I_A′.
+ * Tên đã có thì thêm phẩy nữa (tối đa 3); không được thì trả về null (dùng tên tự động như cũ).
+ */
+export function primeName(doc, srcId) {
+  const base = doc.steps.find((s) => s.id === srcId)?.name;
+  if (!base) return null;
+  const used = new Set(doc.steps.map((s) => s.name));
+  for (let n = base + "'"; n.length <= base.length + 3; n += "'") if (!used.has(n)) return n;
+  return null;
 }
 
 /**

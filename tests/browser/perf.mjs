@@ -2,6 +2,7 @@
 //   node tests/browser/perf.mjs            in kết quả
 //   node tests/browser/perf.mjs --assert   thoát mã 1 nếu không đạt ngưỡng
 //   node tests/browser/perf.mjs --profile  in thêm các hàm tốn thời gian nhất (CPU profile)
+//   node tests/browser/perf.mjs --khung    thêm 3 khung chữ có công thức (gắn màn hình, gắn hình, gắn điểm B)
 //
 // Cách đo: nhấn chuột vào A rồi di chuột 120 lần theo một vòng tròn nhỏ; sau mỗi lần di chuyển chờ
 // trình duyệt vẽ xong 2 khung hình. Thời gian luồng chính (script + style + layout + vẽ) lấy từ
@@ -29,6 +30,15 @@ await page.evaluate(() => {
   __app.loadDoc(d);
   __app.zoomFit();
 });
+if (args.includes('--khung')) {
+  await page.evaluate(() => {
+    const B = __app.doc.steps.find((x) => x.name === 'B').id;
+    const t = 'Ta có $\\angle BAC + \\angle BHC = 180^\\circ$ và $\\frac{AB}{AC} = \\frac{DB}{DC}$.\n---\nVậy $I_A, I_B, I_C$ thẳng hàng.';
+    __app.textBoxes.newBox('loigiai', { text: t });
+    __app.textBoxes.newBox('ghichu', { text: t, anchor: 'figure', x: 0, y: 0 });
+    __app.textBoxes.newBox('ghichu', { text: '$B$ ở đây', anchor: 'point', pt: B, dx: 12, dy: 12 });
+  });
+}
 await page.waitForTimeout(200);
 const cdp = await page.context().newCDPSession(page);
 await cdp.send('Performance.enable');

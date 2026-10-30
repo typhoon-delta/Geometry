@@ -94,8 +94,7 @@ export async function run({ page, ok, shot, state, tool, clickAt, menu, example 
   ok(saved.format === 'hinh-hoc-dong' && saved.steps.length === JSON.parse(ref).length, `lưu tệp JSON "${dl.suggestedFilename()}"`);
 
   await menu('btn-new');
-  await page.click('.modal .primary');
-  ok((await state()).n === 0, 'hình mới rỗng');
+  ok((await state()).n === 0, 'hình mới rỗng (mở ở tab mới, không cần xác nhận)');
   const [fc] = await Promise.all([page.waitForEvent('filechooser'), menu('btn-open')]);
   await fc.setFiles(path);
   await page.waitForFunction(() => __app.doc.steps.length > 0);
@@ -113,10 +112,10 @@ export async function run({ page, ok, shot, state, tool, clickAt, menu, example 
   await page.click('#btn-explore');
   await page.waitForSelector('.rel');
   const rels = await page.locator('.rel .rel-text').allTextContents();
-  ok(rels.length > 0 && /D, E, F, X, Y, Z nằm trên/.test(rels[0]), `quan hệ đầu tiên là 9 điểm Euler: "${rels[0]}"`);
+  ok(rels.length > 0 && /D, E, F, M, K, L, X, Y, Z cùng thuộc một đường tròn/.test(rels[0]), `quan hệ đầu tiên là 9 điểm Euler: "${rels[0]}"`);
   await page.click('.rel[data-i="0"]');
   const hl = await page.evaluate(() => __app.highlight.size);
-  ok(hl === 7, `bấm kết quả tô sáng đối tượng liên quan (${hl})`);
+  ok(hl === 9, `bấm kết quả tô sáng cả 9 điểm (${hl})`);
   await shot('m4-kham-pha-9-diem');
   const iCyc = rels.findIndex((t) => /đồng viên/.test(t));
   await page.click(`.rel[data-i="${iCyc}"]`);

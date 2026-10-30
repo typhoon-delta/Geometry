@@ -4,15 +4,17 @@
 
 import { kinds } from '../core/model.js';
 import { parseLabel, labelHTML } from '../core/names.js';
-import { autoLabelDirs } from '../core/labels.js';
-import { styleOf } from '../core/styles.js';
+import { placeLabels } from '../core/labels.js';
+import { styleOf, isShown } from '../core/styles.js';
+import { trimmedRange } from '../core/geom.js';
 
 export { labelHTML };
 // Khoảng cách tâm điểm → tâm nhãn và cỡ chữ nhãn theo bộ kiểu (đơn sắc: nhãn nhỏ, đặt sát điểm)
-const LABEL = { mono: { dist: 11, font: 15 }, textbook: { dist: 13, font: 16 } };
+const LABEL = { mono: { font: 15 }, textbook: { font: 16 } };
 export const LABEL_DIST = 11;
 const HALO = 'rgba(96,165,250,0.45)';
 const RELATION = '#f59e0b';
+const GHOST = '#e4e4e7';
 const LABEL_FONT = "'Times New Roman', 'Nimbus Roman', 'Liberation Serif', 'TeX Gyre Termes', Times, serif";
 
 export class Renderer {
@@ -23,10 +25,16 @@ export class Renderer {
     this.extra = []; // phần tử tạm: xem trước khi dựng, đường phụ của quan hệ đang tô sáng
     this.scale = 1; // hệ số phóng nét/chữ (chế độ trình chiếu)
     this.grid = false;
+    this.trimLines = true; // đường thẳng/tia "vừa đủ" kiểu sách (xem geom.trimmedRange)
+    this.ghostLines = false; // đang dựng: vẽ mờ phần kéo dài để thấy (và bấm được) mọi chỗ cắt
+    this.lineRanges = new Map(); // id → [t0, t1] khoảng tham số đang vẽ của đường thẳng/tia (để chọn bằng chuột)
     this.labelOffsets = new Map(); // id → [dx, dy] px (y hướng lên), chưa nhân scale
     this.labelBoxes = new Map(); // id → {x, y, w, h} toạ độ màn hình (để kéo nhãn)
     this.drawnIds = new Set();
+    this.measureBoxes = new Map(); // id → {x, y, w, h} khung chữ số đo (để chọn, kéo)
+    this.traces = null; // vết (bản 1.7): Map id → {kind, items: [giá trị]} do App ghi khi kéo
     view.painter = (ctx, v) => this.draw(ctx, v);
+    view.onViewChange(() => this.onViewChange());
   }
 
   /**
@@ -42,25 +50,106 @@ export class Renderer {
     const selected = opts.selected || new Set();
     const highlight = opts.highlight || new Set();
     const theme = (this.theme = opts.theme || 'mono');
-    const L = LABEL[theme] || LABEL.mono;
+    this.imageStore = opts.images || null;
+    this.imageSel = opts.imageSel || null;
     const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
     const layer = (s, kind) => order[s.type === 'polygon' ? 'polygon' : kind] ?? 3;
     this.items = doc.steps
-      .filter((s) => !s.hidden && (!visible || visible.has(s.id)))
+      .filter((s) => isShown(doc, s) && (!visible || visible.has(s.id)))
       .map((s) => {
         const kind = k.get(s.id);
         return { s, kind, st: styleOf(s, kind, theme), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
       })
       .sort((a, b) => a.layer - b.layer);
-    // hướng nhãn tự động: việc tương đối nặng → chỉ làm ở đây (không làm khi đang kéo)
-    const dirs = autoLabelDirs(doc, values, (s) => !s.hidden && (!visible || visible.has(s.id)));
-    this.labelOffsets = new Map();
-    for (const it of this.items) {
-      if (it.kind !== 'point') continue;
-      const d = dirs.get(it.s.id) || { x: 0.7, y: 0.7 };
-      this.labelOffsets.set(it.s.id, it.st.labelOffset || [Math.round(d.x * L.dist), Math.round(d.y * L.dist)]);
-    }
+    // vị trí nhãn tự động: việc tương đối nặng → chỉ làm ở đây (không làm khi đang kéo)
+    this.computeLabels();
     this.view.requestDraw();
+  }
+
+  /**
+   * Đặt nhãn điểm theo khung chữ thật trên màn hình (placeLabels): tránh đường cắt qua nhãn, nhãn đè điểm
+   * (kể cả chính điểm của nó với nhãn rộng như I_A), nhãn đè nhau. Nhãn người dùng đã kéo giữ nguyên.
+   * Kết quả là độ dời [dx, dy] (px, y hướng lên, chưa nhân hệ số trình chiếu) như labelOffset.
+   */
+  computeLabels() {
+    const view = this.view, sc = this.scale, V = this.values;
+    const fontPx = (LABEL[this.theme] || LABEL.mono).font * sc;
+    const ctx = view.ctx;
+    const curves = [], pts = [], fixed = [];
+    this.labelOffsets = new Map();
+    const trimPts = this.trimPoints();
+    for (const it of this.items) {
+      const v = V.get(it.s.id);
+      if (!v) continue;
+      if (it.kind === 'line') {
+        const seg = lineSeg(view, v, it.s.type === 'segment' ? 'segment' : it.s.type === 'ray' ? 'ray' : v.sub, trimPts);
+        if (seg) curves.push({ kind: 'seg', x1: seg[0].x, y1: seg[0].y, x2: seg[1].x, y2: seg[1].y });
+      } else if (it.kind === 'circle') {
+        const c = view.toScreen(v.c);
+        curves.push({ kind: 'circle', cx: c.x, cy: c.y, r: v.r * view.scale });
+      }
+    }
+    for (const it of this.items) {
+      if (it.kind !== 'point' || !it.st.showLabel || !it.s.name) continue;
+      const v = V.get(it.s.id);
+      if (!v) continue;
+      const p = view.toScreen(v);
+      const m = measureLabel(ctx, it.s.name, fontPx);
+      const h = (0.45 + (m.sub ? 0.68 : 0.42)) * fontPx, w = m.w + 1;
+      const delta = (m.sub ? 0.115 : -0.015) * fontPx; // tâm khung chữ = tâm dòng chữ (cy) + delta
+      if (it.st.labelOffset) {
+        const o = it.st.labelOffset;
+        this.labelOffsets.set(it.s.id, o);
+        const cy = p.y - o[1] * sc;
+        fixed.push({ x: p.x + o[0] * sc - w / 2, y: cy + delta - h / 2, w, h });
+        continue;
+      }
+      pts.push({ id: it.s.id, x: p.x, y: p.y, w, h, r: (it.st.size || 3) * sc, delta });
+    }
+    const res = placeLabels(pts, curves, fixed, { W: view.W, H: view.H, gap: 2 * sc });
+    for (const p of pts) {
+      const d = res.get(p.id);
+      this.labelOffsets.set(p.id, [round1(d.dx / sc), round1(-(d.dy - p.delta) / sc)]);
+    }
+    this.labelScale = view.scale;
+  }
+
+  /** Ảnh dán vào hình: vẽ dưới mọi đối tượng hình học, theo toạ độ hình; ảnh đang chọn có khung và ô đổi cỡ. */
+  drawImages(ctx, view) {
+    const list = this.doc && this.doc.images;
+    if (!list || !list.length || !this.imageStore) return;
+    for (const im of list) {
+      const rec = this.imageStore.get(im.id);
+      const a = view.toScreen({ x: im.x, y: im.y });
+      const w = im.w * view.scale, h = im.h * view.scale;
+      if (rec && rec.ready) {
+        ctx.globalAlpha = im.opacity ?? 1;
+        ctx.drawImage(rec.img, a.x, a.y, w, h);
+        ctx.globalAlpha = 1;
+      }
+      if (im.id === this.imageSel) {
+        setStroke(ctx, '#2563eb', 1.5, true);
+        ctx.strokeRect(a.x, a.y, w, h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#2563eb';
+        ctx.fillRect(a.x + w - 5, a.y + h - 5, 10, 10);
+      }
+    }
+  }
+
+  /** Toạ độ màn hình của các điểm đang hiện (để vẽ đường thẳng vừa đủ qua chúng), hoặc null nếu tắt chế độ này. */
+  trimPoints() {
+    if (!this.trimLines) return null;
+    const out = [];
+    for (const it of this.items) if (it.kind === 'point') { const v = this.values.get(it.s.id); if (v) out.push(this.view.toScreen(v)); }
+    return out;
+  }
+
+  /** Phóng to/thu nhỏ làm khoảng cách giữa các đường đổi → đặt lại nhãn (gom lại, không làm mỗi khung). */
+  onViewChange() {
+    if (!this.labelScale || Math.abs(this.view.scale / this.labelScale - 1) < 0.04) return;
+    clearTimeout(this.relabelTimer);
+    this.relabelTimer = setTimeout(() => { this.computeLabels(); this.view.requestDraw(); }, 120);
   }
 
   /** Toạ độ đã đổi (đang kéo): chỉ cần vẽ lại. */
@@ -95,7 +184,12 @@ export class Renderer {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (this.grid) drawGrid(ctx, view);
+    this.drawImages(ctx, view);
+    this.measureBoxes = new Map();
+    if (this.traces) this.drawTraces(ctx, view);
     const labels = [];
+    const trimPts = this.trimPoints();
+    this.lineRanges = new Map();
     for (const it of this.items) {
       const v = V.get(it.s.id);
       if (!v) continue;
@@ -105,9 +199,11 @@ export class Renderer {
       const width = (st.width || 1) * sc * (hl ? 1.8 : 1);
       if (kind === 'line') {
         const sub = s.type === 'segment' ? 'segment' : s.type === 'ray' ? 'ray' : v.sub;
-        if (sel) strokeLine(ctx, view, v, sub, HALO, width + 7 * sc, false);
-        strokeLine(ctx, view, v, sub, color, width, st.dash);
-        if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: lineLabelPos(view, v, sub), color, off: [0, 10] });
+        const seg = lineSeg(view, v, sub, trimPts, this.lineRanges, s.id);
+        if (this.ghostLines && this.lineRanges.has(s.id)) strokeSeg(ctx, screenLine(view, v, sub), GHOST, 1 * sc, false);
+        if (sel) strokeSeg(ctx, seg, HALO, width + 7 * sc, false);
+        strokeSeg(ctx, seg, color, width, st.dash);
+        if (st.showLabel && s.name) labels.push({ id: s.id, name: s.name, at: segLabelPos(seg, sub), color, off: [0, 10] });
       } else if (kind === 'circle') {
         const c = view.toScreen(v.c), r = v.r * view.scale;
         if (st.fill) fillCircle(ctx, c, r, st.fillColor || st.color, st.fill);
@@ -124,6 +220,11 @@ export class Renderer {
         ctx.fill();
         ctx.globalAlpha = 1;
         if (st.border) { ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash([]); ctx.stroke(); }
+      } else if (v.kind === 'locus') {
+        drawLocus(ctx, view, v, sel ? '#60a5fa' : color, width * (sel ? 1.8 : 1), st.dash);
+      } else if (v.kind === 'measure') {
+        const box = drawMeasure(ctx, view, this.doc, s, v, this.values, sc, sel ? '#2563eb' : hl ? '#b45309' : st.color);
+        if (box) this.measureBoxes.set(s.id, box);
       } else if (s.type === 'angle_mark' || s.type === 'segment_mark') {
         const px = 1 / view.scale;
         const [X, Y] = s.type === 'angle_mark' ? angleMarkPath(v, st, px, sc) : segMarkPath(v, st, px, sc);
@@ -145,7 +246,99 @@ export class Renderer {
   }
 }
 
+Renderer.prototype.drawTraces = function (ctx, view) {
+  const sc = this.scale;
+  for (const tr of this.traces.values()) {
+    if (!tr.items.length) continue;
+    if (tr.kind === 'point') {
+      ctx.fillStyle = TRACE;
+      for (const p of tr.items) { const q = view.toScreen(p); ctx.fillRect(q.x - 1.2 * sc, q.y - 1.2 * sc, 2.4 * sc, 2.4 * sc); }
+    } else {
+      ctx.globalAlpha = 0.45;
+      for (const v of tr.items) {
+        if (tr.kind === 'circle') strokeCircle(ctx, view.toScreen(v.c), v.r * view.scale, TRACE, 0.8 * sc, false);
+        else strokeLine(ctx, view, v, 'line', TRACE, 0.8 * sc, false);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+};
+
+const round1 = (v) => Math.round(v * 10) / 10;
+const TRACE = '#2f8f9d';
+
 // ================= các hàm vẽ =================
+/** Quỹ tích: đường gấp khúc qua các mẫu; ngắt ở mẫu không xác định và ở bước nhảy lớn bất thường (tiệm cận). */
+function drawLocus(ctx, view, v, color, width, dash) {
+  const Q = v.pts.map((p) => (p ? view.toScreen(p) : null));
+  const steps = [];
+  for (let i = 1; i < Q.length; i++) if (Q[i] && Q[i - 1]) steps.push(Math.hypot(Q[i].x - Q[i - 1].x, Q[i].y - Q[i - 1].y));
+  steps.sort((a, b) => a - b);
+  const med = steps.length ? steps[steps.length >> 1] : 0;
+  const jump = Math.max(40, 8 * med);
+  setStroke(ctx, color, width, dash);
+  ctx.beginPath();
+  let pen = false;
+  const n = Q.length;
+  for (let i = 0; i < n + (v.closed ? 1 : 0); i++) {
+    const q = Q[i % n], prev = i ? Q[(i - 1) % n] : null;
+    if (!q || Math.abs(q.x) > 1e6 || Math.abs(q.y) > 1e6) { pen = false; continue; }
+    if (pen && prev && Math.hypot(q.x - prev.x, q.y - prev.y) <= jump) ctx.lineTo(q.x, q.y);
+    else ctx.moveTo(q.x, q.y);
+    pen = true;
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+const plainName = (n) => String(n || '?').replace(/[_{}]/g, '');
+const fmtNum = (x, d) => x.toFixed(d).replace('.', ',');
+
+/** Chữ của một số đo: "AB = 5,00", "∠ABC = 81,9°", "AB/CD = 1,25". */
+export function measureText(doc, s, v) {
+  const n = s.args.map((a) => plainName(doc.steps.find((x) => x.id === a)?.name));
+  if (v.m === 'len') return `${n[0]}${n[1]} = ${fmtNum(v.value, 2)}`;
+  if (v.m === 'angle') return `∠${n[0]}${n[1]}${n[2]} = ${fmtNum(v.value, 1)}°`;
+  return `${n[0]}${n[1]}/${n[2]}${n[3]} = ${fmtNum(v.value, 3)}`;
+}
+
+/** Số đo trên hình: chữ có nền mờ; độ dời dx, dy (px) nằm trong params. Trả về khung chữ (toạ độ màn hình). */
+function drawMeasure(ctx, view, doc, s, v, values, sc, color) {
+  const text = measureText(doc, s, v);
+  let q = view.toScreen(v.at);
+  if (v.m === 'angle') {
+    // đặt trên phân giác của góc, cách đỉnh một đoạn
+    const A = values.get(s.args[0]), C = values.get(s.args[2]);
+    const a = A && view.toScreen(A), c = C && view.toScreen(C);
+    if (a && c) {
+      const u1 = norm(a.x - q.x, a.y - q.y), u2 = norm(c.x - q.x, c.y - q.y);
+      let b = norm(u1.x + u2.x, u1.y + u2.y);
+      if (!Number.isFinite(b.x)) b = { x: 0, y: -1 };
+      q = { x: q.x + b.x * 34 * sc, y: q.y + b.y * 34 * sc };
+    }
+  } else q = { x: q.x, y: q.y - 12 * sc };
+  const p = s.params || {};
+  const x = q.x + (p.dx || 0) * sc, y = q.y + (p.dy || 0) * sc;
+  const fpx = 13 * sc;
+  ctx.font = `${fpx}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+  const w = ctx.measureText(text).width;
+  const box = { x: x - w / 2 - 4 * sc, y: y - fpx * 0.75, w: w + 8 * sc, h: fpx * 1.5 };
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  return box;
+}
+
+function norm(x, y) {
+  const l = Math.hypot(x, y);
+  return { x: x / l, y: y / l };
+}
+
 function setStroke(ctx, color, width, dash) {
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
@@ -175,8 +368,27 @@ function screenLine(view, v, sub) {
   return [{ x: p.x + r[0] * d.x, y: p.y + r[0] * d.y }, { x: p.x + r[1] * d.x, y: p.y + r[1] * d.y }];
 }
 
-function strokeLine(ctx, view, v, sub, color, width, dash) {
-  const seg = screenLine(view, v, sub);
+/**
+ * Đoạn màn hình cần vẽ của đường thẳng/tia/đoạn v. Chế độ "vừa đủ" (trimPts ≠ null): đường thẳng/tia chỉ vẽ qua các
+ * điểm nằm trên nó, nhô ra 22–70 px mỗi đầu; đường có ít hơn 2 điểm thì vẽ tới mép như cũ. Ghi khoảng tham số đã vẽ
+ * vào ranges (để bấm chọn chỉ trúng phần đang thấy).
+ */
+function lineSeg(view, v, sub, trimPts, ranges = null, id = null) {
+  if (trimPts && sub !== 'segment') {
+    const p = view.toScreen(v.p), q = view.toScreen({ x: v.p.x + v.d.x, y: v.p.y + v.d.y });
+    const d = { x: q.x - p.x, y: q.y - p.y };
+    const rg = trimmedRange({ p, d }, sub, trimPts, 0.75, 22, 70);
+    if (rg) {
+      if (ranges) ranges.set(id, rg);
+      const m = 20;
+      const r = clip(p, d, -m, -m, view.W + m, view.H + m, rg[0], rg[1]);
+      return r ? [{ x: p.x + r[0] * d.x, y: p.y + r[0] * d.y }, { x: p.x + r[1] * d.x, y: p.y + r[1] * d.y }] : null;
+    }
+  }
+  return screenLine(view, v, sub);
+}
+
+function strokeSeg(ctx, seg, color, width, dash) {
   if (!seg) return;
   setStroke(ctx, color, width, dash);
   ctx.beginPath();
@@ -185,11 +397,20 @@ function strokeLine(ctx, view, v, sub, color, width, dash) {
   ctx.stroke();
 }
 
-function lineLabelPos(view, v, sub) {
-  const seg = screenLine(view, v, sub);
+function segLabelPos(seg, sub) {
   if (!seg) return { x: -1e4, y: -1e4 };
   const t = sub === 'segment' ? 0.5 : 0.85;
   return { x: seg[0].x + t * (seg[1].x - seg[0].x), y: seg[0].y + t * (seg[1].y - seg[0].y) };
+}
+
+function strokeLine(ctx, view, v, sub, color, width, dash) {
+  const seg = screenLine(view, v, sub);
+  if (!seg) return;
+  setStroke(ctx, color, width, dash);
+  ctx.beginPath();
+  ctx.moveTo(seg[0].x, seg[0].y);
+  ctx.lineTo(seg[1].x, seg[1].y);
+  ctx.stroke();
 }
 
 function strokeCircle(ctx, c, r, color, width, dash) {

@@ -49,6 +49,7 @@ function picksFor(tool, f) {
     reflect_point: [f.P, f.A], rotate: [f.P, f.A], homothety: [f.P, f.A], translate: [f.P, f.B, f.C],
     isogonal_line: [f.B, f.A, f.C, f.P], ext_bisector: [f.B, f.A, f.C], int_ext_bisector: [f.B, f.A, f.C],
     radical_center: [f.c1, f.c2, f.c3],
+    rotate_by: [f.P, f.A, f.B, f.C, f.Q], homothety_by: [f.P, f.A, f.B, f.C, f.X, f.Q], spiral: [f.B, f.P, f.A, f.B],
   };
   if (special[tool.id]) return special[tool.id];
   const pts = [f.A, f.B, f.C, f.P];
@@ -71,6 +72,7 @@ function overridesFor(doc, n, seed) {
     for (const s of doc.steps) {
       if (s.type === 'free_point') ov[s.id] = { x: s.params.x + 0.25 * rnd(), y: s.params.y + 0.25 * rnd() };
       else if (s.type === 'point_on') ov[s.id] = { t: (s.params?.t ?? 0) + 0.1 * rnd() };
+      else if (s.type === 'point_in') ov[s.id] = { u: s.params.u + 0.05 * rnd(), v: s.params.v + 0.05 * rnd() };
     }
     out.push(ov);
   }
@@ -108,9 +110,59 @@ for (const tool of LIBRARY) {
   cases.push(caseOf('cong-cu:' + tool.id, f.doc, false));
 }
 // biến thể: biến hình áp cho đường tròn / đường thẳng
-for (const [id, picks, opts] of [['reflect_point', (f) => [f.c1, f.A], {}], ['rotate', (f) => [f.d, f.A], { angle: 90 }], ['homothety', (f) => [f.c1, f.A], { k: 3 }], ['reflect_line', (f) => [f.c2, f.d], {}]]) {
+for (const [id, picks, opts] of [['reflect_point', (f) => [f.c1, f.A], {}], ['rotate', (f) => [f.d, f.A], { angle: 90 }], ['homothety', (f) => [f.c1, f.A], { k: 3 }], ['reflect_line', (f) => [f.c2, f.d], {}],
+  ['invert', (f) => [f.c2, f.c1], {}], ['invert', (f) => [f.d, f.c1], {}], ['homothety_by', (f) => [f.c1, f.A, f.B, f.C, f.X, f.Q], { k: -1 }], ['spiral', (f) => [f.c2, f.P, f.A, f.B], {}]]) {
   const f = fixture();
   runTool(f.doc, LIBRARY.find((t) => t.id === id), picks(f), opts);
-  cases.push(caseOf(`cong-cu:${id}:bien-the`, f.doc, false));
+  cases.push(caseOf(`cong-cu:${id}:bien-the${cases.filter((c) => c.name.startsWith(`cong-cu:${id}:bien-the`)).length || ''}`, f.doc, false));
 }
+// bản 1.7: góc bằng góc, điểm trong tam giác, điểm cố định (đường thẳng, đường tròn), quỹ tích, số đo
+const S = (id, type, args, params, name) => ({ id, type, args, ...(params ? { params } : {}), ...(name ? { name } : {}) });
+const doc17 = (steps) => ({ format: 'hinh-hoc-dong', version: 1, steps });
+const TRI = [
+  S('A', 'free_point', [], { x: 0, y: 4 }, 'A'), S('B', 'free_point', [], { x: -3, y: 0 }, 'B'), S('C', 'free_point', [], { x: 4, y: 0 }, 'C'),
+  S('ab', 'segment', ['A', 'B'], null, 'd1'), S('bc', 'segment', ['B', 'C'], null, 'd2'), S('ca', 'segment', ['C', 'A'], null, 'd3'),
+];
+cases.push(caseOf('ban-1.7:bai-16', doc17([
+  ...TRI,
+  S('P', 'point_in', ['A', 'B', 'C'], { u: 0.25, v: 0.3 }, 'P'),
+  S('l', 'isogonal_line', ['B', 'A', 'C', 'P'], null, 'd4'), S('m', 'parallel', ['P', 'bc'], null, 'd5'),
+  S('Q', 'intersection', ['l', 'm'], null, 'Q'),
+  S('E', 'angle_point', ['Q', 'A', 'P', 'C', 'B', 'ca'], { flip: true }, 'E'),
+  S('F', 'angle_point', ['Q', 'A', 'P', 'B', 'C', 'ab'], { flip: true }, 'F'),
+  S('ef', 'line', ['E', 'F'], null, 'd6'), S('T', 'intersection', ['ef', 'bc'], null, 'T'),
+  S('w', 'circumcircle', ['P', 'B', 'C'], null, 'ω1'),
+  S('R', 'tangent_point', ['w', 'T'], { which: 0 }, 'R'),
+  S('ci', 'circumcircle', ['A', 'R', 'C'], null, 'ω2'), S('I', 'center', ['ci'], null, 'I'),
+  S('pb', 'perp_bisector', ['R', 'E'], null, 'd7'), S('ti', 'line', ['T', 'I'], null, 'd8'), S('U', 'intersection', ['pb', 'ti'], null, 'U'),
+  S('cu', 'circle', ['U', 'R'], null, 'ω3'),
+  S('X', 'fixed_point', ['cu', 'P'], null, 'X'), S('Y', 'fixed_point', ['cu', 'P'], { which: 1 }, 'Y'),
+  S('al', 'angle_line', ['A', 'C', 'A', 'B', 'C'], null, 'd9'), S('al2', 'angle_line', ['A', 'C', 'A', 'B', 'C'], { flip: true }, 'd10'),
+  S('ma', 'measure_angle', ['B', 'A', 'C']), S('ml', 'measure_len', ['E', 'F']), S('mr', 'measure_ratio', ['A', 'E', 'A', 'F']),
+]), false));
+cases.push(caseOf('ban-1.7:quy-tich', doc17([
+  ...TRI,
+  S('w', 'circumcircle', ['A', 'B', 'C'], null, 'ω'), S('D', 'point_on', ['w'], { t: 1.1 }, 'D'), S('D2', 'point_on', ['bc'], { t: 0.3 }, 'D_2'),
+  S('H', 'orthocenter', ['A', 'B', 'D'], null, 'H'), S('N', 'midpoint', ['A', 'D2'], null, 'N'),
+  S('L1', 'locus', ['H', 'D'], { n: 60 }), S('L2', 'locus', ['N', 'D2'], { n: 40 }), S('L3', 'locus', ['N', 'A']),
+  S('ad', 'line', ['A', 'D2'], null, 'd4'), S('X', 'fixed_point', ['ad', 'D2'], null, 'X'), S('X2', 'fixed_point', ['ad', 'D2'], { which: 1 }, 'X_2'),
+  S('pd', 'parallel', ['D2', 'ca'], null, 'd5'), S('Z', 'fixed_point', ['pd', 'D2'], null, 'Z'),
+]), false));
+// bản 1.8: điểm thoả điều kiện (Brocard, PB = PC và ∠BPC = 120°, ∠BRC = 90° – một điều kiện, điểm chính giữa cung)
+cases.push(caseOf('ban-1.8:diem-thoa-dieu-kien', doc17([
+  ...TRI,
+  S('P', 'solve_point', ['A', 'B', 'C'], { x: 0.3, y: 1.5, conds: [{ t: 'ang', a: [-1, 0, 1, -1, 1, 2] }, { t: 'ang', a: [-1, 1, 2, -1, 2, 0] }] }, 'P'),
+  S('Q', 'solve_point', ['B', 'C'], { x: 0.5, y: -1, conds: [{ t: 'len', a: [-1, 0, -1, 1] }, { t: 'angv', a: [0, -1, 1], v: 120 }] }, 'Q'),
+  S('R', 'solve_point', ['B', 'C'], { x: 1, y: 2, conds: [{ t: 'angv', a: [0, -1, 1], v: 90 }] }, 'R'),
+  S('w', 'circumcircle', ['A', 'B', 'C'], null, 'ω'),
+  S('T', 'solve_point', ['w', 'B', 'C'], { x: 0.5, y: -3, conds: [{ t: 'on', a: [0] }, { t: 'len', a: [-1, 1, -1, 2] }] }, 'T'),
+  S('U', 'solve_point', ['bc', 'A'], { x: 1, y: 0, conds: [{ t: 'on', a: [0] }] }, 'U'),
+]), false));
+// bộ khám phá trên hình có điểm trong tam giác (Python phải xê dịch (u, v) giống JS)
+cases.push(caseOf('ban-1.8:kham-pha-diem-trong', doc17([
+  ...TRI,
+  S('P', 'point_in', ['A', 'B', 'C'], { u: 0.3, v: 0.25 }, 'P'),
+  S('M', 'midpoint', ['A', 'P'], null, 'M'), S('N', 'midpoint', ['B', 'P'], null, 'N'), S('K', 'midpoint', ['C', 'P'], null, 'K'),
+  S('mn', 'segment', ['M', 'N'], null, 'd4'),
+]), true));
 console.log(JSON.stringify({ format: 'doi-chieu-js', cases }));

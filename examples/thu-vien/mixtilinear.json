@@ -1,0 +1,183 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Đường tròn mixtilinear",
+ "view": {
+  "bbox": [
+   -8.107,
+   4.654,
+   8.307,
+   -5.224
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.4,
+    "y": 3.8
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3.8,
+    "y": -1.6
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 4,
+    "y": -1.6
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s8",
+   "type": "center",
+   "args": [
+    "s7"
+   ],
+   "name": "O",
+   "joinPrev": true
+  },
+  {
+   "id": "s9",
+   "type": "mixtilinear",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s10",
+   "type": "center",
+   "args": [
+    "s9"
+   ],
+   "name": "J",
+   "joinPrev": true
+  },
+  {
+   "id": "s11",
+   "type": "incenter",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "I"
+  },
+  {
+   "id": "s12",
+   "type": "intersection",
+   "args": [
+    "s9",
+    "s7"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "T"
+  },
+  {
+   "id": "s13",
+   "type": "projection",
+   "args": [
+    "s10",
+    "s4"
+   ],
+   "name": "K"
+  },
+  {
+   "id": "s14",
+   "type": "projection",
+   "args": [
+    "s10",
+    "s6"
+   ],
+   "name": "L"
+  },
+  {
+   "id": "s15",
+   "type": "segment",
+   "args": [
+    "s13",
+    "s14"
+   ],
+   "name": "d4"
+  },
+  {
+   "id": "s16",
+   "type": "arc_midpoint",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "params": {
+    "contains": true
+   },
+   "name": "S"
+  },
+  {
+   "id": "s17",
+   "type": "line",
+   "args": [
+    "s12",
+    "s16"
+   ],
+   "name": "d5"
+  }
+ ]
+}

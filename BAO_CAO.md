@@ -496,6 +496,597 @@ python -m unittest discover -s lab/tests -t .
 
 ---
 
+# Bản 1.2 – Tự dùng thử như giáo viên Olympic, rồi sửa
+
+Kết quả chi tiết từng bài (ảnh, đề tóm tắt, số thao tác, vấn đề gặp và đã sửa chưa): **`reports/dung-thu.html`**.
+
+## 1. Cách dùng thử
+
+**23 bài**, đa dạng cấu hình: 13 bài IMO (2008/1, 2010/2, 2012/5, 2013/4, 2014/4, 2015/4, 2017/4, 2018/1, 2019/6,
+2021/4, 2023/2, 2024/4, 2025/2), 2 bài VMO (2014/4, 2016/3), 7 cấu hình hay gặp (bổ đề tâm nội tiếp – bàng tiếp;
+đường tròn Euler – Feuerbach; mixtilinear; nghịch đảo √(bc); tứ giác nội tiếp – Brocard; tiếp tuyến chung – Monge;
+tâm đồng dạng xoắn) và một hình dày (tam giác, I, I_A, I_B, I_C, ba đường tròn bàng tiếp, (O), trung điểm M_A…, tiếp
+điểm T_A…, điểm đối tâm A′, B′, C′ – nhãn có chỉ số dưới và dấu phẩy).
+
+**Dựng hoàn toàn qua giao diện** (`tests/browser/dung-thu/`): một "người dùng ảo" điều khiển Chromium headless bằng
+Playwright – bấm biểu tượng nhóm trên thanh công cụ dọc, mở menu con, bấm công cụ; bấm lên bảng vẽ vào điểm (theo vị trí
+đang hiện), lên một đường (tìm chỗ trống trên đường như mắt người nhìn), vào chỗ hai đường cắt nhau; đặt tên bằng nháy
+đúp + gõ (bản 1.1) hoặc gõ ngay (bản 1.2). Không ghi JSON trực tiếp. Khi giao diện cản trở, người dùng ảo xử lý như người
+thật và **ghi lại vấn đề**: thẻ nổi che chỗ cần bấm → bỏ chọn cho thẻ ẩn; tên đã bị chiếm → đổi tên điểm kia trước; chỗ
+cắt ngoài màn hình → "Thu phóng vừa hình"; bấm vào chỗ cắt tạo nhầm giao điểm → hoàn tác, chọn lần lượt hai đường…
+
+Mỗi bài ghi: **số thao tác** (chọn một công cụ / một lần bấm lên hình / đặt một tên / một lệnh menu hay phím) và số lần
+bấm chuột; **vấn đề gặp**; **nhãn đè** (đo trên khung chữ thật sau khi thu phóng vừa hình: nhãn–nhãn, nhãn–điểm,
+nhãn–đường); **kéo thử** 36 bước quanh một vòng (điểm "nhảy" – một bước dịch > 60 px và gấp 6 lần hai bước kề –,
+đối tượng biến mất, thời gian JS mỗi khung); **kiểm chứng** kết luận của đề bằng số trên hình vừa dựng và trên 30 cấu
+hình xê dịch (6% kích thước hình, bỏ cấu hình trái giả thiết của đề), đúng nếu sai số tương đối ≤ 10⁻⁷; **bộ khám phá**
+có tự tìm ra kết luận không.
+
+Cùng kịch bản được chạy trên **bản 1.1** (worktree ở commit mốc 1 – `ket-qua-truoc.json`) và **bản 1.2**
+(`ket-qua-sau.json`), nên số liệu so sánh được trực tiếp.
+
+**Kiểm chứng không phát hiện công cụ nào dựng sai.** Bốn lần kết luận "sai" khi viết kịch bản đều do *tôi* chọn cấu
+hình đặc biệt, kiểm chứng số đã bắt được: IMO 2025 với MN đúng bằng bán kính Γ (khi đó P nằm trên Γ, F ≡ P); IMO 2021 với
+tứ giác có ∠A = ∠C (giao AB ∩ CD nằm trên (AIC) nên X ≡ T) và cách đặt tên đỉnh làm X không nằm trên phần kéo dài *qua A*
+như đề; hai đường AB, CD gần song song ở bài đồng dạng xoắn. Công cụ đều cho đúng hình đã dựng.
+
+## 2. Kết quả
+
+| Bài | Thao tác | Lần bấm | Nhãn đè | Kiểm chứng (sai số lớn nhất) | Khám phá tìm ra kết luận |
+|---|---|---|---|---|---|
+| IMO 2008 – Bài 1 | 64 → 46 | 97 → 46 | 8 → 0 | đúng (3·10⁻¹⁵) | #4 → #4 |
+| IMO 2010 – Bài 2 | 44 → 40 | 65 → 50 | 1 → 0 | đúng (3·10⁻¹⁵) | #1 → #1 |
+| IMO 2012 – Bài 5 | 55 → 40 | 87 → 46 | 1 → 2 | đúng (4·10⁻¹⁵) | – → – |
+| IMO 2013 – Bài 4 | 57 → 43 | 92 → 48 | 3 → 1 | đúng (3·10⁻¹⁶) | #2 → #2 |
+| IMO 2014 – Bài 4 | 51 → 41 | 82 → 46 | 3 → 2 | đúng (3·10⁻¹⁵) | #1 → #1 |
+| IMO 2015 – Bài 4 | 61 → 43 | 91 → 51 | 7 → 2 | đúng (4·10⁻¹⁴) | #1 → #1 |
+| IMO 2017 – Bài 4 | 54 → 38 | 86 → 46 | 4 → 2 | đúng (6·10⁻¹⁶) | #1 → #1 |
+| IMO 2018 – Bài 1 | 35 → 33 | 51 → 42 | 1 → 0 | đúng (2·10⁻¹⁶) | – → #1 |
+| IMO 2019 – Bài 6 | 65 → 59 | 94 → 69 | 4 → 1 | đúng (4·10⁻⁸) | #5 → #5 |
+| IMO 2021 – Bài 4 | 72 → 54 | 112 → 53 | 2 → 0 | đúng (9·10⁻¹⁶) | – → – |
+| IMO 2023 – Bài 2 | 56 → 48 | 84 → 58 | 3 → 2 | đúng (2·10⁻¹⁴) | – → – |
+| IMO 2024 – Bài 4 | 59 → 49 | 90 → 56 | 1 → 0 | đúng (3·10⁻¹⁶) | – → – |
+| IMO 2025 – Bài 2 | 52 → 50 | 77 → 63 | 3 → 0 | đúng (1·10⁻¹³) | #5 → #6 |
+| VMO 2014 – Bài 4 | 76 → 67 | 112 → 74 | 17 → 2 | đúng (3·10⁻¹⁵) | – → – |
+| VMO 2016 – Bài 3 | 55 → 49 | 83 → 59 | 7 → 3 | đúng (7·10⁻¹⁶) | #2 → #2 |
+| Bổ đề tâm nội tiếp – bàng tiếp | 30 → 28 | 46 → 40 | 0 → 0 | đúng (1·10⁻¹⁵) | #1 → #1 |
+| Đường tròn Euler – định lý Feuerbach | 30 → 28 | 46 → 37 | 1 → 0 | đúng (5·10⁻¹⁶) | #1 → #1 |
+| Đường tròn mixtilinear | 50 → 40 | 78 → 50 | 0 → 0 | đúng (4·10⁻⁸) | – → – |
+| Nghịch đảo √(bc) | 97 → 47 | 155 → 63 | 27 → 1 | đúng (6·10⁻¹⁵) | – → – |
+| Tứ giác nội tiếp – định lý Brocard | 47 → 35 | 71 → 36 | 2 → 2 | đúng (2·10⁻¹⁴) | #1 → #1 |
+| Tiếp tuyến chung – định lý Monge | 54 → 47 | 90 → 56 | 3 → 0 | đúng (2·10⁻¹⁶) | #6 → #6 |
+| Tâm đồng dạng xoắn (quay + vị tự) | 39 → 50 | 56 → 56 | 1 → 0 | đúng (1·10⁻¹⁵) | – → – |
+| Tam giác với ba tâm bàng tiếp (hình dày) | 74 → 56 | 115 → 55 | 8 → 0 | đúng (6·10⁻¹⁶) | #1 → #1 |
+| **Tổng** | **1277 → 1031** | **1960 → 1200** | **107 → 20** | 23/23 | 14 → 15 |
+
+Thao tác theo loại (tổng 23 bài): chọn công cụ 527 → 306, bấm lên hình 590 → 587, đặt tên 127 → 108 (mỗi lần đặt tên
+ở bản 1.1 kéo theo 2–3 lần đổi công cụ), lệnh khác 33 → 30. Lần bấm chuột giảm 39% – phần lớn nhờ gõ tên ngay và dải
+công cụ vừa dùng. Kéo thử: không bài nào có điểm nhảy nghiệm hay đối tượng biến mất (sau khi dựng IMO 2015 chắc hơn, xem
+vấn đề 15), JS mỗi khung ≤ 0,53 ms. Ghi chú: bài đồng dạng xoắn nhiều thao tác hơn vì bản 1.2 dựng thêm được D′ (bản 1.1
+không có công cụ); IMO 2012 nhãn đè 1 → 2 (nhãn C, K ở chỗ quá nhiều đường đi qua, vẫn không đè điểm/nhãn). 20 chỗ "đè"
+còn lại đều là nhãn chạm một đường ở điểm có 4–6 đường đi qua; không còn nhãn đè nhãn hay nhãn đè điểm.
+
+## 3. Các vấn đề, xếp theo mức ảnh hưởng tới việc dạy – và đã sửa chưa
+
+| # | Mức | Vấn đề | Đã sửa chưa |
+|---|---|---|---|
+| 1 | Cao | **Nghịch đảo chỉ áp cho điểm.** Bài √(bc) phải lấy 3 điểm, nghịch đảo từng điểm rồi dựng đường tròn qua 3 ảnh (97 thao tác); ảnh của (O) qua tâm nghịch đảo là đường thẳng nên "đường tròn qua 3 điểm" không xác định. | **Đã sửa.** Công cụ Nghịch đảo nhận điểm/đường thẳng/đường tròn, tự chọn ảnh là đường thẳng hay đường tròn (loại bước `invert_line`, `invert_circle`). 47 thao tác. |
+| 2 | Cao | **Góc quay, tỉ số vị tự phải gõ số.** Phép quay ∠ASC + vị tự SC/SA của tâm đồng dạng xoắn không dựng được (kéo là sai). | **Đã sửa.** *Quay theo góc trên hình* (∠ABC), *Vị tự theo tỉ số trên hình* (AB/CD, có dấu), *Đồng dạng tâm O biến A thành B*; cho chọn lại cùng một điểm (S vừa là tâm vừa là đỉnh góc). |
+| 3 | Cao | **Tâm đường tròn tự đặt tên chiếm chữ cái của đề** (D, K, L, A, E…): IMO 2015 không đặt được K, L; IMO 2017 mất A; "tứ giác nội tiếp" đặt đỉnh thứ tư là E. | **Đã sửa.** Tâm tự đặt tên O, O₁, O₂… |
+| 4 | Cao | **Thẻ thuộc tính che hình, chặn lần bấm**: đối tượng vừa dựng được chọn nên thẻ hiện ở góc phải, che đúng chỗ cần bấm tiếp; bấm điểm gần góc phải thì thẻ hiện đè lên chính điểm, nháy đúp không đổi tên được. | **Đã sửa.** Thẻ chỉ hiện với công cụ Chọn, tự dời xuống khi che đối tượng đang chọn. |
+| 5 | Cao | **Nhãn đè**: nhãn rộng (M_c, I_A) đè chính điểm của nó (khoảng cách tính tới *tâm* nhãn); nhãn ở giao nhiều đường đè lên đường; hai điểm gần nhau chồng nhãn (M_C và C′). | **Đã sửa.** Đặt nhãn theo khung chữ thật (mục 4). 107 → 20 chỗ. |
+| 6 | Cao | **Đặt tên tốn 3–5 thao tác** (về Chọn, nháy đúp, gõ, chọn lại công cụ). | **Đã sửa.** Điểm vừa dựng được chọn sẵn, gõ chữ là đặt tên tại chỗ; F2/nháy đúp để sửa. |
+| 7 | Vừa | **Đổi sang tên đã có bị từ chối** (tam giác vuông cần vuông tại C: 3 lần đổi tên qua tên tạm). | **Đã sửa.** Đổi chỗ hai tên. |
+| 8 | Vừa | **Chọn công cụ trong menu Công cụ cần 3 lần bấm**; ~40% thao tác là chọn công cụ. | **Đã sửa.** Dải "công cụ vừa dùng" (1 lần bấm). |
+| 9 | Vừa | **Đường thẳng kéo tới mép màn hình** làm rối hình (VMO 2014, nghịch đảo). | **Đã sửa.** "Đường thẳng vừa đủ" kiểu sách (mặc định, tắt được); phần kéo dài hiện mờ khi đang dựng. |
+| 10 | Vừa | **Bộ khám phá bỏ sót kết luận**: mẫu xê dịch phá giả thiết (E ra ngoài đoạn AC, tam giác hết nhọn) – IMO 2018; hình có tiếp điểm thì mọi mẫu bị loại "gần tiếp xúc" (mixtilinear: 0 mẫu). | **Đã sửa.** Lấy mẫu giữ cấu hình gốc (mục 4); bản Python sửa giống hệt. |
+| 11 | Vừa | **Hai điểm trùng nhau: luôn chọn điểm dựng trước** (ảnh nghịch đảo của B trùng C′). | **Đã sửa.** Đối tượng dựng sau (nằm trên) được chọn. |
+| 12 | Vừa | **Bấm vào chỗ ba đường cùng đi qua: chọn cặp bất kỳ** – hình lưu lại có thể "chứa sẵn" kết luận (IMO 2010). | **Đã sửa.** Lấy cặp đường dựng sau cùng. |
+| 13 | Vừa | **Điểm vừa dựng ngoài khung nhìn** (M, N ở IMO 2014; S₁₂ ở Monge): phải tìm menu Thu phóng. | **Đỡ hơn.** Phím `Home` + thông báo; không tự đổi khung nhìn (để khỏi mất chỗ khi đang giảng). |
+| 14 | Thấp | **Giao điểm ở rất xa**: chọn lần lượt hai đường, công cụ tạo cả hai giao điểm (đôi khi phải xoá một). | Chưa sửa (ít gặp, vẫn làm được). |
+| 15 | Thấp | Kéo A ở IMO 2015 làm mất 11 đối tượng (Γ vẽ bằng điểm bán kính tự do). | Không phải lỗi công cụ; thư viện dựng chắc hơn (D trên BC, đường tròn tâm A qua D). |
+| 16 | Thấp | Bộ khám phá chưa tìm đoạn bằng nhau, góc bằng nhau, tổng độ dài (IMO 2012, 2021, 2023, 2024, VMO 2014a). | Chưa làm (xem mục 7). Vẫn kiểm chứng được bằng số. |
+
+Không phát hiện vấn đề kéo thả (không nhảy nghiệm, không giật) ở cả 23 bài.
+
+## 4. Tính năng lớn đã thêm – và vì sao thật sự cần
+
+1. **Nghịch đảo đường thẳng/đường tròn** (hạn chế đã biết của bản 1.1; dùng thử cho thấy bài nghịch đảo tốn gấp đôi thao
+   tác và không dựng được ảnh qua tâm). Loại đối tượng của ảnh (đường thẳng/đường tròn) phải cố định theo cách dựng để
+   tệp JSON mô tả được, nên tách hai loại bước; công cụ tự chọn theo hình lúc dựng. Đường tròn "qua tâm" xét với dung sai
+   tương đối 10⁻⁷ (cấu hình sai loại → không xác định, không vẽ nhầm).
+2. **Góc/tỉ số lấy trên hình** và **phép đồng dạng tâm O biến A thành B** (hạn chế đã biết; bài đồng dạng xoắn không dựng
+   được). Thêm loại bước `rotate_by`, `homothety_by`, `spiral`; công cụ khai báo `allowRepeat` để chọn lặp một điểm.
+3. **Đặt nhãn theo khung chữ trên màn hình** (`placeLabels` trong `src/core/labels.js`): thuật toán cũ chỉ chọn *hướng* và
+   đặt *tâm* nhãn cách điểm 11 px, không biết kích thước chữ – nguồn gốc của 107 chỗ đè. Mỗi điểm thử 24 hướng × 2 khoảng
+   cách; khung chữ đặt kiểu "neo" TikZ (cạnh/góc gần điểm nhất cách điểm 2 px); chi phí = 8 × số đường cắt qua khung +
+   12 × số điểm bị che + 14 (+ diện tích) × số nhãn đã đặt bị đè + 6 nếu ra ngoài khung + ưu tiên nhẹ hướng ra xa tâm
+   hình; đặt tham lam, điểm "khó" (nhiều đường qua, sát điểm khác) đặt trước. Chỉ chạy khi hình thay đổi hoặc phóng to/thu
+   nhỏ (gom 120 ms), không chạy khi kéo. Nhãn người dùng đã kéo được giữ và được tránh.
+4. **Đường thẳng vừa đủ** (`trimmedRange` trong `geom.js`, dùng chung cho màn hình và TikZ): dùng thử cho thấy hình nhiều
+   đường thẳng rất rối. Khi đang dựng, phần kéo dài hiện mờ (vẫn bấm được chỗ cắt) – nếu không, VMO 2014 tốn thêm 6 thao
+   tác vì chỗ cắt bị ẩn.
+5. **Thư viện ví dụ** (yêu cầu): menu **Ví dụ** theo nhóm; dữ liệu là các tệp `examples/thu-vien/*.json` (chính là hình
+   người dùng ảo dựng qua giao diện, chỉ lưu khi kết luận kiểm chứng đúng), module `src/core/thu-vien.js` nhập các tệp này
+   để esbuild đóng gói vào `dist/app.js` – mở `index.html` từ ổ đĩa không mạng vẫn dùng được (dist tăng 240 → 357 KB).
+6. **Bộ khám phá giữ cấu hình của đề khi lấy mẫu**: tam giác vẽ trên hình giữ chiều và góc nhọn/tù rõ ràng; giao điểm với
+   một đoạn thẳng phải còn trong đoạn; giao điểm của hai đường tiếp xúc ngay ở hình gốc không bị loại "gần tiếp xúc". Bản
+   Python `lab/scan/explorer.py` sửa giống hệt – test đối chiếu JS/Python vẫn khớp hoàn toàn.
+
+Không làm: tìm đoạn/góc bằng nhau trong bộ khám phá (vấn đề 16) – tính năng lớn, phải sửa đồng thời bản Python để giữ
+"kết quả giống hệt"; kết luận dạng này vẫn kiểm chứng được bằng số.
+
+## 5. Hiệu năng (test `npm run test:perf`, hình dày, cùng một máy)
+
+| | bản 1.1 | bản 1.2 |
+|---|---|---|
+| Luồng chính / khung, CPU ×1 | 6,29 ms | 6,49 ms |
+| Luồng chính / khung, CPU ×4 | 28,8 ms | 30,4 ms |
+| JS / khung, CPU ×4 | 3,41 ms | 3,66 ms |
+| Một lần vẽ (JS), CPU ×4 | 0,73 ms | 0,96 ms |
+| p95 khoảng cách hai khung, ×4 | 16,7 ms | 16,8 ms (đủ 60 khung/giây) |
+
+Máy phát triển lần này chậm hơn máy đo bản 1.1 (bảng ở mục A bản 1.1), nên so sánh trên cùng máy. Phần tăng ~0,2 ms mỗi
+lần vẽ là tính "đường thẳng vừa đủ" (đường × điểm mỗi khung); đặt nhãn không chạy khi kéo. Mọi ngưỡng tự kiểm vẫn đạt.
+Lần đo cuối (bản 1.2 hoàn chỉnh, kèm thư viện ví dụ): 5,91 ms (×1), 29,8 ms (×4), p95 16,8 ms – các lần đo dao động
+khoảng ±0,5 ms trên máy này.
+
+## 6. Định dạng JSON
+
+Không đổi trường hay loại bước cũ; chỉ **thêm** năm loại bước (`invert_line`, `invert_circle`, `rotate_by`,
+`homothety_by`, `spiral` – đã ghi trong `docs/DINH_DANG_JSON.md`) và lõi Python `lab/core` tính được cả năm (dữ liệu
+đối chiếu `lab/tests/fixtures/js_doi_chieu.json` sinh lại, thêm các trường hợp ảnh là đường thẳng/đường tròn). Tệp và
+link cũ mở bình thường. Tâm đường tròn tên O₁… chỉ là tên mặc định khi dựng mới.
+
+## 7. Kiểm thử và hạn chế còn lại
+
+* `npm test`: 126 test đạt (thêm: mỗi công cụ mới kiểm theo định nghĩa ở 5 cấu hình – ảnh nghịch đảo của mọi điểm nằm
+  trên ảnh của đường; góc quay bằng ∠BCQ khi kéo; tỉ số; phép đồng dạng biến A thành B –, đã thử làm sai cố ý 2 công thức
+  và test phát hiện; mọi hình trong thư viện hợp lệ, mọi đối tượng xác định, xuất TikZ được).
+* `npm run test:browser`: đạt, thêm `tests/browser/smoke3.mjs` (menu Ví dụ, gõ để đặt tên, đổi chỗ tên, thẻ thuộc tính,
+  nghịch đảo đường tròn, quay theo góc chọn lặp điểm, công cụ vừa dùng, đường vừa đủ).
+* `npm run test:perf`: đạt. Python: `python -m unittest discover -s lab/tests -t .` – 23 test đạt (1 bỏ qua vì máy này
+  chưa cài Newclid).
+* Dùng thử: `node tests/browser/dung-thu/chay.mjs [--luu]` (~8 phút), `node tests/browser/dung-thu/bao-cao.mjs`.
+
+Hạn chế còn lại: vấn đề 13, 14, 16 ở trên; giao điểm của hai đường tròn tiếp xúc (điểm Feuerbach, tiếp điểm mixtilinear)
+bấm được nhưng sai số ~10⁻⁸ (căn bậc hai của sai số làm tròn) – đủ cho hiển thị và kiểm chứng 10⁻⁷; nhãn ở điểm có 4–6
+đường đi qua vẫn có thể chạm một đường; "người dùng ảo" chỉ đo được những gì đo bằng máy (số thao tác, nhãn đè, sai số) –
+cảm nhận "đẹp" của hình tôi tự xem lại trên ảnh chụp từng bài.
+
+**Gợi ý tiếp theo**: bộ khám phá tìm đoạn/góc bằng nhau (cả JS và Python); công cụ "giao điểm" chỉ tạo nghiệm gần chỗ
+bấm khi chọn lần lượt hai đường; lưu "công cụ vừa dùng" và "Công cụ của tôi" kèm tệp hình; thử với giáo viên thật trên
+máy chiếu.
+
+---
+
+# Bản 1.3 – Theo đề xuất sau khi dùng bản 1.2
+
+1. **Tên ảnh qua phép biến hình = tên tạo ảnh + `'`.** Các công cụ biến hình (đối xứng tâm/trục, quay, vị tự, tịnh
+   tiến, nghịch đảo, quay/vị tự theo góc/tỉ số trên hình, đồng dạng) đặt tên ảnh của điểm A là A′, ảnh của A′ là A″
+   (tên đã có thì thêm phẩy, tối đa 3, rồi mới dùng tên tự động). Chỉ áp cho công cụ *biến hình*: các công cụ dựng
+   hình dùng phép quay/tịnh tiến bên trong (tam giác đều, hình vuông, hình bình hành…) vẫn đặt C, D như cũ. Ảnh của
+   đường thẳng/đường tròn vẫn đặt tên tự động. Cài đặt: cờ `prime` trên đặc tả bước, `primeName` trong
+   `src/core/apply.js`. Test: `tests/library.test.mjs`.
+2. **Nhiều tab hình.** Dải tab thay ô "Tên hình" trên thanh trên; mỗi tab giữ hình, lịch sử hoàn tác/làm lại và khung
+   nhìn riêng (cất/lấy khi đổi tab, không đổi cấu trúc của App). *Hình mới* mở tab mới (không còn hỏi xoá hình cũ); mở
+   tệp, ví dụ, link mở ở tab mới, trừ khi tab đang mở còn trống. Nháy đúp tab để đặt tên hình; đóng tab có hình thì hỏi
+   lại. Bản nháp lưu **mọi tab** (`hinh-hoc-dong:nhap-tab`); bản nháp một hình của bản cũ vẫn được đọc. Mở lại đúng
+   link đã mở trước đó không tạo tab trùng.
+3. **Dán ảnh.** `Ctrl+V`, kéo thả tệp ảnh, *Tệp › Chèn ảnh…*. Ảnh theo toạ độ hình (phóng/dời cùng hình), vẽ dưới mọi
+   đối tượng; kéo để dời, kéo góc để đổi cỡ, độ đậm, *Khoá làm nền*, xoá. Định dạng: trường tuỳ chọn `images` (vị trí)
+   và `imageData` (data URL) – tệp cũ không đổi, bản Python bỏ qua. Dữ liệu ảnh để **ngoài** `doc` khi đang làm việc nên
+   200 bước hoàn tác không nhân bản ảnh (test kiểm tra một bước hoàn tác < 2000 ký tự). Link chia sẻ không chứa ảnh
+   (có nhắc); TikZ ghi chú là ảnh không được xuất. Ảnh lớn hơn 1600 px được thu nhỏ khi dán (PNG giữ PNG để chữ trong ảnh
+   chụp đề còn nét).
+
+4. **Giữ Shift để căn hướng.** Khi đang dựng, giữ Shift lúc bấm chỗ trống để tạo điểm: hướng từ điểm đã chọn (của lần
+   dùng công cụ đó) tới điểm mới được bắt về bội số của 15°, giữ nguyên khoảng cách; nằm ngang/thẳng đứng thì chép đúng
+   toạ độ của điểm mốc nên đường nằm ngang tuyệt đối. Hình xem trước cũng căn theo. Với công cụ Chọn, giữ Shift khi kéo
+   một điểm tự do: bắt hướng theo các điểm nối với nó bằng đoạn/tia/đường thẳng (lấy điểm làm dịch ít nhất). Dùng Shift
+   (thay vì một phím chữ) vì phím chữ đang dùng để gõ tên điểm và là quy ước quen thuộc của các phần mềm vẽ.
+
+Kiểm thử: `npm test` 127 test; `npm run test:browser` đạt, thêm `tests/browser/smoke4.mjs` (Shift: đoạn nằm ngang
+khi bấm, bắt 15° khi kéo; đối xứng A, B qua C ra
+A′, B′, ảnh của A′ ra A″; tab: mở, đổi, hoàn tác riêng từng tab, đặt tên, mở ví dụ ở tab mới; dán ảnh qua sự kiện
+paste thật, kéo ảnh, vẽ điểm lên trên ảnh, lưu/mở tệp có ảnh, khoá làm nền, bản nháp khôi phục mọi tab và ảnh sau khi
+tải lại trang); `npm run test:perf` đạt (6,44 ms/khung ×1, p95 16,8 ms ×4 – không đổi).
+
+Hạn chế: ảnh không có trong link chia sẻ; ảnh rất lớn có thể vượt dung lượng lưu nháp của trình duyệt (khoảng 5 MB,
+có nhắc lưu tệp); chưa có phím tắt chuyển tab (Ctrl+Tab bị trình duyệt giữ).
+
+# Bản 1.4 – Chữ trên bảng vẽ (đề bài, lời giải) và giao diện mới
+
+Bản này làm theo buổi trao đổi sau bản 1.3: khi dạy, ngoài hình còn phải viết. Các điều đã thống nhất: viết bằng **bàn
+phím** (trình duyệt trên Windows), cú pháp **gần LaTeX** nhưng gõ **nhanh hơn Overleaf**; phần chữ **không cố định**
+mà kéo đi được; đề bài thường là **ảnh cắt** dán vào; thường một chuỗi lời giải. Cuối cùng là yêu cầu **thiết kế lại
+giao diện cho đẹp hơn**.
+
+## 1. Khung chữ
+
+* `doc.boxes` (trường tuỳ chọn, tệp cũ không đổi): khung *Đề bài*, *Lời giải*, *Ghi chú* nổi trên bảng vẽ. Kéo thanh
+  tiêu đề để dời (hít vào mép), kéo góc để đổi cỡ, đổi cỡ chữ, thu gọn, xoá (có hỏi, hoàn tác được). Ba cách gắn:
+  màn hình / hình / điểm. Khung gắn màn hình luôn được giữ trong khung vẽ (mở bảng bên không che mất khung).
+* **Ảnh đề**: `Ctrl+V` (hoặc kéo thả, *Chèn › Ảnh đề bài từ tệp…*) tạo khung *Đề bài* chứa ảnh – vì đề thường là ảnh
+  cắt. Ảnh nền để đồ hình (bản 1.3) chuyển sang *Chèn › Ảnh nền để đồ hình…*. Dữ liệu ảnh trong khung dùng chung
+  `imageData` với ảnh nền (lưu trong tệp và bản nháp, không trong link).
+* **Hiển thị công thức** bằng KaTeX, đóng gói sẵn, phông nhúng trong `css/katex.css` → vẫn chạy offline từ `file://`.
+  Macro tiếng Việt `\goc`, `\tamgiac`, `\cung{}`, `\vecto{}`. Công thức sai cú pháp hiện đỏ tại chỗ, không làm hỏng khung.
+* **Bước**: dòng `---` (tuỳ chọn `@k`) chia lời giải; khi trình bày bước *k* hiện ở khung *k* (cùng nhịp với các bước
+  dựng), bước mới hiện có hiệu ứng nhẹ; số khung trình bày kéo dài theo lời giải.
+* **Tên điểm trong công thức** được bọc `\htmlData{p=id}` khi hiển thị: rê chuột lên tên thì đối tượng sáng lên.
+* **Đổi tên điểm → chữ đổi theo** (`renameInText` trong `src/text/markup.js`, gọi trong `setName` – cùng một bước hoàn
+  tác, cả khi đổi chỗ hai tên). Trong công thức: đổi mọi tên khớp (dài nhất trước, không cắt `I_A` thành `I`, bỏ qua
+  `\text{…}` và tên lệnh). Trong chữ thường: chỉ đổi "từ" tách được hết thành tên điểm ("tam giác ABC"), không đụng
+  "Ta", "Cho", "Gọi"; tên mới có chỉ số mà nằm ngoài công thức thì được bọc `$…$`. Bấm điểm khi đang soạn: ngoài công thức
+  tự bọc `$…$`, bấm liền nhau thì gộp vào công thức vừa chèn (`$ABC$`). Thêm sau khi dùng thử: tên điểm trước đây chỉ là
+  chữ, đổi tên điểm thì lời giải sai tên.
+* **Xuất phiếu LaTeX** (`src/export/latex.js`): đề + hình TikZ + lời giải đánh số theo bước + ảnh đề tải kèm.
+
+## 2. Bộ soạn gõ nhanh (CodeMirror 6, soạn ngay trong khung, xem trước bên dưới)
+
+Thiết kế để số phím gõ ít nhất mà không đụng Unikey/EVKey:
+
+* **Tự đổi trong công thức** (chỉ khi con trỏ đang ở trong `$…$`, kiểu Obsidian LaTeX Suite): `goc` → `\angle `,
+  `^o` → `^\circ`, `<=` → `\le`, `ff` → `\frac{|}{}`… Quy tắc toàn chữ chỉ khớp khi đứng trước không phải chữ cái hay
+  `\` (không đổi nhầm trong `\diff` hay một từ). Dấu cách gõ ngay sau lệnh vừa đổi được nuốt (không thành hai dấu cách).
+* **Gõ tắt** bắt đầu bằng `;` + `Tab`: các chữ Telex/VNI dùng (s f r x j w z, dd, số) không bao giờ đứng sau `;` nên
+  không xung đột với bộ gõ tiếng Việt. `;cm` → **Chứng minh.**, `;dpcm` → (đpcm), `;tgnt` → tứ giác nội tiếp…
+* Ô nhảy `${}` (Tab sang ô sau); `Tab` nhảy ra khỏi `}` `$` `)`; tự đóng `( [ { $` nhưng **không** đóng dấu `'` (tên B′).
+* Gợi ý tên điểm chỉ khi gọi (`Ctrl+Space`) hoặc khi đang gõ tên có chỉ số (`I_`) – để gõ nhanh "BAC" không bị bảng gợi
+  ý chặn Enter. **Bấm điểm trên hình** khi đang soạn thì chèn tên điểm (không tạo điểm mới).
+* Bộ quy tắc sửa được dạng văn bản (*Chèn › Gõ tắt và tự đổi…*), lưu trong trình duyệt.
+
+Ví dụ (đúng câu dùng trong test trình duyệt): phần công thức của "Ta có $\angle BHC + \angle A = 180^\circ$ và
+$\frac{A_1A_2}{2}$" gõ `goc` `goc` `^o` `ff…Tab…Tab` = 19 phím thay vì 36 phím `\angle ` `\angle ` `^\circ` `\frac{A_1A_2}{2}`,
+và không phải với tới `\` `{` `}`.
+
+## 3. Giao diện mới
+
+Viết lại `css/style.css` thành một hệ thống thống nhất dựa trên biến màu (`--chrome`, `--line`, `--ink`, `--muted`,
+`--accent`…), thay cho các màu viết rải rác:
+
+* Ý tưởng "bàn vẽ": tờ giấy trắng mực đen ở giữa (bảng vẽ **giữ nguyên** kiểu nét Sketchpad), khung bàn xám lạnh rất
+  nhạt, **một** màu nhấn xanh mực. Chữ toán và tên thương hiệu dùng chữ có chân nghiêng như trong sách.
+* Thanh trên cao hơn (42 px), có biểu tượng tam giác nội tiếp đường tròn + tên; tab hình dạng thẻ nổi; menu và các
+  bảng xổ có bóng nhiều lớp, mục rê chuột tô xanh nhạt, phím tắt hiện như phím thật.
+* Thanh công cụ dọc rộng hơn (52 px), công cụ đang dùng tô **đặc** màu nhấn – nhìn từ cuối lớp vẫn biết đang ở công cụ nào.
+* Dòng gợi ý thành một nhãn nổi nhỏ ở góc dưới bảng vẽ (không chiếm cả một dải đáy, trả lại diện tích cho hình).
+* Thẻ thuộc tính, hộp thoại, thông báo, thanh trình bày (dạng viên thuốc tối, kính mờ) cùng một kiểu bo góc/bóng.
+* Khung chữ: thanh tiêu đề có nhãn vai trò màu riêng (đề – xanh mực, lời giải – xanh lục, ghi chú – hổ phách), các nút
+  biểu tượng SVG chỉ hiện khi rê chuột, thân khung chữ có chân; bộ soạn chữ đơn cách **không ghép ký tự** (`=>` hiện đúng
+  hai ký tự đã gõ).
+* Menu *Ví dụ* nhiều cột không còn tràn khỏi màn hình; menu không bị xuống dòng khi mở nhiều tab.
+* **Chuyển tab bằng phím**: `Alt+1`…`Alt+9`, `Alt+PageUp`/`Alt+PageDown` (bù hạn chế của bản 1.3: `Ctrl+Tab` bị trình duyệt
+  giữ). Rê chuột lên tab thấy phím tắt.
+* **Ẩn nhanh**: `Ctrl+H` ẩn các đối tượng đang chọn (như Sketchpad), `Ctrl+Shift+H` hiện lại tất cả; có trong menu *Sửa*.
+  Trước đó phải chọn rồi tích *Ẩn* trong thẻ thuộc tính hoặc mở bảng các bước – người dùng thử hỏi "ẩn đường thẳng kiểu gì".
+* `index.html` gắn số phiên bản vào đường dẫn (`dist/app.js?v=1.4`…): khi dùng thử, trình duyệt từng giữ `app.js`/`style.css`
+  cũ trong bộ nhớ đệm trong khi `index.html` đã mới → mất dải tab, giao diện lẫn cũ mới. Mỗi bản sau cần tăng số này.
+
+## 4. Kiểm thử
+
+* `npm test`: 135 test (134 đạt, 1 bỏ qua vì máy không có pdflatex), thêm `tests/van-ban.test.mjs` (chia bước, khung
+  trình bày, gắn tên điểm, tự đổi/gõ tắt, xuất LaTeX).
+* `npm run test:browser`: đạt, thêm `tests/browser/smoke5.mjs` – 32 kiểm tra (cả bấm điểm tự bọc `$…$`, đổi tên điểm → chữ đổi theo, phím chuyển tab): `Ctrl+Enter` tạo khung, gõ thật với tự đổi
+  và gõ tắt, bấm điểm chèn tên, công thức không lỗi, tên gắn hình, rê chuột tô sáng, kéo/đổi cỡ chữ/đổi cách gắn (khung
+  gắn hình đi theo khi phóng), `Ctrl+V` ảnh thành khung Đề bài, trình bày hiện dần từng bước, lưu/mở tệp có khung và
+  ảnh, xuất `.tex` (có TikZ, `\includegraphics`, `\item`), xoá/hoàn tác. `smoke4` đổi sang chèn ảnh nền qua menu.
+* `npm run test:perf`: ×1 6,38 ms/khung, ×4 30,0 ms, p95 16,8 ms – như bản 1.3. Thêm `--khung` (3 khung chữ có công
+  thức, gắn màn hình/hình/điểm): ×1 6,65 ms, p95 16,8 ms. Vị trí khung cập nhật mỗi khung hình nhưng đọc kích thước
+  trước rồi mới ghi để không ép trình duyệt tính lại bố cục giữa chừng.
+* Dựng thử lại 23 bài qua giao diện mới (`tests/browser/dung-thu/chay.mjs`): 23/23 đúng, không lỗi trang; 1027 thao tác
+  (bản 1.2: 1031 – bớt 4 lần đặt tên nhờ tên phẩy A′ của bản 1.3), số lần bấm như cũ (1200).
+* Lab Python: 23 test đạt sau khi sinh lại `lab/tests/fixtures/js_doi_chieu.json` (tệp đối chiếu đã cũ từ bản 1.3 vì
+  tên phẩy A′ của công cụ đối xứng).
+
+## 5. Hạn chế
+
+* `dist/app.js` lớn lên (~1,6 MB) và `css/katex.css` ~370 KB vì đóng gói KaTeX + CodeMirror để chạy offline.
+* KaTeX chỉ hỗ trợ phần công thức (không có môi trường `tikzpicture`, `\usepackage`…); xuất `.tex` cần gói `vietnam`.
+* Khung gắn hình có thể ra ngoài khung nhìn khi phóng to (như mọi đối tượng hình) – `Home` đưa hình về.
+* Ảnh (cả ảnh đề) không có trong link chia sẻ; chữ trong khung thì có.
+* Phông Inter/STIX Two dùng nếu máy có, không thì dùng phông hệ thống (không nhúng để giữ dung lượng).
+
+# Bản 1.5 – Lưu trữ cho chắc và kho bài tập trên GitHub
+
+Sau buổi dạy thật đầu tiên trên bản 1.4 (6 bài trong 6 tab trên GitHub Pages), thầy/cô cần hai thứ: (1) không lo mất hình,
+lưu/mở lại nguyên hiện trạng; (2) **hệ thống lại các bài thành kho bài tập**, mở lại ở máy nào cũng được. Thầy/cô quyết:
+kho là repo riêng tư do thầy/cô tạo; một bài có thể (hiếm) nhiều hình; chưa làm phần cho học sinh.
+
+## 1. Bước 1 – lưu trên máy
+
+* **Lưu tất cả các tab vào một tệp** (`Ctrl+Shift+S`, định dạng `hinh-hoc-dong-bo`): giữ thứ tự tab, tab đang mở, khung
+  nhìn, khung chữ, ảnh. *Mở tệp* chọn được nhiều tệp, nhận cả tệp nhiều tab, không mở trùng hình đang mở; **kéo thả**
+  tệp `.json` vào bảng vẽ cũng mở (trước đây trình duyệt mở thẳng tệp và thay mất trang đang dạy).
+* **Dấu chưa lưu**: chấm cam trên tab có thay đổi chưa lưu ra tệp/kho (so chữ ký nội dung, không tính khung nhìn). Đóng
+  tab đã lưu không hỏi; *Tệp › Mở lại hình vừa đóng* (10 hình gần nhất).
+* **Bản nháp bền hơn**: ghi cả vào IndexedDB (hàng trăm MB) bên cạnh localStorage (~5 MB) – ảnh đề lớn không còn làm
+  hỏng bản nháp; lúc mở trang lấy bản mới hơn trong hai nơi. **Lịch sử bản nháp**: chụp các hình 5 phút một lần khi có
+  thay đổi (và lúc mở trang), giữ 12 bản; *Tệp › Khôi phục bản nháp cũ…* mở các hình của một mốc thành tab mới.
+* Lưu tệp/xuất LaTeX dùng chung `src/ui/download.js`: ở trang artifact của claude.ai (chặn tải kiểu thường) dùng khả
+  năng tải tệp của trang nếu có.
+
+## 2. Bước 2 – kho bài tập trên GitHub
+
+Chi tiết cài đặt, cách dùng, cấu trúc repo: [`docs/KHO_BAI.md`](docs/KHO_BAI.md). Tóm tắt thiết kế:
+
+* **Hai bên tách bạch**: chương trình (repo `Geometry`, công khai) không chứa dữ liệu; kho là repo **riêng tư**
+  (chương trình cảnh báo nếu repo kho công khai, vì học sinh sẽ xem được lời giải). Đọc/ghi bằng token fine-grained
+  chỉ có quyền *Contents* với đúng repo kho, lưu trong trình duyệt máy giáo viên. Không máy chủ riêng.
+* **Cấu trúc đọc được bằng mắt**: `bai/<mã>/bai.json` (thông tin + các hình), `bai/<mã>/anh/*` (ảnh tách tệp),
+  `bai/<mã>/thu-nho.jpg`, `buoi/<mã>.json`, `muc-luc.json` (chỉ mục để tìm nhanh), `chu-de.json`.
+* **Thông tin bài**: tên, nguồn (kỳ – năm – bài, tự điền từ tên dạng "VMO 2016 – Bài 4"; hoặc Tự ra), chủ đề (14 chủ
+  đề mặc định cho hình học Olympic, sửa được), kỹ thuật/thẻ (gợi ý thẻ đã dùng), độ khó 1–5, ghi chú riêng; trạng thái
+  (mới có đề / có hình / có lời giải) tự suy từ nội dung; "đã dạy" suy từ các buổi dạy.
+* **Lưu = một commit** (git data API: blobs → tree → commit → cập nhật nhánh `force: false`). Nhánh vừa đổi ở nơi khác →
+  đọc lại mục lục, làm lại (không mất bài của máy kia). Bài bị sửa ở nơi khác kể từ lúc mở (so sha `bai.json`, sha tính
+  ngay ở máy theo kiểu git) → hỏi: ghi đè / lưu thành bài mới / mở bản trên kho. Ảnh đã có không gửi lại; ảnh không dùng
+  bị xoá.
+* **Cửa sổ kho** (`Ctrl+K`): thẻ bài có ảnh thu nhỏ (vẽ bằng chính bộ vẽ, ở bảng vẽ ẩn), tìm không dấu trên tên, nguồn,
+  chủ đề, thẻ, chữ trong đề/lời giải; lọc chủ đề/nguồn/độ khó/trạng thái/đã dạy; sắp xếp; chọn nhiều bài → mở, tạo buổi.
+  Nút ⋯: sửa thông tin, các phiên bản cũ (mở bản cũ thành tab mới), thêm vào buổi, xoá.
+* **Buổi dạy**: từ các tab đang mở (tab chưa có trong kho thành bài mới) hoặc từ các bài chọn trong kho; sắp thứ tự;
+  mở buổi = mở đủ bài (bài đang mở không mở trùng); xuất **phiếu LaTeX cho cả buổi** (`toLatexSet`: mỗi bài một mục,
+  chỉ đề hoặc kèm lời giải, hình TikZ, ảnh đề tải kèm).
+* **Mất mạng**: lần lưu vào hàng chờ trong IndexedDB, nút kho báo *Chưa đồng bộ (n)*, tự lưu lên khi trình duyệt báo có
+  mạng / mỗi phút / lúc mở trang.
+* **Nhập**: tệp `.json` cũ (một hình hoặc nhiều tab), các tab đang mở, hoặc các bài ví dụ – một commit cho cả lượt.
+
+## 3. Kiểm thử
+
+* `tests/fake-github.mjs`: GitHub giả cài đúng các API dùng tới (contents, git data, commits), sha tệp tính đúng kiểu
+  git; dùng trong Node (`fetchFn`) và trong trình duyệt (`page.route`).
+* `tests/kho.test.mjs` (7 test): mã bài, repo trống, lưu/mở có ảnh và thu nhỏ, một commit mỗi lần lưu, không gửi lại ảnh
+  đã có, xoá ảnh thừa, phát hiện sửa ở máy khác, **hai máy lưu cùng lúc không mất bài**, nhiều hình một bài, nhập hàng
+  loạt một commit, buổi dạy, xoá bài gỡ khỏi buổi, lịch sử + mở bản cũ, chủ đề, tìm kiếm/lọc/sắp xếp.
+* `tests/browser/smoke6.mjs` (11 kiểm tra – bước 1) và `smoke7.mjs` (22 kiểm tra – kho, gõ/bấm như người dùng: kết nối
+  với token sai rồi đúng, Ctrl+S bài mới với tên/nguồn tự điền, lưu tiếp không hỏi, máy khác sửa → hỏi → ghi đè, mất
+  mạng → hàng chờ → có mạng tự lưu, nhập 22 bài ví dụ, Ctrl+K tìm "brocard"/lọc IMO/mở, 3 tab thành buổi dạy, phiếu
+  .tex cho buổi, mở buổi không trùng).
+* `npm test` 141 test đạt; `npm run test:browser` đạt.
+* Dựng thử lại 23 bài qua giao diện mới (có menu Kho, nút kho): 23/23 đúng. `npm run test:perf`: ×1 6,78 ms/khung,
+  ×4 31,8 ms, p95 16,7–16,8 ms – trong ngưỡng, như bản 1.4 (kho không chạy gì khi kéo điểm).
+
+## 4. Hạn chế
+
+* Cần mạng để lưu/mở kho; bài **mới** cần kết nối được kho lần đầu (khi mất mạng, tạm lưu ra tệp).
+* Token nằm trong trình duyệt của máy (chỉ nên dùng máy riêng); token hết hạn thì tạo token mới và dán lại.
+* Trang artifact của claude.ai chặn gọi GitHub – kho chỉ dùng được trên GitHub Pages hoặc khi mở `index.html` trên máy.
+* Chưa có phần cho học sinh (đã hoãn theo yêu cầu); kho thiết kế sẵn để sau này làm một trang chỉ đọc đề và hình.
+
+# Bản 1.6 – Bớt thao tác: phím tắt công cụ, chọn trước dựng sau; LaTeX chuẩn
+
+Góp ý sau khi dùng: "ít phím tắt, mấy cái dùng nhiều cứ phải bấm 2–3 lần mới tới". Việc làm nhiều nhất: **lấy giao
+điểm, vuông góc, song song… rồi ẩn đường**. Thứ hai: **mã LaTeX thiếu, compile ra không chuẩn** (`\overrightarrow`,
+`\widehat`). Thầy/cô muốn phím tắt có `Ctrl`.
+
+## 1. Phím tắt và bớt số lần bấm
+
+Trước bản này không có phím tắt nào cho công cụ dựng hình; giao điểm, vuông góc, song song cần 2 lần bấm (mở nhóm, chọn
+công cụ), các công cụ trong menu *Công cụ* cần 3.
+
+* **Ctrl + chữ** cho 14 công cụ cơ bản (`src/ui/shortcuts.js`): `Ctrl+P` điểm, `G` giao điểm, `M` trung điểm, `D` đoạn,
+  `L` đường thẳng, `Shift+L` tia, `Q` đường tròn, `Shift+O` đường tròn qua 3 điểm, `U` vuông góc, `I` song song (∥),
+  `J` chân đường vuông góc, `B` phân giác, `Shift+M` trung trực, `E` đối xứng. Không dùng phím một chữ vì chữ đang dùng
+  để gõ tên điểm vừa dựng. Tránh các tổ hợp trình duyệt không cho trang chặn (`Ctrl+N/T/W`, `Ctrl+Shift+Q` – thoát
+  Chrome trên Windows) và các phím đã dùng (`Ctrl+S/O/K/H/Z/Y/C/V/X/A`…).
+* **Sửa được** (`Ctrl+/`, *Sửa › Phím tắt…*): gán phím cho bất kỳ công cụ nào (cả công cụ trong menu *Công cụ*, công cụ tự
+  tạo), bỏ phím, về mặc định; chặn tổ hợp đã dùng; lưu trong trình duyệt. Phím hiện cạnh tên công cụ trên thanh công cụ.
+* **Chọn trước, dựng sau** (`App.activateTool`): có đối tượng đang chọn hợp với công cụ thì dựng ngay (hai đường +
+  `Ctrl+G`; điểm + đường + `Ctrl+U/I/J`; một đoạn + trung điểm/trung trực; ba đỉnh + tâm nội tiếp…); chọn mới đủ một phần
+  thì thành các lần chọn đầu.
+* **Tìm công cụ theo tên** (`Space`): không dấu, khớp đầu từ hoặc chữ đầu (`dtnt` → đường tròn nội tiếp), công cụ vừa
+  dùng lên trước; `Enter` dùng ngay (cũng áp "chọn trước, dựng sau").
+* **Alt + bấm** vào đối tượng: ẩn ngay (một thao tác thay cho chọn rồi `Ctrl+H`).
+* Ví dụ "hạ đường cao từ A xuống BC rồi ẩn": trước kia mở nhóm *Dựng* → *Đường vuông góc* → bấm A → bấm BC → mở nhóm
+  *Điểm* → *Giao điểm* → bấm chỗ cắt → chọn đường → tích *Ẩn* (≈ 9 thao tác); nay chọn A, BC rồi `Ctrl+J` (chân đường vuông
+  góc, không cần đường phụ) – 3 thao tác.
+
+## 2. LaTeX
+
+* **Lỗi `\widehat`, `\overrightarrow` hiển thị sai** (mũ chỉ trùm chữ cuối, mũi tên mất đầu): khi đổi xuống dòng thành
+  `<br>`, chương trình đổi cả ký tự xuống dòng trong dữ liệu SVG của KaTeX (dấu mũ, mũi tên là hình SVG). Nay chỉ đổi trong
+  chữ thường. Test kiểm tra không có `<br>` trong SVG và độ rộng thật của dấu mũ trên trang.
+* **Viết như trong tệp .tex**: `\(…\)`, `\begin{align*}` (và `equation*`, `gather*`…) ngoài `$`, `\textbf`, `\emph`,
+  `\underline`, `\\`, `~`, `--`, `\begin{itemize}/{enumerate}` + `\item`, `\%`… – trước đây hiện nguyên chữ thô.
+* **Xuất .tex compile được**: trước đây mọi `\` trong chữ bị đổi thành `\textbackslash{}` và xuống dòng trong `$$…$$` bị
+  chèn `\\`. Nay chữ được giữ nguyên là LaTeX (chỉ thoát `%`, `&`, `#`, `_`, `^` chưa có `\` để "50%" vẫn đúng), không
+  chèn `\\` vào công thức hay quanh `\begin`, `\item`; lời mở đầu thêm `\ssong`, `\vgoc`, `\wideparen` (dự phòng).
+  Test mới **biên dịch thật bằng pdflatex** phiếu một bài và phiếu cả buổi có `\widehat`, `\overrightarrow`,
+  `\wideparen`, `align*`, `itemize`, `\backsim`, `\measuredangle`, `\nparallel`, tiếng Việt (máy phát triển đã cài
+  TeX Live + vntex).
+* Gợi ý lệnh khi gõ `\` thêm ~40 lệnh (`widehat`, `overrightarrow`, `wideparen`, `measuredangle`, `backsim`, `textbf`,
+  `begin{align*}`…), lệnh có `{}` đặt con trỏ vào trong ngoặc. Tự đổi `hat` → `\widehat{}`; gõ tắt `;gh`.
+
+## 3. Kiểm thử
+
+`npm test` 146 test (thêm 4 test chữ/LaTeX, trong đó 1 test biên dịch bằng pdflatex; test TikZ biên dịch bằng pdflatex
+trước đây bị bỏ qua nay chạy được); `npm run test:browser` đạt, thêm `tests/browser/smoke8.mjs` (19 kiểm tra: phím tắt,
+chọn trước dựng sau với giao điểm/vuông góc/chân đường vuông góc/song song/chọn một phần, Alt + bấm ẩn và Ctrl+Z,
+bảng lệnh "dtnt"/"duong tron ngoai" + Enter dựng ngay trên A, B, C, gán phím mới và chặn phím đã dùng, dấu mũ/mũi tên
+vẽ đủ rộng).
+Dựng thử lại 23 bài qua giao diện: 23/23 đúng. `npm run test:perf`: ×1 6,67 ms/khung, ×4 31,6 ms, p95 16,7–16,8 ms – đạt
+ngưỡng, như trước (phím tắt không chạy gì khi kéo).
+
+## 4. Bổ sung sau góp ý: bấm vào chỗ cắt, phím tắt cho điểm đặc biệt
+
+* **Công cụ Chọn: bấm vào chỗ hai đường cắt nhau là có giao điểm** (như Sketchpad; `App.crossingAt`): trong bán kính 9 px
+  quanh chỗ cắt mà chưa có điểm. Rê chuột tới thì hiện trước một chấm xanh, con trỏ đổi, dòng gợi ý *"Bấm để lấy giao
+  điểm của d1 và d2"* – không bấm nhầm. Giữ `Shift` thì vẫn là chọn đường (chọn nhiều). Bấm lại chỗ đó thì chọn điểm vừa
+  có, không tạo trùng. (Công cụ Điểm và mọi công cụ cần chọn điểm vốn đã dùng giao điểm khi bấm vào chỗ cắt.)
+* **Phím tắt cho điểm đặc biệt**, theo quy tắc `Shift` + phím của đường tạo ra nó: `Ctrl+Shift+U` trực tâm, `Ctrl+Shift+B`
+  tâm nội tiếp, `Ctrl+Shift+G` trọng tâm, `Ctrl+Shift+O` đường tròn ngoại tiếp (kèm tâm O). Chọn sẵn ba đỉnh là dựng ngay.
+* Công cụ không dựng gì mới vì điểm đã có (trực tâm H có sẵn): chọn lại điểm đó, báo *Đã có sẵn trên hình: H*.
+* smoke8 thêm 5 kiểm tra (trực tâm có sẵn, Ctrl+M với đoạn đang chọn, rê chuột báo trước, bấm chỗ cắt ra giao điểm, bấm
+  lại không trùng). Dựng thử 23/23 đúng, số thao tác không đổi (1027); hiệu năng ×1 6,65 ms/khung.
+
+# Bản 1.7 – Quỹ tích, điểm cố định, góc bằng góc, đường phụ, chọn vùng, chép/dán
+
+Góp ý sau khi dựng Bài 16 (tam giác ABC, P trong tam giác, Q trên đường đẳng giác, E, F với ∠AQE = ∠PCB, ∠AQF = ∠PBC,
+tiếp tuyến TR, đường tròn (U) qua R – chứng minh (U) đi qua điểm cố định): "chưa có quỹ tích", "công cụ không cho chọn
+nhiều đối tượng cùng lúc", "câu hình này dựng kiểu gì cho dễ". Dựng thử Bài 16 trên bản 1.6 thì vướng: không chép được góc
+(phải quay bằng `rotate_by` rồi đoán chiều), quá nhiều đường phụ che hình, không có cách thấy điểm cố định, điểm P "trong
+tam giác" kéo ra ngoài được. Thầy/cô duyệt mọi đề xuất trừ "hiện mờ hai nghiệm để chọn"; giữ kéo nền = dời hình.
+
+## 1. Đã làm
+
+* **Góc bằng góc** (`angle_line`, `angle_point`): góc mẫu lấy trên hình (kéo hình thì góc đổi theo). Chiều chọn bằng chuột:
+  đường xem trước đi theo phía chuột, bấm là xong (`App.extraFlip`); điểm trên đường thì bấm gần chỗ điểm cần lấy. Cơ chế
+  chung "bấm thêm một lần sau khi chọn đủ" (`tool.extraClick`, `App.picksDone`) dùng cho cả điểm trong tam giác.
+* **Điểm trong tam giác** (`point_in`, tham số u, v): bậc tự do mới – kéo được, kẹp vào trong tam giác; bộ khám phá chỉ thử
+  vị trí trong tam giác; công cụ tự tạo coi nó là đầu vào.
+* **Điểm cố định** (`fixed_point`): dời thử điểm thay đổi tới 6 vị trí cố định (bước dời theo cỡ hình *trước* bước đó, để
+  khi kéo và khi tính lại toàn bộ cho cùng kết quả), giao vị trí hiện tại của đường với hai vị trí đầu, giữ nghiệm nằm trên
+  mọi vị trí. Bài 16 tìm ra X = (0,5; 3,5) trên AC; đường AD (D chạy trên BC) → A; họ đường song song → không có. Điểm cố
+  định là điểm thật của hình: nối, lấy giao, khám phá tiếp được.
+* **Quỹ tích** (`locus`, 160 mẫu, ngắt ở chỗ không xác định và bước nhảy bất thường) – vẽ, chọn, xuất TikZ (`plot
+  coordinates`). **Vết** khi kéo (điểm: chấm; đường thẳng/đường tròn: nét mờ) – không lưu vào hình, *Hiển thị › Xoá vết*.
+* **Đo**: độ dài, góc (độ), tỉ số; số hiện trên hình có nền mờ, cập nhật khi kéo, kéo chữ để dời.
+* **Đường phụ** (`step.aux`): đường vuông góc, song song, trung trực, phân giác, góc bằng góc dựng thêm tự là đường phụ –
+  nét đứt, xám. `Ctrl+Shift+D` ẩn/hiện tất cả (`doc.hideAux`, lưu theo hình; không vẽ, không bấm trúng, không vào TikZ).
+  Thẻ thuộc tính: bỏ *Đường phụ* để thành đường chính.
+* **Ctrl + kéo chọn vùng** (Shift: chọn thêm): điểm trong khung và mọi đối tượng dựng hoàn toàn từ chúng. Kết hợp với "chọn
+  trước, dựng sau" của bản 1.6.
+* **Chép/dán** (`Ctrl+C`/`Ctrl+V`): kèm đối tượng cha, dán được sang tab khác (giữ tên) hoặc chính hình đó (dời đi, tên mới);
+  clipboard chứa JSON nên dán được sang cửa sổ khác.
+* **Sửa đối tượng cha**: thẻ thuộc tính › *Dựng từ* › bấm tên cha › bấm đối tượng mới. Chặn vòng phụ thuộc; các bước được
+  sắp lại theo thứ tự dựng được (`topoOrder`), hoàn tác được.
+* Lõi Python (`lab/core`) có đủ các bước mới, cho **cùng kết quả số** với JS (dữ liệu đối chiếu thêm Bài 16 và một hình quỹ
+  tích – điểm cố định).
+
+## 2. Kiểm thử
+
+`npm test` 151 test (thêm 5 test lõi: góc bằng góc hai phía, điểm trong tam giác, điểm cố định của đường thẳng/đường tròn/họ
+song song, quỹ tích đường trung bình và quỹ tích trực tâm, số đo). Test Python đạt (đối chiếu JS gồm các ca bản 1.7).
+`npm run test:browser` đạt, thêm `tests/browser/smoke9.mjs` (40 kiểm tra: chọn phía góc bằng chuột, điểm E trên AC với
+∠EBC = ∠BAC, điểm trong tam giác và kéo ra ngoài, quỹ tích, vết, điểm cố định, ba số đo và kéo chữ, Ctrl + kéo chọn vùng,
+kéo nền vẫn dời hình, đường phụ và Ctrl+Shift+D, TikZ, chép/dán cùng tab – sang tab – qua sự kiện clipboard, sửa đối tượng
+cha, chặn vòng, hoàn tác). `npm run test:perf` đạt ngưỡng (×1 3,7 ms/khung, ×4 13,9 ms, p95 16,7 ms).
+
+## 3. Hạn chế
+
+* Điểm cố định tìm bằng số: họ đường mà vị trí thử bị suy biến (đường không xác định ở vị trí thử) có thể báo "không có"
+  dù có; điểm cố định nằm rất xa hình bị bỏ qua.
+* Quỹ tích chỉ theo điểm chạy trên đường (`point_on`); quỹ tích theo điểm trong miền chưa làm. Quỹ tích tính lại mỗi khung
+  khi kéo (160 lần dựng lại phần phụ thuộc) – hình rất lớn có nhiều quỹ tích có thể chậm.
+* Chép/dán không mang theo khung chữ, ảnh.
+
+# Bản 1.8 – Gõ lệnh, điểm thoả điều kiện, kiểm tra nhận định, trường hợp đặc biệt, kéo không nhảy, Asymptote
+
+Sau khi tìm hiểu nhu cầu với phần mềm vẽ hình (nghiên cứu về giáo viên dùng phần mềm hình học động, công cụ tự kiểm chứng
+Relation/Prove của GeoGebra, các nghiên cứu dựng hình Olympic tự động, cộng đồng AoPS), thầy/cô duyệt 6 việc (bỏ "quỹ tích
+thành đường thật").
+
+## 1. Đã làm
+
+* **Kiểm tra nhận định** (`src/explore/check.js`): 11 loại (trùng, thẳng hàng, đồng viên, bằng nhau – đoạn/4 điểm, góc bằng
+  nhau, thuộc đường thẳng/đường tròn, vuông góc, song song, đồng quy, tiếp xúc). Chỉ tính phần hình mà nhận định phụ thuộc;
+  80 hình ngẫu nhiên hợp lệ (xen kẽ xê dịch nhỏ/lớn, bỏ hình suy biến hoặc đổi dạng như bộ khám phá – bộ lấy mẫu tách thành
+  `makeSampler` dùng chung) cộng các trường hợp đặc biệt. Kết luận: luôn đúng / sai / không luôn đúng (phản ví dụ đặt được
+  vào hình) / không xác định; liệt kê *sai khi*, *không xác định khi*, *đúng khi*. Vd O, H, G: luôn đúng, suy biến khi tam giác
+  đều; O, I, H: sai, đúng khi tam giác cân (đúng như ProveDetails của GeoGebra báo điều kiện không suy biến).
+* **Trường hợp đặc biệt** (`src/explore/special.js`) dùng cho kiểm tra và cho nút *Đưa về* ở thẻ thuộc tính: tam giác cân /
+  vuông tại từng đỉnh, đều (dời một đỉnh tự do, giữ hai đỉnh kia); điểm trên cạnh về trung điểm, chân đường cao, chân phân
+  giác; điểm trên đường tròn về điểm đối tâm của các điểm khác trên đó; điểm trong tam giác về trọng tâm, tâm nội tiếp, (tam
+  giác nhọn) trực tâm, tâm ngoại tiếp.
+* **Điểm thoả điều kiện** (`solve_point`): Newton với đạo hàm số; một điều kiện thì chiếu về đường r = 0 (điểm chạy trên quỹ
+  tích, kéo được), hai điều kiện giải hệ 2×2. Xuất phát từ chỗ bấm nên ra nghiệm gần đó; khi kéo hình xuất phát từ nghiệm
+  trước (đi liên tục). Lõi Python có bản giống hệt; dữ liệu đối chiếu thêm Brocard, PB = PC & ∠BPC = 120°, ∠BRC = 90° (một
+  điều kiện), điểm chính giữa cung, điểm trên đoạn.
+* **Gõ lệnh tiếng Việt** (`src/core/cmd.js`, trong bảng lệnh `Space`): ~20 mẫu lệnh dựng, lệnh "thoả/sao cho", lệnh "kiểm tra".
+  Tách tên điểm theo tên có thật trên hình (khớp dài nhất: `I_AB` → I_A, B); đường/đường tròn chưa có thì tự dựng (đường
+  thẳng thành đường phụ); giao điểm đã có thì lấy giao điểm còn lại, hai giao điểm đều có / giao điểm trùng điểm có sẵn thì
+  báo thay vì dựng trùng. Báo lỗi ngay khi gõ; gõ vài chữ hiện mẫu lệnh.
+* **Kéo không nhảy**: rà 28 hình mẫu (kéo từng điểm tự do một vòng, 240 bước, hai bán kính): 14 lần giao điểm/tiếp điểm nhảy
+  sang nghiệm kia (vd IMO 2017/4: A nhảy rất xa; IMO 2018/1: G nhảy 0,57 cỡ hình). Nay khi kéo, nếu nghiệm đang chọn ở xa vị
+  trí cũ còn nghiệm kia ở sát thì đổi `which` (ghi vào hình): còn 7 lần, đều là "giao điểm thứ hai khác Q" đi qua chỗ tiếp
+  xúc (hai nghiệm sát nhau – mơ hồ thật, độ nhảy ≤ 0,12 cỡ hình).
+* **Xuất Asymptote** (`src/export/asy.js`): như TikZ (biến pair theo nhãn, đường thẳng vừa đủ, màu, nét đứt, cung góc, vạch,
+  hướng nhãn, quỹ tích). 28 hình mẫu biên dịch được bằng `asy`.
+* Sửa thêm: bộ khám phá Python thiếu nhánh xê dịch điểm trong tam giác (lệch với JS từ bản 1.7) – đã bổ sung.
+
+## 2. Kiểm thử
+
+`npm test` 165 test (thêm `check.test.mjs` 6, `cmd.test.mjs` 6, `asy.test.mjs` 2 – biên dịch thật bằng asy nếu máy có).
+Test Python đạt (đối chiếu gồm các ca bản 1.8, cả khám phá trên hình có điểm trong tam giác). `npm run test:browser` đạt,
+thêm `smoke10.mjs` (28 kiểm tra: lệnh dựng, mẫu lệnh, báo lỗi, hoàn tác, Brocard và kéo đỉnh, công cụ điểm thoả điều kiện
+– gõ sai hỏi lại, kéo sang nghiệm kia; kiểm tra O, H, G / O, I, H và "xem" trường hợp cân; lệnh kiểm tra; đưa về vuông, chân
+đường cao; xuất Asymptote). `npm run test:perf` đạt (×1 4,3 ms/khung, ×4 16,9 ms, p95 16,8 ms).
+
+## 3. Hạn chế
+
+* Kiểm tra nhận định là kiểm tra bằng số (sai số tương đối 10⁻⁷) – rất tin được nhưng không phải chứng minh; trường hợp đặc
+  biệt chỉ gồm các dạng kể trên (chưa có "hai điểm trùng nhau", "đường song song"…).
+* Điểm thoả điều kiện: tối đa hai điều kiện, các loại góc/độ dài/thuộc đường; điều kiện tỉ số, góc có hướng chưa có.
+  Gần chỗ hai nghiệm nhập lại, Newton có thể không hội tụ (điểm tạm không xác định, kéo tiếp thì có lại).
+* Lệnh tiếng Việt chỉ hiểu các mẫu đã liệt kê (xem `COMMAND_EXAMPLES` trong `src/core/cmd.js`).
+
+# Bản 1.9 – Khám phá: thước đo, đoạn/góc bằng nhau, mục tiêu, điểm phụ, bộ máy suy luận
+
+Góp ý: "Khám phá" hơi yếu. Phân tích kỹ thì bộ khám phá cũ chỉ *liệt kê* quan hệ đúng về số; với người học Olympic, cái
+thiếu là (1) biết quan hệ nào **đáng chú ý** (không suy ra ngay từ cách dựng), (2) **vì sao** đúng, (3) đi **về phía điều cần
+chứng minh**, và (4) gợi ý **điểm phụ** – chỗ khó nhất của một bài hình. Làm 5 việc, việc đầu là thước đo để biết có tiến bộ thật.
+
+## 1. Đã làm
+
+* **Thước đo** (`tests/kham-pha/`): 23 bài mẫu, 28 kết luận và 8 bổ đề then chốt (có bổ đề kèm điểm phụ của lời giải
+  chính thức), viết bằng lệnh kiểm tra tiếng Việt; mỗi phát biểu tự kiểm bằng số trước khi đo (đã bắt được một bổ đề nhớ sai).
+  Đo: kết luận có được báo không, hạng mấy; bổ đề có được báo không; chứng minh được không (có / cần điểm phụ); điểm phụ của
+  lời giải chính thức có trong 5 gợi ý đầu không. `tests/kham-pha.test.mjs` chặn thụt lùi.
+* **Bộ máy suy luận** (`src/explore/deduce.js`, JS, chạy trong trình duyệt): góc có hướng mod 180° là phương trình tuyến tính
+  trên hướng đường thẳng, độ dài theo log (tỉ số, phương tích PA·PB = PC·PD); khử Gauss modulo một số nguyên tố, mỗi dòng nhớ
+  lý do để dựng lại chứng minh. Giả thiết lấy từ cách dựng (~40 loại bước: vuông góc, song song, phân giác, đẳng giác, tiếp
+  tuyến, tâm các loại, trung điểm, đối xứng, phép quay/vị tự/đồng dạng quay, giao điểm, điểm thoả điều kiện…). Vòng lặp đóng
+  kín: góc nội tiếp, góc ở tâm, tiếp tuyến – dây, Thales, đường kính, tam giác cân hai chiều, tam giác đồng dạng (g.g → tỉ
+  số), phương tích, trục đẳng phương, đảo phương tích; ứng viên thẳng hàng/đồng viên/đồng dạng lấy từ số, chỉ thành sự kiện
+  khi suy ra được. Có cây giải thích (giả thiết → các bước, mỗi bước ghi quy tắc).
+* **Đại lượng**: đoạn bằng nhau (gộp lớp; chung một đầu mút thì báo "X cách đều A, B, C (X là tâm …)"), góc bằng nhau.
+* **Lớp `discover()`** (`src/explore/discover.js`) bọc bộ khám phá cũ (giữ nguyên để đối chiếu với lab Python): gom điểm cùng
+  thuộc một đường tròn/đường thẳng thành một dòng, bỏ trùng; trạng thái *hiển nhiên* / *chứng minh được* / *sâu*; xếp hạng
+  theo độ "lạ", độ lớn, mức xa giả thiết và độ gần mục tiêu.
+* **Mục tiêu** (bước đệm): gõ như lệnh kiểm tra hoặc lấy từ đối tượng đang chọn; thẻ mục tiêu (đúng?/chứng minh được?/vì sao);
+  quan hệ dính tới mục tiêu lên đầu; từ một quan hệ có thể *Đặt làm mục tiêu*, *Chèn vào lời giải*.
+* **Điểm phụ** (`src/explore/aux.js`): dựng thử giao điểm thứ hai của đường với đường tròn, trung điểm, chân đường vuông góc,
+  điểm đối tâm, tâm ngoại tiếp, giao điểm hai đường tròn ngoại tiếp (Miquel), tâm đồng dạng quay; với mỗi điểm chạy lại bộ máy
+  (giới hạn 4 giây), xếp: làm mục tiêu chứng minh được → nhiều quan hệ mới không hiển nhiên. Xem trước khi rê chuột, *Dựng* để
+  thêm.
+* Giao diện thẻ Khám phá viết lại (`src/ui/explorePanel.js`): nhãn trạng thái, "Vì sao?", tự khám phá lại 0,7 s sau khi hình đổi.
+  Lệnh kiểm tra thêm `góc X + góc Y = 180`, "trùng" cho hai đường; trong lệnh kiểm tra "PQ" luôn là đường qua P, Q (trước đây
+  có thể bắt nhầm một đường khác trùng về số).
+
+## 2. Kết quả đo (trước → sau)
+
+| Chỉ số | Bộ khám phá cũ | Bản 1.9 |
+|---|---|---|
+| Kết luận được báo (28) | 23 | **26** |
+| Kết luận trong 3 dòng đầu | 13 | **16** |
+| Kết luận chứng minh được (không điểm phụ) | 0 (không có bộ chứng minh) | **4** |
+| … chứng minh được nhờ điểm phụ tự tìm | 0 | **+3** (IMO 2013/4, IMO 2015/4, VMO 2014/4b) |
+| Bổ đề then chốt được báo (8) | 3 | **5** |
+| Bổ đề chứng minh được (8) | — | **6** |
+| Điểm phụ của lời giải chính thức trong 5 gợi ý đầu | — | **2/2** (đều đứng #1) |
+
+IMO 2013/4: điểm phụ gợi ý đầu là giao điểm thứ hai của XY với (BWN), chứng minh X, Y, H thẳng hàng bằng trục đẳng phương – đúng
+lời giải chính thức. Thời gian: khám phá cả 23 bài 0,6 s (cũ 0,13 s); tìm điểm phụ ≤ 4 s mỗi lần.
+
+## 3. Kiểm thử
+
+`npm test` 167 test (thêm `kham-pha.test.mjs`: ngưỡng thước đo, ca IMO 2013/4 có điểm phụ). Bộ khám phá cũ giữ nguyên – dữ liệu đối
+chiếu JS/Python không đổi, test Python đạt. `npm run test:browser` thêm `smoke11.mjs` (khám phá tự do, mục tiêu gõ tay chứng minh
+được + vì sao + chèn vào lời giải, mục tiêu từ đối tượng đang chọn, tìm và dựng điểm phụ rồi chứng minh được, đặt mục tiêu từ
+một quan hệ, tự khám phá lại).
+
+## 4. Hạn chế
+
+* Bộ máy chỉ biết biến đổi góc/độ dài và các quy tắc kể trên: chưa có Menelaus/Ceva, tỉ số kép, nghịch đảo, toạ độ/số phức;
+  2 kết luận vẫn không được báo, 21/28 kết luận chưa chứng minh được kể cả với điểm phụ. "Sâu" nghĩa là bộ máy chưa đủ sức,
+  không phải chắc chắn khó.
+* Chứng minh bỏ qua điều kiện không suy biến và thứ tự điểm (góc có hướng mod 180° nên không phân biệt hai phía).
+* Điểm phụ chỉ thử một điểm mỗi lần, trong các dạng kể trên; bài cần hai điểm phụ hoặc một đường tròn phụ thì chưa tìm được.
+* Tìm điểm phụ trên toàn bộ thước đo mất ~28 s nên chỉ chạy bằng dòng lệnh (`--diem-phu`), không nằm trong `npm test`.
+---
+
 # Bản 2.1 – Phòng thí nghiệm "thông minh" hơn: ghép bổ đề, đo độ khó, lọc có chọn lọc
 
 Phản hồi sau bản 2: *phần lớn kết quả vô nghĩa hoặc không khó, thuật toán chưa thông minh*. Nguyên nhân chính: vòng

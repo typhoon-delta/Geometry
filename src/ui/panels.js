@@ -6,6 +6,9 @@ import { intersect } from '../core/geom.js';
 import { PALETTE, styleOf, isDraggableType } from '../core/styles.js';
 import { labelHTML } from '../core/names.js';
 import { TOOL_BY_ID } from './tools.js';
+import { claimsFor, CLAIMS } from '../explore/check.js';
+import { specialCases } from '../explore/special.js';
+import { showCheck } from './checkPanel.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -95,9 +98,26 @@ export function bindStepList(app) {
 export function renderProps(app) {
   const host = document.getElementById('props');
   if (!host) return;
+  // ảnh dán vào hình đang chọn (bản 1.3)
+  const im = app.imageSel && app.toolId === 'move' && app.mode !== 'present' ? (app.doc.images || []).find((x) => x.id === app.imageSel) : null;
+  if (im) {
+    host.classList.add('show');
+    host.innerHTML = `<div class="prop-title">Ảnh dán vào hình</div>
+      <label class="row">Độ đậm <input id="p-img-op" type="range" min="0.1" max="1" step="0.05" value="${im.opacity ?? 1}"></label>
+      <label class="row"><input id="p-img-lock" type="checkbox"> Khoá làm nền (không chọn, không kéo được; mở lại ở Sửa › Mở khoá các ảnh nền)</label>
+      <div class="note">Kéo ảnh để dời, kéo ô vuông ở góc dưới phải để đổi cỡ. Ảnh được lưu trong tệp .json (không có trong link chia sẻ).</div>
+      <div class="row"><button id="p-img-del" class="danger">Xoá ảnh</button></div>`;
+    host.querySelector('#p-img-op').onchange = (e) => app.setImageProp(im.id, { opacity: +e.target.value });
+    host.querySelector('#p-img-lock').onchange = (e) => { if (e.target.checked) { app.setImageProp(im.id, { locked: true }); app.selectImage(null); } };
+    host.querySelector('#p-img-del').onclick = () => app.deleteImage(im.id);
+    return;
+  }
   const ids = [...app.selection].filter((id) => stepById(app.doc, id));
-  host.classList.toggle('show', ids.length > 0 && app.mode !== 'present');
-  if (!ids.length || app.mode === 'present') {
+  // Thẻ thuộc tính chỉ hiện với công cụ Chọn: khi đang dựng, đối tượng vừa dựng được chọn sẵn (để gõ tên)
+  // nhưng thẻ không được nổi lên che hình và chặn lần bấm tiếp theo.
+  const show = ids.length > 0 && app.mode !== 'present' && app.toolId === 'move';
+  host.classList.toggle('show', show);
+  if (!show) {
     host.innerHTML = '';
     return;
   }
@@ -136,6 +156,19 @@ export function renderProps(app) {
     const v = app.values.get(s.id);
     if (v) html += `<div class="row coords">(${v.x.toFixed(3)}; ${v.y.toFixed(3)})</div>`;
   }
+  // bản 1.8: kiểm tra nhận định về các đối tượng đang chọn (theo thứ tự chọn)
+  const claims = claimsFor(app.doc, ids);
+  if (claims.length) html += `<div class="row check-row">Kiểm tra ${claims.map((c, i) => `<button class="mini" data-claim="${i}">${CLAIMS[c.type].title}?</button>`).join('')}</div>`;
+  // bản 1.8: đưa nhanh về trường hợp đặc biệt (một điểm đang chọn)
+  const specials = one && kind === 'point' ? specialCases(app.doc, app.values).filter((c) => c.about[0] === s.id || (c.key.startsWith('deu:') && c.about.includes(s.id))).slice(0, 8) : [];
+  if (specials.length) html += `<div class="row special-row">Đưa về ${specials.map((c, i) => `<button class="mini" data-special="${i}" title="${esc(c.label)}">${esc(shortLabel(c))}</button>`).join('')}</div>`;
+  if (one && (kind === 'line' || kind === 'circle')) html += `<label class="row" title="Đường phụ: nét đứt, ẩn/hiện tất cả cùng lúc bằng Ctrl+Shift+D. Bỏ chọn: đường chính."><input id="p-aux" type="checkbox" ${s.aux ? 'checked' : ''}> Đường phụ (bỏ chọn: đường chính)</label>`;
+  if (one && kind !== 'mark') html += `<label class="row"><input id="p-trace" type="checkbox" ${app.traceIds.has(s.id) ? 'checked' : ''}> Để lại vết khi kéo</label>`;
+  if (one && s.type === 'free_point') html += `<div class="row"><button id="p-attach" class="mini wide" title="Cho điểm chạy trên một đường thẳng / đường tròn (vd D di động trên BC); mọi thứ dựng từ điểm này giữ nguyên">Gắn lên đường…</button></div>`;
+  if (one && s.args.length && STEP_TYPES[s.type] && !['locus', 'fixed_point'].includes(s.type)) {
+    // sửa đối tượng cha: bấm một tên rồi bấm đối tượng thay thế trên hình
+    html += `<div class="row redef">Dựng từ ${s.args.map((a, i) => `<button class="mini" data-redef="${i}" title="Thay đối tượng này (các đối tượng phụ thuộc giữ nguyên)">${labelHTML(stepById(app.doc, a)?.name || '?')}</button>`).join('')}</div>`;
+  }
   if (one) {
     html += `<label class="row"><input id="p-hidden" type="checkbox" ${s.hidden ? 'checked' : ''}> Ẩn (đối tượng phụ)</label>`;
     html += `<label class="row"><input id="p-join" type="checkbox" ${s.joinPrev ? 'checked' : ''}> Gộp khung trình bày với bước trước</label>`;
@@ -156,9 +189,39 @@ export function renderProps(app) {
   host.querySelectorAll('[data-ticks]').forEach((b) => (b.onclick = () => app.setStyle(ids, { ticks: +b.dataset.ticks })));
   if (q('#p-swap')) q('#p-swap').onclick = () => app.setParams(s.id, { which: 1 - (paramsOf(s).which || 0) });
   if (q('#p-arc')) q('#p-arc').onclick = () => app.setParams(s.id, { contains: !paramsOf(s).contains });
+  host.querySelectorAll('[data-claim]').forEach((b) => (b.onclick = () => showCheck(app, claims[+b.dataset.claim])));
+  host.querySelectorAll('[data-special]').forEach((b) => (b.onclick = () => {
+    const c = specials[+b.dataset.special];
+    app.applyOverrides(c.patch);
+    app.showHint(`Đã đưa về: ${c.label} – Ctrl+Z để trở lại`);
+  }));
+  if (q('#p-aux')) q('#p-aux').onchange = (e) => app.setStepProp(s.id, 'aux', e.target.checked);
+  if (q('#p-trace')) q('#p-trace').onchange = (e) => app.toggleTrace(s.id, e.target.checked);
+  if (q('#p-attach')) q('#p-attach').onclick = () => app.startAttach(s.id);
+  host.querySelectorAll('[data-redef]').forEach((b) => (b.onclick = () => app.startRedefine(s.id, +b.dataset.redef)));
   if (q('#p-hidden')) q('#p-hidden').onchange = (e) => app.setStepProp(s.id, 'hidden', e.target.checked);
   if (q('#p-join')) q('#p-join').onchange = (e) => app.setStepProp(s.id, 'joinPrev', e.target.checked);
   q('#p-del').onclick = () => app.deleteSteps(ids);
+  placeCard(app, host, ids);
+}
+
+/** Nhãn ngắn trên nút "Đưa về": "cân tại A", "trung điểm BC", "trọng tâm"… */
+function shortLabel(c) {
+  return c.label.replace(/^tam giác \S+ /, '').replace(/^\S+ là /, '').replace(/^\S+ (đối xứng)/, '$1');
+}
+
+/** Thẻ nổi không được che chính đối tượng đang chọn: nếu che thì chuyển xuống góc dưới bên phải. */
+function placeCard(app, host, ids) {
+  host.classList.remove('alt');
+  const st = app.stage.getBoundingClientRect(), r = host.getBoundingClientRect();
+  const box = { x: r.left - st.left - 14, y: r.top - st.top - 14, w: r.width + 28, h: r.height + 28 };
+  const covered = ids.some((id) => {
+    const v = app.values.get(id);
+    if (!v) return false;
+    const pts = v.kind === 'point' ? [v] : v.kind === 'circle' ? [v.c, { x: v.c.x + v.r, y: v.c.y }, { x: v.c.x - v.r, y: v.c.y }, { x: v.c.x, y: v.c.y + v.r }] : v.kind === 'line' ? [v.p, { x: v.p.x + v.d.x, y: v.p.y + v.d.y }] : [];
+    return pts.some((P) => { const q = app.toScreen(P); return q.x > box.x && q.x < box.x + box.w && q.y > box.y && q.y < box.y + box.h; });
+  });
+  if (covered) host.classList.add('alt');
 }
 
 /** Tuỳ chọn cho công cụ đánh dấu (màu, số cung, số vạch của dấu sắp tạo). */

@@ -1,0 +1,144 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Bổ đề tâm nội tiếp – bàng tiếp",
+ "view": {
+  "bbox": [
+   -9.034,
+   5.358,
+   9.234,
+   -5.635
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.4,
+    "y": 4.4
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -2.6,
+    "y": 0.2
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 2.8,
+    "y": 0.2
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s8",
+   "type": "center",
+   "args": [
+    "s7"
+   ],
+   "name": "O",
+   "joinPrev": true
+  },
+  {
+   "id": "s9",
+   "type": "incenter",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "I"
+  },
+  {
+   "id": "s10",
+   "type": "excenter",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "I_A"
+  },
+  {
+   "id": "s11",
+   "type": "arc_midpoint",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "params": {
+    "contains": false
+   },
+   "name": "S"
+  },
+  {
+   "id": "s12",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s10"
+   ],
+   "name": "d4"
+  },
+  {
+   "id": "s13",
+   "type": "circle",
+   "args": [
+    "s11",
+    "s2"
+   ],
+   "name": "ω2"
+  }
+ ]
+}

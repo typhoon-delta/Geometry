@@ -72,18 +72,18 @@ def _value_finite(v):
     return True
 
 
-def compute_step(s, vals, overrides=None):
+def compute_step(s, vals, overrides=None, doc=None):
     """Tính giá trị một bước từ giá trị các bước trước (vals: dict id → giá trị)."""
     d = STEP_TYPES.get(s["type"])
     if d is None:
         return None
-    variadic = bool(d.args) and d.args[0] == "...point"
+    variadic = bool(d.args) and d.args[0].startswith("...")
     arg_vals = []
     for i, a in enumerate(s["args"]):
         v = vals.get(a)
         if v is None:
             return None
-        t = "...point" if variadic else (d.args[i] if i < len(d.args) else None)
+        t = d.args[0] if variadic else (d.args[i] if i < len(d.args) else None)
         if t is None or not arg_accepts(t, kind_of_value(v)):
             return None
         arg_vals.append(v)
@@ -91,7 +91,10 @@ def compute_step(s, vals, overrides=None):
     if overrides and s["id"] in overrides:
         p.update(overrides[s["id"]])
     try:
-        v = d.compute(arg_vals, p)
+        if d.sampler:
+            v = SAMPLERS[s["type"]](s, arg_vals, p, vals, doc, overrides) if doc is not None else None
+        else:
+            v = d.compute(arg_vals, p)
     except (ZeroDivisionError, ValueError, OverflowError, TypeError, AttributeError, IndexError):
         v = None
     if v is not None and d.kind != "mark" and not _value_finite(v):
@@ -99,11 +102,115 @@ def compute_step(s, vals, overrides=None):
     return v
 
 
+# ======================= DỜI THỬ (bản 1.7): điểm cố định, quỹ tích – giống hệt src/core/model.js =======================
+FIX_OFFS = [[0.31, 0.12], [-0.22, 0.27], [0.17, -0.33], [-0.36, -0.08], [0.05, 0.41], [0.26, -0.14]]
+FIX_UV = [[0.2, 0.2], [0.55, 0.2], [0.2, 0.55], [0.33, 0.33], [0.12, 0.62], [0.6, 0.3]]
+FIX_DT = [0.37, -0.29, 0.61, -0.53, 0.19, -0.71]
+FIX_SEG = [0.15, 0.32, 0.5, 0.68, 0.85, 0.25]
+
+
+def _moved_values(doc, vals, mover_id, params, upto, overrides):
+    local = dict(vals)
+    ov = dict(overrides or {})
+    ov[mover_id] = params
+    changed = {mover_id}
+    for s in doc["steps"]:
+        if s["id"] == upto:
+            break
+        if s["id"] == mover_id or any(a in changed for a in s["args"]):
+            local[s["id"]] = compute_step(s, local, ov, doc)
+            changed.add(s["id"])
+    return local
+
+
+def _trial_params(step, vals, doc, upto):
+    p = params_of(step)
+    if step["type"] == "free_point":
+        total, n = 0.0, 0
+        for t in doc["steps"]:
+            if t["id"] == upto:
+                break
+            v = vals.get(t["id"])
+            if t["id"] != step["id"] and v is not None and kind_of_value(v) == "point":
+                total += math.hypot(v.x - p["x"], v.y - p["y"])
+                n += 1
+        sc = 0.15 * (total / n if n else 1) or 0.15
+        return [{"x": p["x"] + dx * sc, "y": p["y"] + dy * sc} for dx, dy in FIX_OFFS]
+    if step["type"] == "point_in":
+        return [{"u": u, "v": v} for u, v in FIX_UV]
+    if step["type"] == "point_on":
+        host = vals.get(step["args"][0])
+        if host is None:
+            return []
+        if host.kind == "line" and host.sub == "segment":
+            return [{"t": t} for t in FIX_SEG]
+        if host.kind == "line" and host.sub == "ray":
+            return [{"t": max(0, p["t"]) * math.exp(d) + 0.05} for d in FIX_DT]
+        return [{"t": p["t"] + d} for d in FIX_DT]
+    return []
+
+
+def _dist_to(P, X):
+    return G.dist_point_line(P, X) if X.kind == "line" else abs(G.dist(P, X.c) - X.r)
+
+
+def _fixed_point(s, a, p, vals, doc, overrides):
+    X = a[0]
+    mover = next((t for t in doc["steps"] if t["id"] == s["args"][1]), None)
+    if mover is None:
+        return None
+    objs = [X]
+    for tp in _trial_params(mover, vals, doc, s["id"]):
+        v = _moved_values(doc, vals, mover["id"], tp, s["id"], overrides).get(s["args"][0])
+        if v is not None and kind_of_value(v) == X.kind:
+            objs.append(v)
+    if len(objs) < 4:
+        return None
+    size = X.r if X.kind == "circle" else 1
+    if X.kind == "line":
+        c = G.intersect_ll(objs[1], objs[2])
+        cand = [c] if c is not None else []
+    else:
+        cand = G.intersect_cc(objs[1], objs[2])
+    tol = 1e-6 * (1 + size + max([0] + [math.hypot(c.x, c.y) for c in cand]))
+    good = sorted((c for c in cand if all(_dist_to(c, o) <= tol for o in objs)), key=lambda c: (c.x, c.y))
+    w = p.get("which") or 0
+    return G.pt(good[w].x, good[w].y) if w < len(good) else None
+
+
+def _locus(s, a, p, vals, doc, overrides):
+    D = next((t for t in doc["steps"] if t["id"] == s["args"][1]), None)
+    if D is None or D["type"] != "point_on":
+        return None
+    host = vals.get(D["args"][0])
+    if host is None:
+        return None
+    n = max(8, min(600, int(p.get("n") or 0) or 160))
+    t0 = params_of(D)["t"]
+    if host.kind == "circle":
+        lo, hi = 0, 2 * math.pi
+    elif host.sub == "segment":
+        lo, hi = 0, 1
+    elif host.sub == "ray":
+        lo, hi = 0, max(4, 3 * abs(t0))
+    else:
+        lo, hi = t0 - 3, t0 + 3
+    pts = []
+    for i in range(n + 1):
+        t = lo + (hi - lo) * i / n
+        v = _moved_values(doc, vals, D["id"], {"t": t}, s["id"], overrides).get(s["args"][0])
+        pts.append({"x": v.x, "y": v.y} if v is not None and kind_of_value(v) == "point" else None)
+    return {"kind": "locus", "pts": pts, "closed": host.kind == "circle"}
+
+
+SAMPLERS = {"fixed_point": _fixed_point, "locus": _locus}
+
+
 def evaluate(doc, overrides=None) -> dict:
     """Tính giá trị mọi đối tượng. overrides: dict id → params thay thế (dùng khi lấy mẫu ngẫu nhiên)."""
     vals = {}
     for s in doc["steps"]:
-        vals[s["id"]] = compute_step(s, vals, overrides)
+        vals[s["id"]] = compute_step(s, vals, overrides, doc)
     return vals
 
 
@@ -204,14 +311,14 @@ def validate(doc) -> list:
             errs.append(f"{where}: thiếu args")
             seen.add(s["id"])
             continue
-        variadic = bool(d.args) and d.args[0] == "...point"
-        if (len(s["args"]) < 3) if variadic else (len(s["args"]) != len(d.args)):
+        variadic = bool(d.args) and d.args[0].startswith("...")
+        if (len(s["args"]) < d.min_args) if variadic else (len(s["args"]) != len(d.args)):
             errs.append(f"{where}: số đối số sai")
         for j, a in enumerate(s["args"]):
             if a not in seen:
                 errs.append(f'{where}: tham chiếu "{a}" chưa được dựng ở bước trước')
             else:
-                t = "...point" if variadic else (d.args[j] if j < len(d.args) else None)
+                t = d.args[0] if variadic else (d.args[j] if j < len(d.args) else None)
                 if t and not arg_accepts(t, k.get(a)):
                     errs.append(f'{where}: đối số "{a}" sai loại')
         k[s["id"]] = (k.get(s["args"][0]) if s["args"] else None) if d.kind == "same" else d.kind

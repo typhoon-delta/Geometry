@@ -1,0 +1,258 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Nghịch đảo √(bc)",
+ "view": {
+  "bbox": [
+   -24.071,
+   12.332,
+   25.24,
+   -17.341
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.6,
+    "y": 3.8
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -3,
+    "y": -0.8
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 4.2,
+    "y": -1.4
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s5",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s3"
+   ],
+   "name": "d2",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s3",
+    "s1"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "circumcircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s8",
+   "type": "center",
+   "args": [
+    "s7"
+   ],
+   "name": "O",
+   "joinPrev": true
+  },
+  {
+   "id": "s9",
+   "type": "angle_bisector",
+   "args": [
+    "s2",
+    "s1",
+    "s3"
+   ],
+   "name": "d4"
+  },
+  {
+   "id": "s10",
+   "type": "reflect",
+   "args": [
+    "s3",
+    "s9"
+   ],
+   "name": "C'"
+  },
+  {
+   "id": "s11",
+   "type": "circle_diameter",
+   "args": [
+    "s2",
+    "s10"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s12",
+   "type": "center",
+   "args": [
+    "s11"
+   ],
+   "name": "O1",
+   "joinPrev": true
+  },
+  {
+   "id": "s13",
+   "type": "tangent_point",
+   "args": [
+    "s11",
+    "s1"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "T"
+  },
+  {
+   "id": "s14",
+   "type": "line",
+   "args": [
+    "s1",
+    "s13"
+   ],
+   "name": "d5",
+   "joinPrev": true
+  },
+  {
+   "id": "s15",
+   "type": "tangent_point",
+   "args": [
+    "s11",
+    "s1"
+   ],
+   "params": {
+    "which": 1
+   },
+   "name": "E",
+   "joinPrev": true
+  },
+  {
+   "id": "s16",
+   "type": "line",
+   "args": [
+    "s1",
+    "s15"
+   ],
+   "name": "d6",
+   "joinPrev": true
+  },
+  {
+   "id": "s17",
+   "type": "circle",
+   "args": [
+    "s1",
+    "s13"
+   ],
+   "name": "ω3"
+  },
+  {
+   "id": "s18",
+   "type": "invert_line",
+   "args": [
+    "s7",
+    "s17"
+   ],
+   "name": "d7"
+  },
+  {
+   "id": "s19",
+   "type": "reflect",
+   "args": [
+    "s18",
+    "s9"
+   ],
+   "name": "d8"
+  },
+  {
+   "id": "s20",
+   "type": "mixtilinear",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω4"
+  },
+  {
+   "id": "s21",
+   "type": "center",
+   "args": [
+    "s20"
+   ],
+   "name": "O2",
+   "joinPrev": true
+  },
+  {
+   "id": "s22",
+   "type": "invert_circle",
+   "args": [
+    "s20",
+    "s17"
+   ],
+   "name": "ω5"
+  },
+  {
+   "id": "s23",
+   "type": "reflect",
+   "args": [
+    "s22",
+    "s9"
+   ],
+   "name": "ω6"
+  },
+  {
+   "id": "s24",
+   "type": "excircle",
+   "args": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "name": "ω7"
+  },
+  {
+   "id": "s25",
+   "type": "center",
+   "args": [
+    "s24"
+   ],
+   "name": "I_A",
+   "joinPrev": true
+  }
+ ]
+}

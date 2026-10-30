@@ -268,6 +268,52 @@ export function invertPoint(P, c) {
   return pt(c.c.x + k * dx, c.c.y + k * dy);
 }
 
+// ---- Nghịch đảo đường thẳng / đường tròn (bản 1.2) ----
+// Ảnh của đường tròn qua TÂM nghịch đảo là đường thẳng, của đường tròn không qua tâm là đường tròn; đường thẳng
+// qua tâm biến thành chính nó, không qua tâm thành đường tròn qua tâm. Loại đối tượng của ảnh phải cố định theo
+// cách dựng nên có hai hàm (hai loại bước): ảnh là đường thẳng / ảnh là đường tròn; cấu hình "sai loại" → null.
+const passesThrough = (X, O) => (X.kind === 'line' ? distPointLine(O, X) : Math.abs(dist(O, X.c) - X.r)) <= 1e-7 * (X.kind === 'line' ? Math.max(norm(X.d), dist(O, X.p)) : X.r);
+
+/** Ảnh qua phép nghịch đảo (đường tròn c) của đường thẳng/đường tròn X ĐI QUA tâm của c: một đường thẳng. */
+export function invertToLine(X, c) {
+  if (!X || !c) return null;
+  const O = c.c;
+  if (!passesThrough(X, O)) return null;
+  if (X.kind === 'line') return line(X.p, X.d);
+  // điểm đối tâm của O trên X → ảnh của nó nằm trên ảnh cần tìm, ảnh vuông góc với đường nối O với tâm X
+  const P = invertPoint(pt(2 * X.c.x - O.x, 2 * X.c.y - O.y), c);
+  return P ? line(P, perp(sub(X.c, O))) : null;
+}
+
+/** Ảnh qua phép nghịch đảo (đường tròn c) của đường thẳng/đường tròn X KHÔNG đi qua tâm của c: một đường tròn. */
+export function invertToCircle(X, c) {
+  if (!X || !c) return null;
+  const O = c.c, k2 = c.r * c.r;
+  if (passesThrough(X, O)) return null;
+  if (X.kind === 'line') {
+    const F = invertPoint(project(O, X), c);
+    return F ? circle(mid(O, F), dist(O, F) / 2) : null;
+  }
+  const v = sub(X.c, O), s = k2 / (dot(v, v) - X.r * X.r);
+  return circle(pt(O.x + s * v.x, O.y + s * v.y), Math.abs(s) * X.r);
+}
+
+/** Góc có hướng ∠ABC (từ tia BA sang tia BC, ngược chiều kim đồng hồ), độ, trong (−180°, 180°]. */
+export function directedAngle(A, B, C) {
+  const u = sub(A, B), v = sub(C, B);
+  if (norm(u) < EPS || norm(v) < EPS) return null;
+  return (Math.atan2(cross(u, v), dot(u, v)) * 180) / Math.PI;
+}
+
+/** Phép đồng dạng thuận tâm O biến A thành B (quay góc ∠AOB, vị tự tỉ số OB/OA). */
+export function spiralPoint(P, O, A, B) {
+  const a = sub(A, O), b = sub(B, O), a2 = dot(a, a);
+  if (a2 < EPS * EPS) return null;
+  const re = dot(a, b) / a2, im = cross(a, b) / a2; // (B−O)/(A−O) dạng số phức
+  const x = P.x - O.x, y = P.y - O.y;
+  return pt(O.x + re * x - im * y, O.y + im * x + re * y);
+}
+
 /** Áp một phép biến đổi điểm f cho điểm / đường thẳng / đường tròn (phép đồng dạng). */
 export function mapObject(X, f) {
   if (!X) return null;
@@ -434,4 +480,97 @@ export function mixtilinear(A, B, C, external = false) {
   const t = (-2 * (dot(u, AO) + (external ? -1 : 1) * circ.r * s)) / c2;
   if (!(t > 0)) return null;
   return circle(pt(A.x + t * u.x, A.y + t * u.y), t * s);
+}
+
+/**
+ * Đoạn cần vẽ của một đường thẳng/tia kiểu sách (bản 1.2): từ điểm ngoài cùng tới điểm ngoài cùng trong số các
+ * điểm NẰM TRÊN đường, nhô ra mỗi đầu `ext` = kẹp(15% độ dài, minExt, maxExt). Dùng chung cho màn hình (toạ độ
+ * px) và TikZ (toạ độ hình). Ít hơn 2 điểm nằm trên đường → null (để bên gọi cắt theo khung hình như cũ).
+ * Trả về [t0, t1] theo tham số p + t·d của đường.
+ */
+export function trimmedRange(l, sub, pts, tol, minExt, maxExt) {
+  const dd = Math.hypot(l.d.x, l.d.y);
+  if (!(dd > 0)) return null;
+  let t0 = Infinity, t1 = -Infinity, n = 0;
+  for (const P of pts) {
+    const ex = P.x - l.p.x, ey = P.y - l.p.y;
+    if (Math.abs(l.d.x * ey - l.d.y * ex) / dd > tol) continue;
+    const t = (ex * l.d.x + ey * l.d.y) / (dd * dd);
+    if (sub === 'ray' && t < -1e-9) continue;
+    if (t < t0) t0 = t;
+    if (t > t1) t1 = t;
+    n++;
+  }
+  if (sub === 'ray') { t0 = 0; if (n < 1) return null; } else if (n < 2) return null;
+  const len = (t1 - t0) * dd;
+  const ext = Math.min(maxExt, Math.max(minExt, 0.15 * len)) / dd;
+  return [sub === 'ray' ? 0 : t0 - ext, t1 + ext];
+}
+
+// ======================= ĐIỂM THOẢ ĐIỀU KIỆN (bản 1.8) =======================
+// Giải bằng Newton (đạo hàm số, sai phân trung tâm) từ (x0, y0). Một điều kiện: chiếu về đường r = 0 (P chạy trên
+// "quỹ tích" của điều kiện); hai điều kiện: hệ 2×2. Cùng thuật toán, cùng hằng số với lab/core/geom.py.
+const SOLVE_ITERS = 60;
+
+function condAngle(A, B, C) {
+  const a = directedAngle(A, B, C);
+  return a == null ? NaN : (Math.abs(a) * Math.PI) / 180;
+}
+
+function condResidual(c, P, objs) {
+  const g = (i) => (i < 0 ? P : objs[i]);
+  const a = c.a;
+  if (c.t === 'on') {
+    const X = objs[a[0]];
+    if (X.kind === 'line') return cross(unit(X.d), sub(P, X.p));
+    return dist(P, X.c) - X.r;
+  }
+  if (c.t === 'len') return dist(g(a[0]), g(a[1])) - dist(g(a[2]), g(a[3]));
+  if (c.t === 'ang') return condAngle(g(a[0]), g(a[1]), g(a[2])) - condAngle(g(a[3]), g(a[4]), g(a[5]));
+  if (c.t === 'angv') return condAngle(g(a[0]), g(a[1]), g(a[2])) - (c.v * Math.PI) / 180;
+  return NaN;
+}
+
+export function solvePoint(objs, conds, x0, y0) {
+  const n = conds.length;
+  if (n < 1 || n > 2) return null;
+  // cỡ hình: khoảng cách lớn nhất từ (x0, y0) tới các điểm / tâm liên quan
+  let S = 0;
+  for (const o of objs) {
+    const q = o.kind === 'point' ? o : o.kind === 'circle' ? o.c : o.p;
+    S = Math.max(S, Math.hypot(q.x - x0, q.y - y0));
+    if (o.kind === 'circle') S = Math.max(S, o.r);
+  }
+  if (!(S > 0)) S = 1;
+  const h = 1e-6 * S;
+  const R = (x, y) => conds.map((c) => condResidual(c, pt(x, y), objs));
+  let x = x0, y = y0;
+  for (let it = 0; it < SOLVE_ITERS; it++) {
+    const r = R(x, y);
+    if (r.some((v) => !Number.isFinite(v))) return null;
+    const rx1 = R(x + h, y), rx0 = R(x - h, y), ry1 = R(x, y + h), ry0 = R(x, y - h);
+    const J = r.map((_, i) => [(rx1[i] - rx0[i]) / (2 * h), (ry1[i] - ry0[i]) / (2 * h)]);
+    let dx, dy;
+    if (n === 1) {
+      const g2 = J[0][0] * J[0][0] + J[0][1] * J[0][1];
+      if (!(g2 > 1e-300)) return null;
+      dx = (r[0] * J[0][0]) / g2;
+      dy = (r[0] * J[0][1]) / g2;
+    } else {
+      const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+      if (!(Math.abs(det) > 1e-300)) return null;
+      dx = (r[0] * J[1][1] - r[1] * J[0][1]) / det;
+      dy = (J[0][0] * r[1] - J[1][0] * r[0]) / det;
+    }
+    // bước quá dài (gần chỗ đạo hàm bằng 0): cắt bớt để không văng xa
+    const L = Math.hypot(dx, dy);
+    if (L > 0.5 * S) { dx *= (0.5 * S) / L; dy *= (0.5 * S) / L; }
+    x -= dx;
+    y -= dy;
+    if (L < 1e-13 * S) break;
+  }
+  const r = R(x, y);
+  // kiểm tra nghiệm: độ dài sai < 1e-9·S, góc sai < 1e-9 rad
+  const ok = conds.every((c, i) => Number.isFinite(r[i]) && Math.abs(r[i]) < (c.t === 'ang' || c.t === 'angv' ? 1e-9 : 1e-9 * S));
+  return ok ? pt(x, y) : null;
 }

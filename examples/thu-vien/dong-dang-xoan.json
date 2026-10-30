@@ -1,0 +1,173 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "Tâm đồng dạng xoắn (quay + vị tự)",
+ "view": {
+  "bbox": [
+   -6.453,
+   5.08,
+   6.251,
+   -2.565
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -4,
+    "y": 1.5
+   },
+   "name": "A"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -1.6,
+    "y": -0.3
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 1.5,
+    "y": 0.3
+   },
+   "name": "C"
+  },
+  {
+   "id": "s4",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": 3.5,
+    "y": 2.7
+   },
+   "name": "D"
+  },
+  {
+   "id": "s5",
+   "type": "line",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s6",
+   "type": "line",
+   "args": [
+    "s3",
+    "s4"
+   ],
+   "name": "d2"
+  },
+  {
+   "id": "s7",
+   "type": "intersection",
+   "args": [
+    "s6",
+    "s5"
+   ],
+   "name": "X"
+  },
+  {
+   "id": "s8",
+   "type": "circle_3pts",
+   "args": [
+    "s7",
+    "s1",
+    "s3"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s9",
+   "type": "center",
+   "args": [
+    "s8"
+   ],
+   "name": "O",
+   "joinPrev": true
+  },
+  {
+   "id": "s10",
+   "type": "circle_3pts",
+   "args": [
+    "s7",
+    "s2",
+    "s4"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s11",
+   "type": "center",
+   "args": [
+    "s10"
+   ],
+   "name": "O1",
+   "joinPrev": true
+  },
+  {
+   "id": "s12",
+   "type": "intersection_other",
+   "args": [
+    "s10",
+    "s8",
+    "s7"
+   ],
+   "name": "S"
+  },
+  {
+   "id": "s13",
+   "type": "rotate_by",
+   "args": [
+    "s2",
+    "s12",
+    "s1",
+    "s12",
+    "s3"
+   ],
+   "name": "B_1"
+  },
+  {
+   "id": "s14",
+   "type": "homothety_by",
+   "args": [
+    "s13",
+    "s12",
+    "s12",
+    "s3",
+    "s12",
+    "s1"
+   ],
+   "name": "D'"
+  },
+  {
+   "id": "s15",
+   "type": "segment",
+   "args": [
+    "s12",
+    "s2"
+   ],
+   "name": "d3"
+  },
+  {
+   "id": "s16",
+   "type": "segment",
+   "args": [
+    "s12",
+    "s14"
+   ],
+   "name": "d4"
+  }
+ ]
+}

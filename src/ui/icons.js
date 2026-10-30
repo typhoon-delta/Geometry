@@ -11,6 +11,7 @@ export const ICONS = {
   construct: svg('<path d="M3 18h18M12 18V4"/><path d="M12 15h3v3"/>' + dot(12, 6, 1.8)),
   triangle: svg('<path d="M12 4L3.5 19h17z"/>' + dot(12, 4, 1.8) + dot(3.5, 19, 1.8) + dot(20.5, 19, 1.8)),
   mark: svg('<path d="M4 19h16M4 19L16 6"/><path d="M10 19a6 6 0 0 0-1.8-4.3"/><path d="M8 11.5l2 2M10 9.5l2 2"/>'),
+  locus: svg('<path d="M3 17c3-9 6-12 9-6s6 4 9-5" stroke-dasharray="2.2 2.2"/>' + dot(12, 11, 1.8) + '<path d="M12 11l4 7"/>' + dot(16, 18, 1.8)),
   tools: svg('<path d="M5 4l8 8-8 8z" fill="currentColor" stroke-width="1"/><circle cx="18" cy="7" r="1.4" fill="currentColor"/><circle cx="18" cy="12" r="1.4" fill="currentColor"/><circle cx="18" cy="17" r="1.4" fill="currentColor"/>'),
   undo: svg('<path d="M9 7H4V2"/><path d="M4 7a9 9 0 1 1-1 7"/>'),
   redo: svg('<path d="M15 7h5V2"/><path d="M20 7a9 9 0 1 0 1 7"/>'),

@@ -7,3 +7,8 @@ venv/
 lab/du-lieu/
 reports/*
 !reports/README.md
+!reports/dung-thu.html
+!reports/dung-thu/
+reports/dung-thu/hinh-*/
+reports/dung-thu/anh-dbg/
+reports/dung-thu/ket-qua-dbg.json

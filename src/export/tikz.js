@@ -10,7 +10,7 @@ import { evaluate, kinds, stepById } from '../core/model.js';
 import * as G from '../core/geom.js';
 import { autoLabelDirs } from '../core/labels.js';
 import { texLabel } from '../core/names.js';
-import { styleOf, PALETTE } from '../core/styles.js';
+import { styleOf, isShown, PALETTE } from '../core/styles.js';
 
 // Tên màu dễ đọc cho bảng màu chuẩn; màu khác đặt tên theo mã hex.
 const NAMED_COLORS = Object.fromEntries([
@@ -66,7 +66,7 @@ export function toTikZ(doc, opts = {}) {
   const theme = opts.theme || 'mono';
   const vals = opts.values || evaluate(doc);
   const k = kinds(doc);
-  const visible = doc.steps.filter((s) => !s.hidden && vals.get(s.id));
+  const visible = doc.steps.filter((s) => isShown(doc, s) && vals.get(s.id));
 
   // ---- khung bao ----
   const pts = [];
@@ -148,7 +148,9 @@ export function toTikZ(doc, opts = {}) {
       if (sub === 'segment' && s.type === 'segment') out.lines.push(`\\draw${lineOpts(s)} ${ref(s.args[0])} -- ${ref(s.args[1])};`);
       else if (sub === 'segment') out.lines.push(`\\draw${lineOpts(s)} ${xy(v.p)} -- ${xy(G.add(v.p, v.d))};`);
       else {
-        const seg = clipLine(v, box, sub === 'ray' ? 0 : -Infinity);
+        // kiểu "vừa đủ" (như trên màn hình): chỉ qua các điểm nằm trên đường, nhô ra 0,35–1,1 cm
+        const rg = opts.trimLines ? G.trimmedRange(v, sub, visible.filter((x) => k.get(x.id) === 'point').map((x) => vals.get(x.id)), 1e-9 * (box.x2 - box.x1), cm(0.35), cm(1.1)) : null;
+        const seg = rg ? [G.add(v.p, G.mul(v.d, rg[0])), G.add(v.p, G.mul(v.d, rg[1]))] : clipLine(v, box, sub === 'ray' ? 0 : -Infinity);
         if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub === 'ray' && s.type === 'ray' ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub === 'ray' ? 'tia' : 'đường thẳng'} ${desc}`);
         if (seg && st.showLabel && s.name) {
           const P = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
@@ -159,6 +161,14 @@ export function toTikZ(doc, opts = {}) {
       const path = s.args.map(ref).join(' -- ') + ' -- cycle';
       out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.1)}] ${path};`);
       if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path};`);
+    } else if (v.kind === 'locus') {
+      // quỹ tích: các khúc gấp khúc qua điểm mẫu (bỏ phần ra xa ngoài khung, ngắt ở chỗ không xác định)
+      const W = box.x2 - box.x1, inBox = (p) => p && p.x > box.x1 - W && p.x < box.x2 + W && p.y > box.y1 - W && p.y < box.y2 + W;
+      let run = [];
+      const flush = () => { if (run.length > 1) out.lines.push(`\\draw${lineOpts(s)} plot coordinates {${run.map(xy).join(' ')}}; % quỹ tích`); run = []; };
+      const ps = v.closed ? [...v.pts, v.pts[0]] : v.pts;
+      for (const p of ps) { if (inBox(p)) run.push(p); else flush(); }
+      flush();
     } else if (s.type === 'angle_mark') {
       out.marks.push(...angleMark(v, s, col(s), cm, ref));
     } else if (s.type === 'segment_mark') {
@@ -173,9 +183,10 @@ export function toTikZ(doc, opts = {}) {
   }
 
   const L = [];
-  L.push(`% ${doc.title ? doc.title + ' — ' : ''}xuất từ Hình học động`);
+  L.push(`% ${doc.title ? doc.title + ' — ' : ''}xuất từ TyphoonDelta Geometry`);
   L.push('% Cần trong phần mở đầu: \\usepackage{tikz}');
   L.push('% Đổi kích thước hình: sửa x=…, y=… (đơn vị của một ô toạ độ).');
+  if (doc.images && doc.images.length) L.push(`% (${doc.images.length} ảnh dán vào hình không được xuất sang TikZ)`);
   L.push(`\\begin{tikzpicture}[x=${f3(unit)}cm, y=${f3(unit)}cm, line width=${f3(baseWidth * PT_PER_PX)}pt, line cap=round, line join=round]`);
   if (colorDefs.size) {
     L.push('  % Màu');

@@ -1,0 +1,208 @@
+{
+ "format": "hinh-hoc-dong",
+ "version": 1,
+ "title": "IMO 2012 – Bài 5",
+ "view": {
+  "bbox": [
+   -15.548,
+   7.198,
+   12.697,
+   -9.799
+  ]
+ },
+ "steps": [
+  {
+   "id": "s1",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -0.5,
+    "y": 3.5
+   },
+   "name": "C"
+  },
+  {
+   "id": "s2",
+   "type": "free_point",
+   "args": [],
+   "params": {
+    "x": -4.5,
+    "y": -1.5
+   },
+   "name": "B"
+  },
+  {
+   "id": "s3",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s2"
+   ],
+   "name": "d1"
+  },
+  {
+   "id": "s4",
+   "type": "perpendicular",
+   "args": [
+    "s1",
+    "s3"
+   ],
+   "name": "d2",
+   "hidden": true,
+   "joinPrev": true
+  },
+  {
+   "id": "s5",
+   "type": "point_on",
+   "args": [
+    "s4"
+   ],
+   "params": {
+    "t": 0.75
+   },
+   "name": "A",
+   "joinPrev": true
+  },
+  {
+   "id": "s6",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s5"
+   ],
+   "name": "d3",
+   "joinPrev": true
+  },
+  {
+   "id": "s7",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s5"
+   ],
+   "name": "d4",
+   "joinPrev": true
+  },
+  {
+   "id": "s8",
+   "type": "altitude_foot",
+   "args": [
+    "s1",
+    "s5",
+    "s2"
+   ],
+   "name": "D"
+  },
+  {
+   "id": "s9",
+   "type": "segment",
+   "args": [
+    "s1",
+    "s8"
+   ],
+   "name": "d5",
+   "style": {
+    "dash": true
+   },
+   "joinPrev": true
+  },
+  {
+   "id": "s10",
+   "type": "point_on",
+   "args": [
+    "s9"
+   ],
+   "params": {
+    "t": 0.5499999576752862
+   },
+   "name": "X"
+  },
+  {
+   "id": "s11",
+   "type": "segment",
+   "args": [
+    "s5",
+    "s10"
+   ],
+   "name": "d6"
+  },
+  {
+   "id": "s12",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s10"
+   ],
+   "name": "d7"
+  },
+  {
+   "id": "s13",
+   "type": "circle",
+   "args": [
+    "s2",
+    "s1"
+   ],
+   "name": "ω1"
+  },
+  {
+   "id": "s14",
+   "type": "circle",
+   "args": [
+    "s5",
+    "s1"
+   ],
+   "name": "ω2"
+  },
+  {
+   "id": "s15",
+   "type": "intersection",
+   "args": [
+    "s13",
+    "s11"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "K"
+  },
+  {
+   "id": "s16",
+   "type": "intersection",
+   "args": [
+    "s14",
+    "s12"
+   ],
+   "params": {
+    "which": 0
+   },
+   "name": "L"
+  },
+  {
+   "id": "s17",
+   "type": "segment",
+   "args": [
+    "s5",
+    "s16"
+   ],
+   "name": "d8"
+  },
+  {
+   "id": "s18",
+   "type": "segment",
+   "args": [
+    "s2",
+    "s15"
+   ],
+   "name": "d9"
+  },
+  {
+   "id": "s19",
+   "type": "intersection",
+   "args": [
+    "s18",
+    "s17"
+   ],
+   "name": "M"
+  }
+ ]
+}
