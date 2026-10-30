@@ -69,6 +69,30 @@ class TestSuyLuan(unittest.TestCase):
         d = tri(("M", "midpoint", ["A", "B"]), ("M2", "midpoint", ["B", "A"]))
         self.assertEqual(difficulty(d, "coincide", ["M", "M2"]), "?")
 
+    def test_diem_dac_biet_chi_de_trang_tri(self):
+        import copy
+
+        from lab.reason.generalize import decorative
+        from lab.search.base import build_base_doc, make_samples
+
+        base = build_base_doc()
+
+        def mk(extra, ids):
+            d = copy.deepcopy(base)
+            d["steps"] += extra
+            return sub_doc(d, ids, title="")
+
+        S = make_samples(6, 11)
+        # Q đối xứng A qua đường Euler, P = CA ∩ OH ⇒ C, O, P, Q đồng viên: đúng với MỌI đường qua O
+        d = mk([{"id": "lOH", "type": "line", "args": ["O", "H"]}, {"id": "P", "type": "intersection", "args": ["CA", "lOH"]},
+                {"id": "lHN", "type": "line", "args": ["H", "N"]}, {"id": "Q", "type": "reflect", "args": ["A", "lHN"]}],
+               ["C", "O", "P", "Q"])
+        self.assertIn("mọi đường thẳng qua O", decorative(d, "concyclic", ["C", "O", "P", "Q"], S))
+        # chính đường thẳng Euler, đối xứng của H qua BC trên (O), trung điểm AH trên đường tròn Euler: cần thật
+        self.assertIsNone(decorative(mk([], ["O", "G", "H"]), "collinear", ["O", "G", "H"], S))
+        self.assertIsNone(decorative(mk([{"id": "X", "type": "reflect", "args": ["H", "BC"]}], ["w", "X"]), "on_circle", ["w", "X"], S))
+        self.assertIsNone(decorative(mk([{"id": "X", "type": "midpoint", "args": ["A", "H"]}], ["e", "X"]), "on_circle", ["e", "X"], S))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -220,6 +220,8 @@ def _card(i, f, cfg, weights, variants=()):
         chips.append(f'<span class="chip">tự nhiên {f["tu_nhien"]:.2f}</span>')
     if f.get("giao_thoa"):
         chips.append('<span class="chip kho-mid">nối hai bổ đề</span>')
+    if f.get("tong_quat"):
+        chips.append(f'<span class="chip kho-hard" title="{html.escape(f["tong_quat"])}">điểm đặc biệt chỉ để trang trí</span>')
     if nc.get("goals_total", 0) > 1:
         chips.append(f'<span class="chip">{nc.get("goals_proved", 0)}/{nc["goals_total"]} mục tiêu</span>')
     parts = explain(f.get("dac_trung", {}), weights)
@@ -233,6 +235,8 @@ def _card(i, f, cfg, weights, variants=()):
     if f.get("nguon"):
         src += " · kết luận dính phần của: " + html.escape(", ".join(BY_KEY[k].ten if k in BY_KEY else k for k in f["nguon"]))
     src += "</p>"
+    if f.get("tong_quat"):
+        src += f'<p class="meta">Thực chất: {html.escape(f["tong_quat"])}.</p>'
     det = [_variants(variants, cfg)] if variants else []
     det += [f'<details><summary>Thành phần điểm</summary><table class="pts">{expl}</table></details>']
     if proof:
@@ -298,7 +302,7 @@ def build_report(run_id=None, cfg=None):
                          f'<p class="tier-note">{note}</p>' + ("".join(cards) or "<p>Chưa có.</p>")))
     dropped = [f for f in facts if f["tang"] == "loai"]
     why = {"hệ quả trực tiếp của sự kiện khác": 0, "đối tượng gượng ép (độ tự nhiên thấp)": 0,
-           "dễ (đuổi góc 1 bước) và không đặc sắc": 0, "bị đánh Chán": 0}
+           "dễ (đuổi góc 1 bước) và không đặc sắc": 0, "điểm đặc biệt chỉ để trang trí": 0, "bị đánh Chán": 0}
     for f in dropped:
         if f.get("phan_hoi") == "chan":
             why["bị đánh Chán"] += 1
@@ -306,6 +310,8 @@ def build_report(run_id=None, cfg=None):
             why["hệ quả trực tiếp của sự kiện khác"] += 1
         elif f.get("tu_nhien", 1.0) < (loc or {}).get("nguong_tu_nhien", 0.65):
             why["đối tượng gượng ép (độ tự nhiên thấp)"] += 1
+        elif f.get("tong_quat"):
+            why["điểm đặc biệt chỉ để trang trí"] += 1
         else:
             why["dễ (đuổi góc 1 bước) và không đặc sắc"] += 1
     dropped.sort(key=lambda f: -f["score"])

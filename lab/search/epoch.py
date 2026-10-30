@@ -298,6 +298,12 @@ class Epoch:
         earlier = [x for x in self.pipeline.known if _fact_sig(x) not in own]  # (pipeline đã ghi nhớ chính sự kiện này)
         if f["kho"] not in (1, "?") and earlier:
             f["he_qua"] = difficulty(f["doc"], f["type"], f["ids"], known=known + earlier, max_rounds=1) == 1
+        # điểm đặc biệt (O, H, I, G, N) có thật sự cần không, hay chỉ để trang trí
+        from ..reason.generalize import decorative
+
+        if not hasattr(self, "_gen_samples"):
+            self._gen_samples = make_samples(5, 77)
+        f["tong_quat"] = decorative(f["doc"], f["type"], f["ids"], self._gen_samples, seed=self.seed % 1000)
         on_fact(f)
         # đối tượng trong sự kiện được ưu tiên hơn trong phần còn lại của vòng
         for i in f["ids"]:

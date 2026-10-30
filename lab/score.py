@@ -11,6 +11,7 @@ cộng phần điều chỉnh học từ phản hồi "hay"/"chán" (lab/feedbac
     diem_tu_do              số điểm tuỳ ý
     so_diem                 số điểm vượt quá 4 trong phát biểu
     dai_dong                số câu dựng hình (kể cả của bổ đề) vượt quá 4
+    gia_dac_biet            vẫn đúng khi thả O/H/I/G/N thành điểm bất kỳ (lab/reason/generalize.py)
     kho_*                   độ khó theo bộ đuổi góc (lab/reason/angles.py): 1 vòng, 2 vòng, ≥ 3 vòng, không suy ra được,
                             chưa đánh giá được
     tu_nhien                độ tự nhiên của các đối tượng (0..1)
@@ -58,6 +59,7 @@ FEATURE_LABELS = {
     "kho_khong": "đuổi góc không suy ra được", "kho_chua": "chưa đánh giá được độ khó",
     "tu_nhien": "độ tự nhiên", "giao_thoa": "nối hai bổ đề", "noi_bo": "nằm gọn trong một bổ đề",
     "he_qua": "hệ quả trực tiếp của sự kiện khác", "dai_dong": "phát biểu dài dòng (số câu dựng hình quá 4)",
+    "gia_dac_biet": "điểm đặc biệt chỉ để trang trí (vẫn đúng khi thay bằng điểm bất kỳ)",
 }
 
 MAIN_SPECIAL = {"O", "I", "H", "circumcircle", "incircle", "ninepoint"}
@@ -119,6 +121,9 @@ def features(fact: dict, max_steps: int = 6) -> dict:
         f["noi_bo"] = 1.0
     if fact.get("he_qua"):
         f["he_qua"] = 1.0
+    if fact.get("tong_quat"):  # điểm đặc biệt chỉ để trang trí: không được thưởng "đặc biệt"
+        f["gia_dac_biet"] = 1.0
+        f["dac_biet"] = f["dac_biet_phu"] = 0.0
     return f
 
 
@@ -143,6 +148,8 @@ def tier(fact, cfg_loc=None):
     if k == 2 or k == "?":
         return "vua"
     special = feats.get("dac_biet", 0) + feats.get("dac_biet_phu", 0)
+    if fact.get("tong_quat"):
+        return "loai"  # dễ, và cái "đặc biệt" chỉ là trang trí
     if nat >= loc["nguong_tu_nhien_de"] and (fact.get("giao_thoa") or special >= 1):
         return "de"
     return "loai"
