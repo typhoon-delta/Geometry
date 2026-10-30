@@ -1,7 +1,8 @@
 """25 bài đứng đầu tầng Khó của lần chạy 1 tiếng (thầy/cô gửi). Giải tay: 14 bài là hệ quả ngắn của các bổ đề
 kinh điển về đường tròn nội tiếp – bàng tiếp (tiếp điểm đối xứng qua M_a, vị tự tâm A, S_a là trung điểm II_a, trực tâm
 IBC = B + C − I_a…) ⇒ phải đo được là dễ (≤ 2 vòng) khi dùng sổ tri thức bổ đề; các bài còn lại cần ý thật (vị tự,
-hàng điểm điều hoà, đối trung…) ⇒ vẫn "khó"."""
+hàng điểm điều hoà, đối trung…) ⇒ vẫn "khó". Sau khi giải tay kỹ: thêm #11, #14, #18 vào nhóm dễ (máy học thêm
+điểm Dumpty, hàng điểm điều hoà, đường tròn Euler của tam giác bất kỳ)."""
 
 import copy
 import unittest
@@ -54,7 +55,9 @@ B25 = {
 }
 
 
-DE = {1, 2, 3, 4, 5, 6, 8, 9, 12, 15, 17, 19, 21, 24}
+# dễ khi biết bổ đề: 14 bài ban đầu + #11 (cực của đường đối trung, điểm Dumpty), #14 (hàng điểm điều hoà),
+# #18 (đường tròn Euler của tam giác APU; đường tròn mixtilinear chỉ để trang trí)
+DE = {1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 19, 21, 24}
 
 
 def doc_of(k):

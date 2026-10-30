@@ -57,6 +57,8 @@ def holds(rtype, ids, v, eps):
             return abs(G.cross(G.unit(P[0].d), G.unit(P[1].d))) < eps and G.dist_point_line(P[1].p, P[0]) < eps
         if rtype == "midpoint":
             return G.dist(P[0], G.mid(P[1], P[2])) < eps
+        if rtype == "phuong_tich":
+            return abs(G.dist(P[0], P[1]) * G.dist(P[0], P[2]) - G.dist(P[0], P[3]) ** 2) < eps * max(1.0, G.dist(P[0], P[3]))
         if rtype == "same_circle":
             return G.dist(P[0].c, P[1].c) < eps and abs(P[0].r - P[1].r) < eps
     except (AttributeError, TypeError, ZeroDivisionError):

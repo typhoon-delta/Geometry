@@ -7,7 +7,8 @@ thêm các bước riêng (id dạng "<khoá>_<số>"). Mỗi cấu hình khai b
     ten        tên tiếng Việt
     ket_luan   các KẾT LUẬN CHÍNH của bổ đề (coi là đã biết: không báo lại, và được dùng như kiến thức khi
                đo độ khó) – các quan hệ khác nằm gọn trong một bổ đề vẫn được báo (trừ nhẹ điểm). Ngoài các
-               loại quan hệ thường, có loại "midpoint" [M, X, Y]: M là trung điểm XY.
+               loại quan hệ thường, có loại "midpoint" [M, X, Y]: M là trung điểm XY, và "phuong_tich" [M, X, Y, Z]: X, Y nằm trên
+               một đường qua M và MX·MY = MZ².
     the        nhãn (để ưu tiên ghép các cấu hình "hợp nhau")
 
 Khi ghép hai cấu hình, các đối tượng trùng nhau (bằng số) được gộp; quan hệ nối phần của cấu hình này với
@@ -268,6 +269,17 @@ def _dien_tich_N(b):
     b.kl("collinear", [X, "N", "Ma"])
 
 
+def _dumpty(b):
+    # đường đối trung từ A cắt (O) tại X; trung điểm D của AX (điểm Dumpty); tiếp tuyến tại A cắt BC tại T
+    Sf = b.add("symmedian_foot", ["A", "B", "C"], "S")
+    X = b.add("intersection_other", [b.line("A", Sf), "w", "A"], "X")
+    D = b.add("midpoint", ["A", X], "D")
+    T = b.add("intersection", [b.add("tangent_at", ["w", "A"]), "BC"], "T")
+    b.kl("concyclic", ["B", "O", "C", D])  # D trên (BOC)
+    b.kl("collinear", ["O", T, D])  # T là cực của đường đối trung: OT ⊥ AX tại D
+    b.kl("phuong_tich", ["Ma", Sf, T, "B"])  # (B, C; S, T) điều hoà: M_aS·M_aT = M_aB²
+
+
 def _hai_duong_tron(b):
     c1 = b.add("circle_tangent_at", ["B", "C", "A"])
     c2 = b.add("circle_tangent_at", ["C", "B", "A"])
@@ -302,5 +314,6 @@ CONFIGS = [Config(*c).make() for c in [
     ("AEF", "Đường tròn (AEF) qua H", _duong_tron_A_E_F, ("H",)),
     ("euler9", "Trung điểm AH trên đường tròn Euler", _dien_tich_N, ("H", "e")),
     ("tiepxucBC", "Hai đường tròn tiếp xúc AB, AC tại B, C qua A", _hai_duong_tron, ("tiep-tuyen", "trung-tuyen")),
+    ("dumpty", "Điểm Dumpty, cực của đường đối trung", _dumpty, ("w", "tiep-tuyen", "doi-trung")),
 ]]
 BY_KEY = {c.key: c for c in CONFIGS}

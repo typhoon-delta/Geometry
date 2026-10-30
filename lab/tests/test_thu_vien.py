@@ -38,6 +38,8 @@ def holds(rtype, ids, v, eps):
         return G.dist(P[0].c, P[1].c) < eps and abs(P[0].r - P[1].r) < eps
     if rtype == "midpoint":
         return G.dist(P[0], G.mid(P[1], P[2])) < eps
+    if rtype == "phuong_tich":
+        return abs(G.dist(P[0], P[1]) * G.dist(P[0], P[2]) - G.dist(P[0], P[3]) ** 2) < eps * 10
     raise AssertionError(rtype)
 
 

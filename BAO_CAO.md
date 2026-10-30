@@ -1165,3 +1165,18 @@ cần ý thật (vị tự, hàng điểm điều hoà, đối trung…). Đã s
 
 Kết quả: 14/25 đo được là dễ (≤ 2 vòng khi dùng bổ đề), 11/25 vẫn khó. Chạy thử 6 phút: tầng Khó còn 11 % (trước 26 %).
 Tốc độ giảm khoảng 25 % (bộ suy luận làm nhiều việc hơn).
+
+### Giải tay 11 bài còn lại
+
+| Bài | Kết luận | Máy học thêm |
+|---|---|---|
+| #7 | Dễ: đường tròn I_a, I_c và trực tâm chỉ để trang trí – R chỉ cần nằm trên đường qua A song song phân giác CI; AA′VR là hình chữ nhật (A′ đối xứng A qua CI, nằm trên BC) | chưa (cần nới lỏng theo đường không có sẵn trong hình) |
+| #11 | Dễ: giao điểm tiếp tuyến tại A với BC là cực của đường đối trung, đường nối nó với O đi qua điểm Dumpty | thư viện: cấu hình Dumpty |
+| #14 | Dễ – vừa: (B, C; chân đối trung, giao tiếp tuyến tại A) điều hoà + phương tích của M_a | loại kết luận "phương tích" |
+| #18 | Dễ: đường tròn mixtilinear chỉ để trang trí (P tuỳ ý trên AI); O, V, W là trung điểm ba cạnh tam giác APU, S_a là chân đường cao từ U | đường tròn Euler của tam giác bất kỳ; tâm mixtilinear trên AI; phát hiện trung điểm mới giữa chừng |
+| #16, #20 | Vừa (tính toán): quy về tỉ số vị tự tâm A, r_a/r = h_a/(h_a − 2r) | – |
+| #22 | Nhiều khả năng là kết quả quen về tứ giác điều hoà (chưa viết lời giải) | – |
+| #10, #13, #23, #25 | **Chưa giải được** trong thời gian hợp lý – ứng viên thật. Rút gọn: #13 điểm Humpty chỉ để trang trí; #23 quy về "tâm (IUV) nằm trên AB"; #25 quy về "tâm (OPQ) nằm trên đường cao CH" | – |
+
+Sửa thêm: luật hệ thức lượng nhanh hơn ~13 lần (tra chân đường cao theo toạ độ); **lỗi trong bộ suy luận trước đây bị
+tính là "khó"** – nay trả "?" (chưa đo được).

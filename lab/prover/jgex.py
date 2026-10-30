@@ -443,6 +443,9 @@ class Translator:
         elif rel_type == "midpoint":
             m, x, y = (self.P(i) for i in ids)
             g.append(f"midp {m} {x} {y}")
+        elif rel_type == "phuong_tich":
+            m, x, y, z = (self.P(i) for i in ids)
+            g.append(f"eqratio {m} {x} {m} {z} {m} {z} {m} {y}")
         else:
             raise NotTranslatable(f"chưa dịch được quan hệ '{rel_type}'")
         if not g:

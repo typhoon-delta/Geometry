@@ -26,6 +26,8 @@ def _point_atoms(doc, rtype, ids):
         out += [("cyc", list(c)) for c in combinations(ids, 4)]
     elif rtype == "midpoint":
         out.append(("mid", list(ids)))
+    elif rtype == "phuong_tich":
+        out.append(("pow", list(ids)))
     elif rtype in ("on_circle", "on_line") and ids:
         st = by.get(ids[0])
         if st is None:
@@ -99,7 +101,7 @@ def _add(out, seen, doc, kls, v, key_):
             if any(x is None or getattr(x, "kind", None) != "point" for x in P):
                 continue
             xy = tuple((round(p.x, 9), round(p.y, 9)) for p in P)
-            key = (kind, xy if kind in ("mid", "eq") else tuple(sorted(xy)))
+            key = (kind, xy if kind in ("mid", "eq", "pow") else tuple(sorted(xy)))
             if key in seen:
                 continue
             seen.add(key)
