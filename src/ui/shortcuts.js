@@ -2,6 +2,7 @@
 // duyệt. Có đối tượng đang chọn thì công cụ DỰNG NGAY trên chúng ("chọn trước, dựng sau" như Sketchpad): chọn hai đường
 // rồi Ctrl+G là có giao điểm; chọn điểm và đường rồi Ctrl+U là có đường vuông góc.
 // BẢNG LỆNH (Space): gõ vài chữ không dấu để tìm mọi công cụ, kể cả công cụ trong menu Công cụ và công cụ tự tạo.
+import { parseCommand, COMMAND_EXAMPLES, fold as foldCmd } from '../core/cmd.js';
 import { TOOL_BY_ID } from './tools.js';
 import { modal } from './dialog.js';
 
@@ -128,27 +129,59 @@ export function setupShortcuts(app) {
   async function palette() {
     const list = allTools(app);
     const recent = app.recentTools || [];
-    const id = await modal((box, close) => {
+    const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const pick = await modal((box, close) => {
       box.classList.add('palette');
-      box.innerHTML = `<input type="text" class="pal-q" placeholder="Gõ tên công cụ (không cần dấu): giao, vuong goc, ngoai tiep, dtnt…" spellcheck="false" autocomplete="off"><div class="pal-list"></div>
+      box.innerHTML = `<input type="text" class="pal-q" placeholder="Tên công cụ (giao, vuong goc…) hoặc lệnh: M = trung điểm BC, S = (AEF) cắt (O)…" spellcheck="false" autocomplete="off"><div class="pal-list"></div>
         <div class="pal-foot">↑↓ chọn · Enter dùng · Esc đóng · <kbd>Ctrl+/</kbd> xem và sửa phím tắt${app.selection.size ? ` · đang chọn ${app.selection.size} đối tượng: dựng ngay trên chúng nếu hợp` : ''}</div>`;
       const inp = box.querySelector('.pal-q'), host = box.querySelector('.pal-list');
       let rows = [], cur = 0;
       const paint = () => {
-        rows = searchTools(list, inp.value, recent).slice(0, 12);
-        cur = Math.min(cur, Math.max(0, rows.length - 1));
-        host.innerHTML = rows.length ? rows.map((t, i) => `<button class="pal-row ${i === cur ? 'on' : ''}" data-i="${i}"><span class="pal-ti">${TOOL_BY_ID[t.id].icon || ''}</span><span class="pal-l">${t.label}</span><span class="pal-g">${t.group}</span>${keyOf(t.id) ? `<kbd>${keyOf(t.id)}</kbd>` : ''}</button>`).join('') : '<div class="note">Không có công cụ nào khớp.</div>';
+        const q = inp.value;
+        rows = [];
+        // bản 1.8: câu lệnh dựng hình / kiểm tra
+        const cmd = q.trim() ? parseCommand(app.doc, q, { mouse: app.mouse }) : null;
+        const looksCmd = /=|\(|^\s*(kiem tra|qua|trung|giao|doan|duong|tia|diem|chan|doi xung|phan giac|tiep tuyen)\b|\b(thoa|sao cho|cat)\b/.test(foldCmd(q.toLowerCase()));
+        if (cmd && cmd.ok) rows.push({ cmd });
+        else if (cmd && looksCmd && cmd.error) rows.push({ err: cmd.error });
+        // mẫu lệnh khớp chữ đang gõ (bấm để chép vào ô)
+        const words = foldCmd(q.toLowerCase()).split(/\s+/).filter((w) => w.length > 1 && /^[a-z]+$/.test(w));
+        if (words.length && !(cmd && cmd.ok)) for (const ex of COMMAND_EXAMPLES.filter((e) => words.every((w) => foldCmd(e.toLowerCase()).includes(w))).slice(0, 4)) rows.push({ ex });
+        if (!(cmd && cmd.ok)) for (const t of searchTools(list, q, recent).slice(0, 12 - rows.length)) rows.push({ tool: t });
+        const sel = rows.map((r, i) => (r.err ? -1 : i)).filter((i) => i >= 0);
+        if (!sel.includes(cur)) cur = sel[0] ?? 0;
+        host.innerHTML = rows.length ? rows.map((r, i) => {
+          if (r.cmd) return `<button class="pal-row pal-cmd ${i === cur ? 'on' : ''}" data-i="${i}"><span class="pal-ti">↵</span><span class="pal-l">${r.cmd.kind === 'check' ? 'Kiểm tra' : 'Dựng'}: ${esc(r.cmd.desc)}</span><span class="pal-g">lệnh</span></button>`;
+          if (r.err) return `<div class="pal-err">${esc(r.err)}</div>`;
+          if (r.ex) return `<button class="pal-row pal-ex ${i === cur ? 'on' : ''}" data-i="${i}"><span class="pal-ti">›</span><span class="pal-l">${esc(r.ex)}</span><span class="pal-g">mẫu lệnh</span></button>`;
+          const t = r.tool;
+          return `<button class="pal-row ${i === cur ? 'on' : ''}" data-i="${i}"><span class="pal-ti">${TOOL_BY_ID[t.id].icon || ''}</span><span class="pal-l">${t.label}</span><span class="pal-g">${t.group}</span>${keyOf(t.id) ? `<kbd>${keyOf(t.id)}</kbd>` : ''}</button>`;
+        }).join('') : '<div class="note">Không có công cụ hay lệnh nào khớp.</div>';
+      };
+      const choose = (i) => {
+        const r = rows[i];
+        if (!r || r.err) return;
+        if (r.ex) { inp.value = r.ex; inp.focus(); cur = 0; paint(); return; }
+        close(r.cmd ? { cmd: inp.value } : { tool: r.tool.id });
+      };
+      const move = (d) => {
+        const sel = rows.map((r, i) => (r.err ? -1 : i)).filter((i) => i >= 0);
+        const j = sel.indexOf(cur);
+        cur = sel[Math.max(0, Math.min(sel.length - 1, j + d))] ?? 0;
+        paint();
       };
       inp.oninput = () => { cur = 0; paint(); };
       inp.onkeydown = (e) => {
-        if (e.key === 'ArrowDown') { e.preventDefault(); cur = Math.min(rows.length - 1, cur + 1); paint(); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); cur = Math.max(0, cur - 1); paint(); }
-        else if (e.key === 'Enter') { e.preventDefault(); if (rows[cur]) close(rows[cur].id); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+        else if (e.key === 'Enter') { e.preventDefault(); choose(cur); }
       };
-      host.onclick = (e) => { const b = e.target.closest('[data-i]'); if (b) close(rows[+b.dataset.i].id); };
+      host.onclick = (e) => { const b = e.target.closest('[data-i]'); if (b) choose(+b.dataset.i); };
       paint();
     });
-    if (id) app.activateTool(id);
+    if (!pick) return;
+    if (pick.tool) return app.activateTool(pick.tool);
+    app.runCommand(pick.cmd);
   }
 
   // ---------- bảng phím tắt (xem + sửa) ----------
@@ -161,7 +194,7 @@ export function setupShortcuts(app) {
         <input type="text" class="keys-q" placeholder="Lọc công cụ…" spellcheck="false">
         <div class="keys-list"></div>
         <details class="keys-fixed"><summary>Các phím cố định khác</summary><div class="keys-grid">${Object.entries({
-          'Space': 'tìm công cụ theo tên', 'Esc': 'huỷ / về công cụ Chọn', 'Ctrl+Z / Ctrl+Y': 'hoàn tác / làm lại', 'Delete': 'xoá đối tượng đang chọn',
+          'Space': 'tìm công cụ theo tên, hoặc gõ lệnh (M = trung điểm BC…)', 'Esc': 'huỷ / về công cụ Chọn', 'Ctrl+Z / Ctrl+Y': 'hoàn tác / làm lại', 'Delete': 'xoá đối tượng đang chọn',
           'Ctrl+H / Ctrl+Shift+H': 'ẩn đối tượng đang chọn / hiện lại tất cả', 'Alt + bấm': 'ẩn ngay đối tượng được bấm', 'gõ chữ / F2': 'đặt tên điểm đang chọn',
           'Shift + bấm/kéo': 'căn hướng ngang, dọc, bước 15°', 'Home': 'thu phóng vừa hình', 'Ctrl+S': 'lưu (vào kho nếu đã kết nối)', 'Ctrl+Shift+S': 'lưu tất cả các tab ra tệp',
           'Ctrl + kéo nền': 'chọn vùng (thêm Shift: chọn thêm)', 'Ctrl+C / Ctrl+V': 'chép / dán đối tượng (cả sang tab khác)', 'Ctrl+Shift+D': 'ẩn / hiện mọi đường phụ',

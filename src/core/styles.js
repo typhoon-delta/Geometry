@@ -89,4 +89,4 @@ export function defaultMarkColor(theme = current) {
 /** Đối tượng có được vẽ không: không ẩn, và không phải đường phụ khi đang tắt đường phụ (doc.hideAux). */
 export const isShown = (doc, s) => !s.hidden && !(s.aux && doc.hideAux);
 
-export const isDraggableType = (type) => type === 'free_point' || type === 'point_on' || type === 'point_in';
+export const isDraggableType = (type) => type === 'free_point' || type === 'point_on' || type === 'point_in' || type === 'solve_point';

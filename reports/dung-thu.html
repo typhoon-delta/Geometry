@@ -45,7 +45,7 @@ a { color: var(--accent); }
   <div class="stat"><b>1960 → 1200</b><span>tổng lần bấm chuột (−39%)</span></div>
   <div class="stat"><b>107 → 21</b><span>chỗ nhãn đè (nhãn–nhãn, nhãn–điểm, nhãn–đường)</span></div>
   <div class="stat"><b>14 → 15</b><span>bài bộ khám phá tự tìm ra kết luận</span></div>
-  <div class="stat"><b>≤ 0.39 ms</b><span>mỗi khung khi kéo (JS), không nhảy nghiệm</span></div>
+  <div class="stat"><b>≤ 0.53 ms</b><span>mỗi khung khi kéo (JS), không nhảy nghiệm</span></div>
 </div>
 <p class="sub">Thao tác = chọn một công cụ, một lần bấm lên hình, đặt một tên, hoặc một lệnh menu/phím. Nhãn đè đo trên ảnh chụp sau khi “Thu phóng vừa hình”. Thời gian khung đo trên Chromium headless không GPU.</p>
 
@@ -147,7 +147,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>8</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#4: B_2, C_1, C_2 nằm trên (A_1A_2B_1)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.38 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.42 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 8 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 9 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -163,7 +163,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#1: X nằm trên (ABC)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.3 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.36 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li></ul>
   </div>
@@ -179,7 +179,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>1</s> → <b>2</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 4·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
-      <tr><th>Kéo thử</th><td>X: 0.39 ms/khung<br>B: 0.24 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>X: 0.27 ms/khung<br>B: 0.3 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> Tên &quot;C&quot; đã bị chiếm (điểm khác) – phải đổi tên điểm kia trước <a href="#vd-ten-trung" class="sub">→ vấn đề 7</a></li><li><span class="st st-ok">đã sửa</span> Đặt 8 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -195,7 +195,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>3</s> → <b>1</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#2: H nằm trên XY</td></tr>
-      <tr><th>Kéo thử</th><td>W: 0.3 ms/khung<br>A: 0.3 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>W: 0.37 ms/khung<br>A: 0.36 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 1 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 7 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -211,7 +211,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>3</s> → <b>2</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#1: X nằm trên (ABC)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.31 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.38 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (M) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -227,7 +227,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>7</s> → <b>2</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁴ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#1: X nằm trên AO</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.38 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.44 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> Tên &quot;L&quot; đã bị chiếm (tâm đường tròn tự đặt tên) – phải đổi tên điểm kia trước <a href="#vd-ten-tam" class="sub">→ vấn đề 3</a></li><li><span class="st st-ok">đã sửa</span> 7 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 8 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -243,7 +243,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>4</s> → <b>2</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 4·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#1: KT tiếp xúc (JST)</td></tr>
-      <tr><th>Kéo thử</th><td>S: 0.28 ms/khung<br>J: 0.29 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>S: 0.53 ms/khung<br>J: 0.31 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> Tên &quot;A&quot; đã bị chiếm (tâm đường tròn tự đặt tên) – phải đổi tên điểm kia trước <a href="#vd-ten-tam" class="sub">→ vấn đề 3</a></li><li><span class="st st-part">đỡ hơn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (Z1) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 4 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 9 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -259,7 +259,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#1: DE ∥ FG</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.25 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.32 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Bộ khám phá không tìm thấy kết luận → bản 1.2 xếp hạng #1: “DE ∥ FG” <a href="#vd-kham" class="sub">→ vấn đề 10</a></li></ul>
   </div>
@@ -275,7 +275,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>4</s> → <b>1</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 4·10⁻⁸ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#5: DI, PQ, d10 (⊥ AI qua A) đồng quy</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.34 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.42 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 4 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 1 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 3 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -291,7 +291,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>2</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 1·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
-      <tr><th>Kéo thử</th><td>T_1: 0.29 ms/khung<br>U: 0.26 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>T_1: 0.42 ms/khung<br>U: 0.41 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (chỗ cắt) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 2 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 11 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -307,7 +307,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>3</s> → <b>2</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁴ trên 30 cấu hình xê dịch (bỏ 3 cấu hình trái giả thiết)</td></tr>
       <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.37 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.41 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 4 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -323,7 +323,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁶ trên 30 cấu hình xê dịch (bỏ 36 cấu hình trái giả thiết)</td></tr>
       <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.34 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.35 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -339,7 +339,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>3</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 1·10⁻¹³ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#6: d3 (∥ AP qua H) tiếp xúc (BEF)</td></tr>
-      <tr><th>Kéo thử</th><td>N: 0.3 ms/khung<br>U: 0.25 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>N: 0.34 ms/khung<br>U: 0.31 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li></ul>
   </div>
@@ -355,7 +355,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>17</s> → <b>2</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 3·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.38 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.44 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 17 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 2 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -371,7 +371,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>7</s> → <b>3</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 7·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#2: D nằm trên (AMN)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.35 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.4 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (N) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-part">còn</span> Chỗ cắt nằm ngoài khung nhìn – phải chọn lần lượt hai đường <a href="#vd-giao-xa" class="sub">→ vấn đề 14</a></li><li><span class="st st-ok">đã sửa</span> 7 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 3 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 3 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -387,7 +387,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>0</s> → <b>1</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 1·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#1: C, I, I_A nằm trên (S, SB)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.27 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.32 ms/khung</td></tr>
     </table>
     <p class="sub">Không gặp vấn đề riêng.</p>
   </div>
@@ -403,7 +403,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 5·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#1: đường tròn Euler ABC tiếp xúc đường tròn nội tiếp ABC</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.3 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.37 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li></ul>
   </div>
@@ -419,7 +419,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>0</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 4·10⁻⁸ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.3 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.38 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -435,7 +435,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>27</s> → <b>1</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 6·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.35 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.47 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> Nghịch đảo chỉ áp cho điểm: ảnh của (O) và của đường tròn mixtilinear phải dựng qua ảnh của 3 điểm <a href="#vd-nghich-dao" class="sub">→ vấn đề 1</a></li><li><span class="st st-ok">đã sửa</span> Hai điểm trùng toạ độ: bấm/nháy đúp luôn chọn điểm dựng trước, không chọn được điểm vừa dựng để đặt tên &quot;B_1&quot; <a href="#vd-trung-diem" class="sub">→ vấn đề 11</a></li><li><span class="st st-part">đỡ hơn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (X') <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 27 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 1 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 10 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -451,7 +451,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>2</s> → <b>2</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁴ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#1: P nằm trên d10 (⊥ QR qua O)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.29 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.39 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (Q) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-part">còn</span> Chỗ cắt nằm ngoài khung nhìn – phải chọn lần lượt hai đường <a href="#vd-giao-xa" class="sub">→ vấn đề 14</a></li><li><span class="st st-ok">đã sửa</span> Đặt 5 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -467,7 +467,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>3</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 2·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#6: S_{13} nằm trên S_{12}S_{23}</td></tr>
-      <tr><th>Kéo thử</th><td>O_1: 0.28 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>O_1: 0.33 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-part">còn</span> Đối tượng mới dựng nằm ngoài khung nhìn – phải &quot;Thu phóng vừa hình&quot; mới bấm/đặt tên được (S_{13}) <a href="#vd-khung-nhin" class="sub">→ vấn đề 13</a></li><li><span class="st st-ok">đã sửa</span> 3 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 9 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>
@@ -483,7 +483,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>1</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 1·10⁻¹⁵ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>không (dạng kết luận chưa hỗ trợ: đoạn/góc bằng nhau, tổng độ dài…)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.29 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.38 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> Phép quay/vị tự chỉ nhận góc/tỉ số là hằng số gõ tay – không lấy được góc ASC và tỉ số SC/SA trên hình (kéo hình là sai) <a href="#vd-goc-ti-so" class="sub">→ vấn đề 2</a></li><li><span class="st st-ok">đã sửa</span> 1 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li></ul>
   </div>
@@ -499,7 +499,7 @@ a { color: var(--accent); }
       <tr><th>Nhãn đè</th><td><s>8</s> → <b>0</b></td></tr>
       <tr><th>Kiểm chứng</th><td><b class="good">đúng</b> – sai số lớn nhất 6·10⁻¹⁶ trên 30 cấu hình xê dịch</td></tr>
       <tr><th>Khám phá</th><td>#1: M_A, M_B, M_C, A', B', C' nằm trên (ABC)</td></tr>
-      <tr><th>Kéo thử</th><td>A: 0.39 ms/khung</td></tr>
+      <tr><th>Kéo thử</th><td>A: 0.46 ms/khung</td></tr>
     </table>
     <ul class="iss"><li><span class="st st-ok">đã sửa</span> 8 chỗ nhãn đè (nhãn–nhãn / nhãn–điểm / nhãn–đường) → còn 0 <a href="#vd-nhan" class="sub">→ vấn đề 5</a></li><li><span class="st st-ok">đã sửa</span> Đặt 9 tên tốn nhiều thao tác <a href="#vd-ten" class="sub">→ vấn đề 6</a></li></ul>
   </div>

@@ -442,6 +442,19 @@ export const STEP_TYPES = {
     compute: ([A, B, C, D]) => { const cd = G.dist(C, D); return cd < G.EPS ? null : { kind: 'measure', m: 'ratio', value: G.dist(A, B) / cd, at: { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } }; },
   },
 
+  // ---------- BẢN 1.8: điểm thoả điều kiện ----------
+  solve_point: {
+    // Điểm P thoả 1–2 điều kiện, giải bằng Newton từ vị trí gần đúng (x, y) – luôn ra nghiệm gần chỗ đặt.
+    // conds: [{t, a, v?}], a là chỉ số trong args (−1 = chính P):
+    //   on   [i]            P thuộc đường thẳng / đường tròn args[i]
+    //   len  [i, j, k, l]   độ dài ij = kl
+    //   ang  [i,j,k,l,m,n]  góc ijk = góc lmn (góc thường, 0..180°)
+    //   angv [i, j, k], v   góc ijk = v độ
+    // Một điều kiện: P chạy trên "quỹ tích" đó (kéo được); hai điều kiện: P xác định (gần chỗ đặt).
+    kind: 'point', args: ['...obj'], minArgs: 1, params: { x: 0, y: 0, conds: [] }, label: 'Điểm thoả điều kiện',
+    compute: (argVals, p) => G.solvePoint(argVals, p.conds || [], p.x, p.y),
+  },
+
   // ---------- ĐÁNH DẤU (không tham gia khám phá) ----------
   polygon: {
     kind: 'mark', args: ['...point'], label: 'Miền đa giác',
@@ -469,6 +482,7 @@ export function argAccepts(argType, kind) {
     case 'obj': return kind === 'point' || kind === 'line' || kind === 'circle';
     case 'pl': return kind === 'point' || kind === 'line';
     case '...point': return kind === 'point';
+    case '...obj': return kind === 'point' || kind === 'line' || kind === 'circle';
     default: return false;
   }
 }

@@ -46,11 +46,11 @@ export function evaluate(doc, overrides = null) {
 export function computeStep(s, vals, overrides = null, doc = null) {
   const def = STEP_TYPES[s.type];
   if (!def) return null;
-  const variadic = def.args[0] === '...point';
+  const variadic = (def.args[0] || '').startsWith('...');
   const argVals = new Array(s.args.length);
   for (let i = 0; i < s.args.length; i++) {
     const a = vals.get(s.args[i]);
-    if (!a || !argAccepts(variadic ? '...point' : def.args[i], a.kind)) return null;
+    if (!a || !argAccepts(variadic ? def.args[0] : def.args[i], a.kind)) return null;
     argVals[i] = a;
   }
   const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
@@ -76,7 +76,10 @@ export function makeUpdater(doc, changedIds, { track = false } = {}) {
   const update = (vals) => {
     for (const s of plan) {
       if (track && TRACKED[s.type]) trackRoot(s, vals);
-      vals.set(s.id, computeStep(s, vals, null, doc));
+      const v = computeStep(s, vals, null, doc);
+      vals.set(s.id, v);
+      // điểm thoả điều kiện: lần giải sau xuất phát từ nghiệm vừa tìm (đi liên tục theo hình)
+      if (track && v && s.type === 'solve_point') s.params = { ...s.params, x: Math.round(v.x * 1e9) / 1e9, y: Math.round(v.y * 1e9) / 1e9 };
     }
     return vals;
   };
@@ -274,13 +277,13 @@ export function validate(doc) {
     const def = STEP_TYPES[s.type];
     if (!def) { errs.push(`${where}: loại bước không rõ "${s.type}"`); seen.add(s.id); continue; }
     if (!Array.isArray(s.args)) { errs.push(`${where}: thiếu args`); seen.add(s.id); continue; }
-    const variadic = def.args[0] === '...point';
-    if (variadic ? s.args.length < 3 : s.args.length !== def.args.length)
+    const variadic = (def.args[0] || '').startsWith('...');
+    if (variadic ? s.args.length < (def.minArgs ?? 3) : s.args.length !== def.args.length)
       errs.push(`${where}: số đối số sai`);
     s.args.forEach((a, j) => {
       if (!seen.has(a)) errs.push(`${where}: tham chiếu "${a}" chưa được dựng ở bước trước`);
       else {
-        const t = variadic ? '...point' : def.args[j];
+        const t = variadic ? def.args[0] : def.args[j];
         if (t && !argAccepts(t, k.get(a))) errs.push(`${where}: đối số "${a}" sai loại`);
       }
     });

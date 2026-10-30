@@ -4,9 +4,9 @@ import { checkClaim, claimText, CLAIMS } from '../explore/check.js';
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
-export function showCheck(app, claim) {
-  const q = claimText(app.doc, claim);
-  const r = checkClaim(app.doc, claim);
+export function showCheck(app, claim, doc = app.doc) {
+  const q = claimText(doc, claim);
+  const r = checkClaim(doc, claim);
   const sp = (st) => r.special.filter((x) => x.status === st);
   let head, cls, body = '';
   const tried = `thử ${r.tested} hình ngẫu nhiên${r.undef ? ` (${r.undef} hình không xác định)` : ''} và ${r.special.length} trường hợp đặc biệt`;

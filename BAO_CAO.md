@@ -971,3 +971,53 @@ cha, chặn vòng, hoàn tác). `npm run test:perf` đạt ngưỡng (×1 3,7 ms
 * Quỹ tích chỉ theo điểm chạy trên đường (`point_on`); quỹ tích theo điểm trong miền chưa làm. Quỹ tích tính lại mỗi khung
   khi kéo (160 lần dựng lại phần phụ thuộc) – hình rất lớn có nhiều quỹ tích có thể chậm.
 * Chép/dán không mang theo khung chữ, ảnh.
+
+# Bản 1.8 – Gõ lệnh, điểm thoả điều kiện, kiểm tra nhận định, trường hợp đặc biệt, kéo không nhảy, Asymptote
+
+Sau khi tìm hiểu nhu cầu với phần mềm vẽ hình (nghiên cứu về giáo viên dùng phần mềm hình học động, công cụ tự kiểm chứng
+Relation/Prove của GeoGebra, các nghiên cứu dựng hình Olympic tự động, cộng đồng AoPS), thầy/cô duyệt 6 việc (bỏ "quỹ tích
+thành đường thật").
+
+## 1. Đã làm
+
+* **Kiểm tra nhận định** (`src/explore/check.js`): 11 loại (trùng, thẳng hàng, đồng viên, bằng nhau – đoạn/4 điểm, góc bằng
+  nhau, thuộc đường thẳng/đường tròn, vuông góc, song song, đồng quy, tiếp xúc). Chỉ tính phần hình mà nhận định phụ thuộc;
+  80 hình ngẫu nhiên hợp lệ (xen kẽ xê dịch nhỏ/lớn, bỏ hình suy biến hoặc đổi dạng như bộ khám phá – bộ lấy mẫu tách thành
+  `makeSampler` dùng chung) cộng các trường hợp đặc biệt. Kết luận: luôn đúng / sai / không luôn đúng (phản ví dụ đặt được
+  vào hình) / không xác định; liệt kê *sai khi*, *không xác định khi*, *đúng khi*. Vd O, H, G: luôn đúng, suy biến khi tam giác
+  đều; O, I, H: sai, đúng khi tam giác cân (đúng như ProveDetails của GeoGebra báo điều kiện không suy biến).
+* **Trường hợp đặc biệt** (`src/explore/special.js`) dùng cho kiểm tra và cho nút *Đưa về* ở thẻ thuộc tính: tam giác cân /
+  vuông tại từng đỉnh, đều (dời một đỉnh tự do, giữ hai đỉnh kia); điểm trên cạnh về trung điểm, chân đường cao, chân phân
+  giác; điểm trên đường tròn về điểm đối tâm của các điểm khác trên đó; điểm trong tam giác về trọng tâm, tâm nội tiếp, (tam
+  giác nhọn) trực tâm, tâm ngoại tiếp.
+* **Điểm thoả điều kiện** (`solve_point`): Newton với đạo hàm số; một điều kiện thì chiếu về đường r = 0 (điểm chạy trên quỹ
+  tích, kéo được), hai điều kiện giải hệ 2×2. Xuất phát từ chỗ bấm nên ra nghiệm gần đó; khi kéo hình xuất phát từ nghiệm
+  trước (đi liên tục). Lõi Python có bản giống hệt; dữ liệu đối chiếu thêm Brocard, PB = PC & ∠BPC = 120°, ∠BRC = 90° (một
+  điều kiện), điểm chính giữa cung, điểm trên đoạn.
+* **Gõ lệnh tiếng Việt** (`src/core/cmd.js`, trong bảng lệnh `Space`): ~20 mẫu lệnh dựng, lệnh "thoả/sao cho", lệnh "kiểm tra".
+  Tách tên điểm theo tên có thật trên hình (khớp dài nhất: `I_AB` → I_A, B); đường/đường tròn chưa có thì tự dựng (đường
+  thẳng thành đường phụ); giao điểm đã có thì lấy giao điểm còn lại, hai giao điểm đều có / giao điểm trùng điểm có sẵn thì
+  báo thay vì dựng trùng. Báo lỗi ngay khi gõ; gõ vài chữ hiện mẫu lệnh.
+* **Kéo không nhảy**: rà 28 hình mẫu (kéo từng điểm tự do một vòng, 240 bước, hai bán kính): 14 lần giao điểm/tiếp điểm nhảy
+  sang nghiệm kia (vd IMO 2017/4: A nhảy rất xa; IMO 2018/1: G nhảy 0,57 cỡ hình). Nay khi kéo, nếu nghiệm đang chọn ở xa vị
+  trí cũ còn nghiệm kia ở sát thì đổi `which` (ghi vào hình): còn 7 lần, đều là "giao điểm thứ hai khác Q" đi qua chỗ tiếp
+  xúc (hai nghiệm sát nhau – mơ hồ thật, độ nhảy ≤ 0,12 cỡ hình).
+* **Xuất Asymptote** (`src/export/asy.js`): như TikZ (biến pair theo nhãn, đường thẳng vừa đủ, màu, nét đứt, cung góc, vạch,
+  hướng nhãn, quỹ tích). 28 hình mẫu biên dịch được bằng `asy`.
+* Sửa thêm: bộ khám phá Python thiếu nhánh xê dịch điểm trong tam giác (lệch với JS từ bản 1.7) – đã bổ sung.
+
+## 2. Kiểm thử
+
+`npm test` 165 test (thêm `check.test.mjs` 6, `cmd.test.mjs` 6, `asy.test.mjs` 2 – biên dịch thật bằng asy nếu máy có).
+Test Python đạt (đối chiếu gồm các ca bản 1.8, cả khám phá trên hình có điểm trong tam giác). `npm run test:browser` đạt,
+thêm `smoke10.mjs` (28 kiểm tra: lệnh dựng, mẫu lệnh, báo lỗi, hoàn tác, Brocard và kéo đỉnh, công cụ điểm thoả điều kiện
+– gõ sai hỏi lại, kéo sang nghiệm kia; kiểm tra O, H, G / O, I, H và "xem" trường hợp cân; lệnh kiểm tra; đưa về vuông, chân
+đường cao; xuất Asymptote). `npm run test:perf` đạt (×1 4,3 ms/khung, ×4 16,9 ms, p95 16,8 ms).
+
+## 3. Hạn chế
+
+* Kiểm tra nhận định là kiểm tra bằng số (sai số tương đối 10⁻⁷) – rất tin được nhưng không phải chứng minh; trường hợp đặc
+  biệt chỉ gồm các dạng kể trên (chưa có "hai điểm trùng nhau", "đường song song"…).
+* Điểm thoả điều kiện: tối đa hai điều kiện, các loại góc/độ dài/thuộc đường; điều kiện tỉ số, góc có hướng chưa có.
+  Gần chỗ hai nghiệm nhập lại, Newton có thể không hội tụ (điểm tạm không xác định, kéo tiếp thì có lại).
+* Lệnh tiếng Việt chỉ hiểu các mẫu đã liệt kê (xem `COMMAND_EXAMPLES` trong `src/core/cmd.js`).

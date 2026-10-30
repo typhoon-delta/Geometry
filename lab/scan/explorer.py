@@ -117,6 +117,12 @@ def random_overrides(doc, base, scale, rand, perturb):
             else:
                 t += (rand() * 2 - 1) * 0.4
             ov[s["id"]] = {"t": t}
+        elif s["type"] == "point_in":
+            # điểm trong tam giác (bản 1.7): (u, v) ngẫu nhiên, tránh sát cạnh – như randomOverrides của bản JS
+            u, v = rand(), rand()
+            if u + v > 1:
+                u, v = 1 - u, 1 - v
+            ov[s["id"]] = {"u": 0.08 + 0.84 * u, "v": 0.08 + 0.84 * v}
     return ov
 
 

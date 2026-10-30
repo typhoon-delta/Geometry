@@ -53,13 +53,17 @@
       box.querySelector(".primary").onclick = () => close2(true);
     }).then((v) => !!v);
   }
-  function promptDialog(title, value = "", hint = "") {
+  function promptDialog(title, value = "", hint = "", { cursorEnd = false, error = "" } = {}) {
     return modal((box, close2) => {
       box.innerHTML = `<h3>${esc(title)}</h3>${hint ? `<div class="modal-body">${esc(hint)}</div>` : ""}
-      <input type="text" class="modal-input" value="${esc(value)}">
+      <input type="text" class="modal-input" value="${esc(value)}">${error ? `<div class="modal-err">${esc(error)}</div>` : ""}
       <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary">OK</button></div>`;
       const inp = box.querySelector("input");
-      inp.select();
+      if (cursorEnd) setTimeout(() => {
+        inp.focus();
+        inp.setSelectionRange(inp.value.length, inp.value.length);
+      }, 0);
+      else inp.select();
       inp.onkeydown = (e) => {
         if (e.key === "Enter") close2(inp.value);
       };
@@ -197,6 +201,7 @@
     reflectPointOverLine: () => reflectPointOverLine,
     reflectPointOverPoint: () => reflectPointOverPoint,
     rotatePoint: () => rotatePoint,
+    solvePoint: () => solvePoint,
     spiralPoint: () => spiralPoint,
     sub: () => sub,
     symmedianFoot: () => symmedianFoot,
@@ -587,6 +592,67 @@
     const len = (t1 - t0) * dd;
     const ext = Math.min(maxExt, Math.max(minExt, 0.15 * len)) / dd;
     return [sub4 === "ray" ? 0 : t0 - ext, t1 + ext];
+  }
+  var SOLVE_ITERS = 60;
+  function condAngle(A, B, C2) {
+    const a = directedAngle(A, B, C2);
+    return a == null ? NaN : Math.abs(a) * Math.PI / 180;
+  }
+  function condResidual(c, P2, objs) {
+    const g = (i) => i < 0 ? P2 : objs[i];
+    const a = c.a;
+    if (c.t === "on") {
+      const X = objs[a[0]];
+      if (X.kind === "line") return cross(unit(X.d), sub(P2, X.p));
+      return dist(P2, X.c) - X.r;
+    }
+    if (c.t === "len") return dist(g(a[0]), g(a[1])) - dist(g(a[2]), g(a[3]));
+    if (c.t === "ang") return condAngle(g(a[0]), g(a[1]), g(a[2])) - condAngle(g(a[3]), g(a[4]), g(a[5]));
+    if (c.t === "angv") return condAngle(g(a[0]), g(a[1]), g(a[2])) - c.v * Math.PI / 180;
+    return NaN;
+  }
+  function solvePoint(objs, conds, x0, y0) {
+    const n = conds.length;
+    if (n < 1 || n > 2) return null;
+    let S2 = 0;
+    for (const o of objs) {
+      const q = o.kind === "point" ? o : o.kind === "circle" ? o.c : o.p;
+      S2 = Math.max(S2, Math.hypot(q.x - x0, q.y - y0));
+      if (o.kind === "circle") S2 = Math.max(S2, o.r);
+    }
+    if (!(S2 > 0)) S2 = 1;
+    const h = 1e-6 * S2;
+    const R = (x2, y2) => conds.map((c) => condResidual(c, pt(x2, y2), objs));
+    let x = x0, y = y0;
+    for (let it = 0; it < SOLVE_ITERS; it++) {
+      const r2 = R(x, y);
+      if (r2.some((v) => !Number.isFinite(v))) return null;
+      const rx1 = R(x + h, y), rx0 = R(x - h, y), ry1 = R(x, y + h), ry0 = R(x, y - h);
+      const J = r2.map((_, i) => [(rx1[i] - rx0[i]) / (2 * h), (ry1[i] - ry0[i]) / (2 * h)]);
+      let dx, dy;
+      if (n === 1) {
+        const g2 = J[0][0] * J[0][0] + J[0][1] * J[0][1];
+        if (!(g2 > 1e-300)) return null;
+        dx = r2[0] * J[0][0] / g2;
+        dy = r2[0] * J[0][1] / g2;
+      } else {
+        const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+        if (!(Math.abs(det) > 1e-300)) return null;
+        dx = (r2[0] * J[1][1] - r2[1] * J[0][1]) / det;
+        dy = (J[0][0] * r2[1] - J[1][0] * r2[0]) / det;
+      }
+      const L = Math.hypot(dx, dy);
+      if (L > 0.5 * S2) {
+        dx *= 0.5 * S2 / L;
+        dy *= 0.5 * S2 / L;
+      }
+      x -= dx;
+      y -= dy;
+      if (L < 1e-13 * S2) break;
+    }
+    const r = R(x, y);
+    const ok = conds.every((c, i) => Number.isFinite(r[i]) && Math.abs(r[i]) < (c.t === "ang" || c.t === "angv" ? 1e-9 : 1e-9 * S2));
+    return ok ? pt(x, y) : null;
   }
 
   // src/core/steps.js
@@ -1176,6 +1242,22 @@
         return cd < EPS ? null : { kind: "measure", m: "ratio", value: dist(A, B) / cd, at: { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } };
       }
     },
+    // ---------- BẢN 1.8: điểm thoả điều kiện ----------
+    solve_point: {
+      // Điểm P thoả 1–2 điều kiện, giải bằng Newton từ vị trí gần đúng (x, y) – luôn ra nghiệm gần chỗ đặt.
+      // conds: [{t, a, v?}], a là chỉ số trong args (−1 = chính P):
+      //   on   [i]            P thuộc đường thẳng / đường tròn args[i]
+      //   len  [i, j, k, l]   độ dài ij = kl
+      //   ang  [i,j,k,l,m,n]  góc ijk = góc lmn (góc thường, 0..180°)
+      //   angv [i, j, k], v   góc ijk = v độ
+      // Một điều kiện: P chạy trên "quỹ tích" đó (kéo được); hai điều kiện: P xác định (gần chỗ đặt).
+      kind: "point",
+      args: ["...obj"],
+      minArgs: 1,
+      params: { x: 0, y: 0, conds: [] },
+      label: "\u0110i\u1EC3m tho\u1EA3 \u0111i\u1EC1u ki\u1EC7n",
+      compute: (argVals, p) => solvePoint(argVals, p.conds || [], p.x, p.y)
+    },
     // ---------- ĐÁNH DẤU (không tham gia khám phá) ----------
     polygon: {
       kind: "mark",
@@ -1214,6 +1296,8 @@
         return kind === "point" || kind === "line";
       case "...point":
         return kind === "point";
+      case "...obj":
+        return kind === "point" || kind === "line" || kind === "circle";
       default:
         return false;
     }
@@ -1253,11 +1337,11 @@
   function computeStep(s, vals, overrides = null, doc2 = null) {
     const def = STEP_TYPES[s.type];
     if (!def) return null;
-    const variadic = def.args[0] === "...point";
+    const variadic = (def.args[0] || "").startsWith("...");
     const argVals = new Array(s.args.length);
     for (let i = 0; i < s.args.length; i++) {
       const a = vals.get(s.args[i]);
-      if (!a || !argAccepts(variadic ? "...point" : def.args[i], a.kind)) return null;
+      if (!a || !argAccepts(variadic ? def.args[0] : def.args[i], a.kind)) return null;
       argVals[i] = a;
     }
     const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
@@ -1277,7 +1361,9 @@
     const update = (vals) => {
       for (const s of plan) {
         if (track && TRACKED[s.type]) trackRoot(s, vals);
-        vals.set(s.id, computeStep(s, vals, null, doc2));
+        const v = computeStep(s, vals, null, doc2);
+        vals.set(s.id, v);
+        if (track && v && s.type === "solve_point") s.params = { ...s.params, x: Math.round(v.x * 1e9) / 1e9, y: Math.round(v.y * 1e9) / 1e9 };
       }
       return vals;
     };
@@ -1460,13 +1546,13 @@
         seen.add(s.id);
         continue;
       }
-      const variadic = def.args[0] === "...point";
-      if (variadic ? s.args.length < 3 : s.args.length !== def.args.length)
+      const variadic = (def.args[0] || "").startsWith("...");
+      if (variadic ? s.args.length < (def.minArgs ?? 3) : s.args.length !== def.args.length)
         errs.push(`${where}: s\u1ED1 \u0111\u1ED1i s\u1ED1 sai`);
       s.args.forEach((a, j) => {
         if (!seen.has(a)) errs.push(`${where}: tham chi\u1EBFu "${a}" ch\u01B0a \u0111\u01B0\u1EE3c d\u1EF1ng \u1EDF b\u01B0\u1EDBc tr\u01B0\u1EDBc`);
         else {
-          const t2 = variadic ? "...point" : def.args[j];
+          const t2 = variadic ? def.args[0] : def.args[j];
           if (t2 && !argAccepts(t2, k.get(a))) errs.push(`${where}: \u0111\u1ED1i s\u1ED1 "${a}" sai lo\u1EA1i`);
         }
       });
@@ -1814,7 +1900,7 @@
     return st;
   }
   var isShown = (doc2, s) => !s.hidden && !(s.aux && doc2.hideAux);
-  var isDraggableType = (type) => type === "free_point" || type === "point_on" || type === "point_in";
+  var isDraggableType = (type) => type === "free_point" || type === "point_on" || type === "point_in" || type === "solve_point";
 
   // src/ui/render.js
   var LABEL = { mono: { font: 15 }, textbook: { font: 16 } };
@@ -3396,6 +3482,15 @@
       { extraClick: "B\u1EA5m v\xE0o trong tam gi\xE1c \u0111\u1EC3 \u0111\u1EB7t \u0111i\u1EC3m (khi k\xE9o, \u0111i\u1EC3m lu\xF4n \u1EDF trong tam gi\xE1c)" }
     ),
     T2(
+      "solve_point",
+      "\u0110i\u1EC3m tho\u1EA3 \u0111i\u1EC1u ki\u1EC7n",
+      "C\u01A1 b\u1EA3n",
+      "\u2316",
+      ["point"],
+      ["B\u1EA5m v\xE0o ch\u1ED7 G\u1EA6N \u0111i\u1EC3m c\u1EA7n t\xECm, r\u1ED3i g\xF5 \u0111i\u1EC1u ki\u1EC7n (vd: g\xF3c PAB = g\xF3c PBC, g\xF3c PBC = g\xF3c PCA)"],
+      () => []
+    ),
+    T2(
       "fixed_point",
       "\u0110i\u1EC3m c\u1ED1 \u0111\u1ECBnh",
       "Qu\u1EF9 t\xEDch",
@@ -3425,7 +3520,7 @@
   var TOOL_BY_ID = Object.fromEntries([...TOOLS, ...LIBRARY].map((t2) => [t2.id, t2]));
   var TOOLBAR = [
     { id: "move", label: "Ch\u1ECDn / k\xE9o", icon: "move", tools: ["move"] },
-    { id: "point", label: "\u0110i\u1EC3m", icon: "point", tools: ["point", "intersect", "midpoint", "point_in"] },
+    { id: "point", label: "\u0110i\u1EC3m", icon: "point", tools: ["point", "intersect", "midpoint", "point_in", "solve_point"] },
     { id: "circle", label: "\u0110\u01B0\u1EDDng tr\xF2n", icon: "circle", tools: ["circle", "circle_3pts", "circle_radius"] },
     { id: "line", label: "\u0110o\u1EA1n, tia, \u0111\u01B0\u1EDDng th\u1EB3ng", icon: "line", tools: ["segment", "ray", "line"] },
     { id: "construct", label: "D\u1EF1ng", icon: "construct", tools: ["perpendicular", "parallel", "perp_bisector", "angle_bisector", "ext_bisector", "projection", "reflect", "angle_point", "angle_line"] },
@@ -4589,9 +4684,9 @@
   // src/ui/checkPanel.js
   init_dialog();
   var esc2 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  function showCheck(app, claim) {
-    const q = claimText(app.doc, claim);
-    const r = checkClaim(app.doc, claim);
+  function showCheck(app, claim, doc2 = app.doc) {
+    const q = claimText(doc2, claim);
+    const r = checkClaim(doc2, claim);
     const sp = (st) => r.special.filter((x) => x.status === st);
     let head, cls, body = "";
     const tried = `th\u1EED ${r.tested} h\xECnh ng\u1EABu nhi\xEAn${r.undef ? ` (${r.undef} h\xECnh kh\xF4ng x\xE1c \u0111\u1ECBnh)` : ""} v\xE0 ${r.special.length} tr\u01B0\u1EDDng h\u1EE3p \u0111\u1EB7c bi\u1EC7t`;
@@ -20196,6 +20291,345 @@ ${tk.v}
     later(500);
   }
 
+  // src/core/cmd.js
+  var fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+  function normalize(text2) {
+    return text2.replace(/∠/g, " g\xF3c ").replace(/∈/g, " thu\u1ED9c ").replace(/⊥/g, " vu\xF4ng g\xF3c ").replace(/∥/g, " song song ").replace(/∩/g, " c\u1EAFt ").replace(/([=,;:()])/g, " $1 ").split(/\s+/).filter(Boolean).map((w) => (/^[a-zà-ỹđ]+$/u.test(w) || /^[A-ZĐ][a-zà-ỹđ]{2,}$/u.test(w)) && !/^[α-ω]/.test(w) ? fold(w.toLowerCase()) : w).join(" ").replace(/\( /g, "(").replace(/ \)/g, ")");
+  }
+  var Fail = class extends Error {
+  };
+  var fail = (msg) => {
+    throw new Fail(msg);
+  };
+  var Ctx = class {
+    constructor(doc2, opts = {}) {
+      this.doc = doc2;
+      this.mouse = opts.mouse || null;
+      this.extraNames = new Set(opts.extraNames || []);
+      this.refresh();
+    }
+    refresh() {
+      this.k = kinds(this.doc);
+      this.vals = evaluate(this.doc);
+    }
+    byName(n, kind) {
+      const s = this.doc.steps.find((x) => x.name === n && (!kind || this.k.get(x.id) === kind));
+      return s ? s.id : null;
+    }
+    /** Tách chuỗi thành các tên điểm có trên hình (khớp tên dài nhất trước): "ABC", "A, B, C", "I_AB" → I_A, B. */
+    points(str, { allowNew = false } = {}) {
+      const names = this.doc.steps.filter((s) => this.k.get(s.id) === "point" && s.name).map((s) => s.name);
+      for (const n of this.extraNames) names.push(n);
+      names.sort((a, b) => b.length - a.length);
+      const out = [];
+      let i = 0;
+      const t2 = str.replace(/[\s,]+/g, " ").trim();
+      while (i < t2.length) {
+        if (t2[i] === " ") {
+          i++;
+          continue;
+        }
+        const n = names.find((x) => t2.startsWith(x, i) && !/^['_\d]/.test(t2.slice(i + x.length, i + x.length + 1)));
+        if (!n) {
+          const m = /^[A-Z](?:_\{[^}]*\}|_[A-Za-z0-9])?\d*'*/.exec(t2.slice(i));
+          if (!m) fail(`Kh\xF4ng hi\u1EC3u "${t2.slice(i)}"`);
+          if (!allowNew) fail(`Ch\u01B0a c\xF3 \u0111i\u1EC3m ${m[0]} tr\xEAn h\xECnh`);
+          out.push(m[0]);
+          i += m[0].length;
+          continue;
+        }
+        out.push(n);
+        i += n.length;
+      }
+      return out;
+    }
+    pointIds(str, n) {
+      const ps = this.points(str);
+      if (n && ps.length !== n) fail(`C\u1EA7n ${n} \u0111i\u1EC3m, g\xF5 \u0111\u01B0\u1EE3c ${ps.length} (${ps.join(", ") || "\u2013"})`);
+      return ps.map((x) => this.byName(x, "point"));
+    }
+    add(type, args, extra = {}) {
+      const [id] = addSpecs(this.doc, [{ type, args, ...extra }], { join: true });
+      if (extra.aux) stepById(this.doc, id).aux = true;
+      this.refresh();
+      return id;
+    }
+    /** Đường thẳng: tên (d1) hoặc hai điểm (BC) – dùng đường có sẵn qua hai điểm, không có thì dựng đường phụ. */
+    line(tok) {
+      const named = this.byName(tok, "line");
+      if (named) return named;
+      const [P2, Q] = this.pointIds(tok, 2);
+      const own = this.doc.steps.find((s) => ["segment", "line", "ray"].includes(s.type) && (s.args[0] === P2 && s.args[1] === Q || s.args[0] === Q && s.args[1] === P2));
+      if (own) return own.id;
+      const p = this.vals.get(P2), q = this.vals.get(Q);
+      const tol = 1e-9 * (1 + dist(p, q));
+      const any = this.doc.steps.find((s) => this.k.get(s.id) === "line" && this.vals.get(s.id) && distPointLine(p, this.vals.get(s.id)) < tol && distPointLine(q, this.vals.get(s.id)) < tol);
+      if (any) return any.id;
+      return this.add("line", [P2, Q], { aux: true });
+    }
+    /** Đường tròn: tên (ω1), (O) – tâm O, (ABC) – qua A, B, C (chưa có thì dựng đường tròn ngoại tiếp). */
+    circle(tok) {
+      const named = this.byName(tok, "circle");
+      if (named) return named;
+      const m = /^\((.+)\)$/.exec(tok);
+      if (!m) fail(`"${tok}" kh\xF4ng ph\u1EA3i \u0111\u01B0\u1EDDng tr\xF2n \u2013 vi\u1EBFt (O), (ABC) ho\u1EB7c t\xEAn \u0111\u01B0\u1EDDng tr\xF2n`);
+      const pts = this.points(m[1]);
+      const circles = this.doc.steps.filter((s) => this.k.get(s.id) === "circle" && this.vals.get(s.id));
+      if (pts.length === 1) {
+        const O = this.vals.get(this.byName(pts[0], "point"));
+        const c2 = circles.find((s) => dist(this.vals.get(s.id).c, O) < 1e-9 * (1 + this.vals.get(s.id).r));
+        if (!c2) fail(`Ch\u01B0a c\xF3 \u0111\u01B0\u1EDDng tr\xF2n t\xE2m ${pts[0]}`);
+        return c2.id;
+      }
+      if (pts.length !== 3) fail(`\u0110\u01B0\u1EDDng tr\xF2n (${m[1]}): c\u1EA7n t\xE2m (1 \u0111i\u1EC3m) ho\u1EB7c 3 \u0111i\u1EC3m`);
+      const ids = pts.map((x) => this.byName(x, "point"));
+      const V = ids.map((id) => this.vals.get(id));
+      const c = circles.find((s) => V.every((P2) => Math.abs(dist(P2, this.vals.get(s.id).c) - this.vals.get(s.id).r) < 1e-9 * (1 + this.vals.get(s.id).r)));
+      if (c) return c.id;
+      return this.add("circumcircle", ids);
+    }
+    curve(tok) {
+      if (/^\(/.test(tok) || this.byName(tok, "circle")) return this.circle(tok);
+      return this.line(tok);
+    }
+    /** Đối tượng: điểm, đường thẳng hoặc đường tròn. */
+    obj(tok) {
+      const p = this.byName(tok, "point");
+      if (p) return p;
+      return this.curve(tok);
+    }
+    name(id) {
+      return stepById(this.doc, id)?.name || "?";
+    }
+  };
+  var NAME = String.raw`([^\s=,;:]+)`;
+  var REST = String.raw`(.+?)`;
+  var TYPE_OF_CENTER = {
+    "truc tam": "orthocenter",
+    "trong tam": "centroid",
+    "tam noi tiep": "incenter",
+    "tam duong tron noi tiep": "incenter",
+    "tam ngoai tiep": "circumcenter",
+    "tam duong tron ngoai tiep": "circumcenter",
+    "tam euler": "nine_point_center",
+    "tam duong tron euler": "nine_point_center",
+    "diem lemoine": "lemoine"
+  };
+  var TYPE_OF_CIRCLE = { "ngoai tiep": "circumcircle", "noi tiep": "incircle", "euler": "nine_point_circle" };
+  var RULES = [
+    [/^trung diem (?:cua )?(?:doan )?(.+)$/, (m, c) => {
+      const seg = c.byName(m[1], "line");
+      const [A, B] = seg ? stepById(c.doc, seg).args : c.pointIds(m[1], 2);
+      return c.add("midpoint", [A, B]);
+    }],
+    [new RegExp(`^(${Object.keys(TYPE_OF_CENTER).join("|")}) (?:cua )?(?:tam giac )?(.+)$`), (m, c) => c.add(TYPE_OF_CENTER[m[1]], c.pointIds(m[2], 3))],
+    [/^duong tron (ngoai tiep|noi tiep|euler) (?:cua )?(?:tam giac )?(.+)$/, (m, c) => c.add(TYPE_OF_CIRCLE[m[1]], c.pointIds(m[2], 3))],
+    [/^\(([^()]+)\)$/, (m, c) => c.add("circumcircle", c.pointIds(m[1], 3))],
+    [/^(?:duong thang |duong )?qua (\S+) (vuong goc|song song)(?: voi)? (\S+)$/, (m, c) => c.add(m[2] === "vuong goc" ? "perpendicular" : "parallel", [c.pointIds(m[1], 1)[0], c.line(m[3])], { aux: true })],
+    [/^(?:duong )?trung truc (?:cua )?(?:doan )?(.+)$/, (m, c) => c.add("perp_bisector", c.pointIds(m[1], 2), { aux: true })],
+    [/^(?:duong )?phan giac (trong |ngoai )?(?:cua )?(?:goc )?(.+)$/, (m, c) => c.add("angle_bisector", c.pointIds(m[2], 3), { aux: true, params: m[1] === "ngoai " ? { external: true } : void 0 })],
+    [/^(?:chan duong cao|chan duong vuong goc|hinh chieu) (?:ke )?(?:tu |cua )?(\S+) (?:xuong|len|tren) (\S+)$/, (m, c) => {
+      const P2 = c.pointIds(m[1], 1)[0];
+      const named = c.byName(m[2], "line");
+      if (named) return c.add("projection", [P2, named]);
+      const [A, B] = c.pointIds(m[2], 2);
+      return c.add("foot", [P2, A, B]);
+    }],
+    [/^doi xung (?:cua )?(\S+) qua (\S+)$/, (m, c) => {
+      const X = c.obj(m[1]);
+      const M = c.byName(m[2], "point") || c.line(m[2]);
+      return c.add("reflect", [X, M], { prime: true });
+    }],
+    [/^(?:giao (?:diem )?(?:cua )?)?(\S+) (?:cat|giao|va|voi) (\S+)(?: khac (\S+))?$/, (m, c) => intersect2(c, m[1], m[2], m[3])],
+    [/^(?:doan thang|doan) (\S+)$/, (m, c) => c.add("segment", c.pointIds(m[1], 2))],
+    [/^duong thang (\S+)$/, (m, c) => c.add("line", c.pointIds(m[1], 2))],
+    [/^tia (\S+)$/, (m, c) => c.add("ray", c.pointIds(m[1], 2))],
+    [/^duong tron tam (\S+) (?:qua|di qua) (\S+)$/, (m, c) => c.add("circle", [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]])],
+    [/^duong tron tam (\S+) ban kinh (\S+)$/, (m, c) => c.add("circle_radius", [c.pointIds(m[1], 1)[0], ...c.pointIds(m[2], 2)])],
+    [/^duong tron duong kinh (\S+)$/, (m, c) => c.add("circle_diameter", c.pointIds(m[1], 2))],
+    [/^diem (?:tren|thuoc) (\S+)$/, (m, c) => {
+      const host = c.curve(m[1]);
+      const v = c.vals.get(host);
+      const t2 = c.mouse && v ? paramOf(v, c.mouse) : v && v.kind === "circle" ? 0.6 : 0.4;
+      return c.add("point_on", [host], { params: { t: Math.round(t2 * 1e9) / 1e9 } });
+    }],
+    [/^tiep tuyen (?:tai|o) (\S+) (?:cua|voi) (\S+)$/, (m, c) => c.add("tangent_at", [c.circle(m[2]), c.pointIds(m[1], 1)[0]])],
+    [/^(\S+)$/, (m, c) => {
+      const ps = c.points(m[1]);
+      if (ps.length !== 2) fail("Kh\xF4ng hi\u1EC3u l\u1EC7nh");
+      return c.add("segment", ps.map((x) => c.byName(x, "point")));
+    }]
+  ];
+  function intersect2(c, t1, t2, other) {
+    const a = c.curve(t1), b = c.curve(t2);
+    const roots = intersect(c.vals.get(a), c.vals.get(b));
+    if (!roots.length) fail(`${t1} v\xE0 ${t2} kh\xF4ng c\u1EAFt nhau (\u1EDF h\xECnh hi\u1EC7n t\u1EA1i)`);
+    if (other) return c.add("intersection_other", [a, b, c.pointIds(other, 1)[0]]);
+    const pts = c.doc.steps.filter((s) => c.k.get(s.id) === "point" && c.vals.get(s.id));
+    if (roots.length === 1) {
+      const same = pts.find((s) => dist(c.vals.get(s.id), roots[0]) < 1e-9 * (1 + Math.hypot(roots[0].x, roots[0].y)));
+      if (same) fail(`Giao \u0111i\u1EC3m ch\xEDnh l\xE0 \u0111i\u1EC3m ${same.name} \u0111\xE3 c\xF3`);
+      return c.add("intersection", [a, b], { params: { which: 0 } });
+    }
+    const tol = 1e-9 * (1 + dist(roots[0], roots[1]));
+    const known = roots.map((R) => pts.find((s) => dist(c.vals.get(s.id), R) < tol));
+    if (known[0] && known[1]) fail(`Hai giao \u0111i\u1EC3m \u0111\u1EC1u \u0111\xE3 c\xF3 tr\xEAn h\xECnh: ${known[0].name}, ${known[1].name}`);
+    if (known[0] && !known[1]) return c.add("intersection_other", [a, b, known[0].id]);
+    if (known[1] && !known[0]) return c.add("intersection_other", [a, b, known[1].id]);
+    const which = c.mouse && dist(roots[1], c.mouse) < dist(roots[0], c.mouse) ? 1 : 0;
+    return c.add("intersection", [a, b], { params: { which } });
+  }
+  var COND_RULES = [
+    [/^goc (\S+) = goc (\S+)$/, "ang"],
+    [/^goc (\S+) = (\d+(?:[.,]\d+)?)(?: ?(?:do|°))?$/, "angv"],
+    [/^(\S+) = (\S+)$/, "len"],
+    [/^(\S+) (?:thuoc|nam tren|tren) (\S+)$/, "on"]
+  ];
+  function solvePointCmd(c, name2, condText) {
+    if (c.byName(name2)) fail(`T\xEAn ${name2} \u0111\xE3 c\xF3 tr\xEAn h\xECnh`);
+    c.extraNames.add(name2);
+    const args = [];
+    const ref = (id) => {
+      let i = args.indexOf(id);
+      if (i < 0) {
+        args.push(id);
+        i = args.length - 1;
+      }
+      return i;
+    };
+    const pt2 = (n) => n === name2 ? -1 : ref(c.byName(n, "point"));
+    const conds = [];
+    for (const part of condText.split(/ ?[,;] ?| va /).map((x) => x.trim()).filter(Boolean)) {
+      const rule = COND_RULES.find(([re]) => re.test(part));
+      if (!rule) fail(`Kh\xF4ng hi\u1EC3u \u0111i\u1EC1u ki\u1EC7n "${part}" \u2013 d\xF9ng: g\xF3c XYZ = g\xF3c UVW, g\xF3c XYZ = 30, XY = ZT, ${name2} thu\u1ED9c (O) / BC`);
+      const m = rule[0].exec(part);
+      if (rule[1] === "ang") {
+        const p1 = c.points(m[1]), p2 = c.points(m[2]);
+        if (p1.length !== 3 || p2.length !== 3) fail(`G\xF3c c\u1EA7n 3 \u0111i\u1EC3m: "${part}"`);
+        conds.push({ t: "ang", a: [...p1, ...p2].map(pt2) });
+      } else if (rule[1] === "angv") {
+        const p1 = c.points(m[1]);
+        if (p1.length !== 3) fail(`G\xF3c c\u1EA7n 3 \u0111i\u1EC3m: "${part}"`);
+        conds.push({ t: "angv", a: p1.map(pt2), v: parseFloat(m[2].replace(",", ".")) });
+      } else if (rule[1] === "len") {
+        const p1 = c.points(m[1]), p2 = c.points(m[2]);
+        if (p1.length !== 2 || p2.length !== 2) fail(`\u0110\u1ED9 d\xE0i c\u1EA7n 2 \u0111i\u1EC3m m\u1ED7i v\u1EBF: "${part}"`);
+        conds.push({ t: "len", a: [...p1, ...p2].map(pt2) });
+      } else {
+        if (c.points(m[1]).join() !== name2) fail(`"${part}": v\u1EBF tr\xE1i ph\u1EA3i l\xE0 ${name2}`);
+        conds.push({ t: "on", a: [ref(c.curve(m[2]))] });
+      }
+    }
+    if (!conds.length) fail("C\u1EA7n \xEDt nh\u1EA5t m\u1ED9t \u0111i\u1EC1u ki\u1EC7n");
+    if (conds.length > 2) fail("T\u1ED1i \u0111a hai \u0111i\u1EC1u ki\u1EC7n (m\u1ED9t \u0111i\u1EC3m c\xF3 hai b\u1EADc t\u1EF1 do)");
+    if (conds.every((x) => !x.a.includes(-1)) && conds.some((x) => x.t !== "on")) fail(`\u0110i\u1EC1u ki\u1EC7n ph\u1EA3i nh\u1EAFc t\u1EDBi \u0111i\u1EC3m ${name2}`);
+    c.extraNames.delete(name2);
+    const objs = args.map((id) => c.vals.get(id));
+    const ptsV = objs.filter((o) => o.kind === "point");
+    const cen = ptsV.length ? { x: ptsV.reduce((s, p) => s + p.x, 0) / ptsV.length, y: ptsV.reduce((s, p) => s + p.y, 0) / ptsV.length } : { x: 0, y: 0 };
+    const size = Math.max(1, ...ptsV.map((p) => dist(p, cen)));
+    const guesses = [c.mouse, cen, ...[0, 1, 2, 3, 4, 5].map((i) => ({ x: cen.x + 0.6 * size * Math.cos(i + 0.3), y: cen.y + 0.6 * size * Math.sin(i + 0.3) }))].filter(Boolean);
+    let sol = null;
+    for (const g of guesses) {
+      sol = solvePoint(objs, conds, g.x, g.y);
+      if (sol) break;
+    }
+    if (!sol) fail("Kh\xF4ng t\xECm \u0111\u01B0\u1EE3c \u0111i\u1EC3m tho\u1EA3 c\xE1c \u0111i\u1EC1u ki\u1EC7n (th\u1EED \u0111\u1EB7t con tr\u1ECF chu\u1ED9t g\u1EA7n ch\u1ED7 \u0111i\u1EC3m c\u1EA7n t\xECm r\u1ED3i g\xF5 l\u1EA1i)");
+    return c.add("solve_point", args, { params: { x: Math.round(sol.x * 1e9) / 1e9, y: Math.round(sol.y * 1e9) / 1e9, conds }, name: name2 });
+  }
+  var CHECK_RULES = [
+    [/^(.+) thang hang$/, (m, c) => ({ type: "collinear", ids: c.pointIds(m[1], 3) })],
+    [/^(.+) (?:dong vien|cung thuoc (?:mot )?duong tron)$/, (m, c) => ({ type: "concyclic", ids: c.pointIds(m[1], 4) })],
+    [/^goc (\S+) = goc (\S+)$/, (m, c) => ({ type: "equal_angle", ids: [...c.pointIds(m[1], 3), ...c.pointIds(m[2], 3)] })],
+    [/^(\S+) (?:vuong goc|⊥)(?: voi)? (\S+)$/, (m, c) => ({ type: "perpendicular", ids: [c.line(m[1]), c.line(m[2])] })],
+    [/^(\S+) song song(?: voi)? (\S+)$/, (m, c) => ({ type: "parallel", ids: [c.line(m[1]), c.line(m[2])] })],
+    [/^(\S+) , (\S+) , (\S+) dong quy$/, (m, c) => ({ type: "concurrent", ids: [c.line(m[1]), c.line(m[2]), c.line(m[3])] })],
+    [/^(\S+) tiep xuc(?: voi)? (\S+)$/, (m, c) => ({ type: "tangent", ids: [c.curve(m[1]), c.circle(m[2])] })],
+    [/^(\S+) (?:thuoc|nam tren) (\S+)$/, (m, c) => {
+      const P2 = c.pointIds(m[1], 1)[0], X = c.curve(m[2]);
+      return { type: c.k.get(X) === "circle" ? "on_circle" : "on_line", ids: [P2, X] };
+    }],
+    [/^(\S+) trung(?: voi)? (\S+)$/, (m, c) => ({ type: "coincide", ids: [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]] })],
+    [/^(\S+) = (\S+)$/, (m, c) => ({ type: "equal_len", ids: [...c.pointIds(m[1], 2), ...c.pointIds(m[2], 2)] })]
+  ];
+  function parseCommand(doc2, text2, ctx = {}) {
+    const t2 = normalize(text2 || "").trim();
+    if (!t2) return { ok: false, error: "" };
+    const attempt = (d) => {
+      const c = new Ctx(d, ctx);
+      const chk = /^kiem tra (.+?)\??$/.exec(t2);
+      if (chk) {
+        const r = CHECK_RULES.find(([re]) => re.test(chk[1]));
+        if (!r) fail("Ki\u1EC3m tra: th\u1EB3ng h\xE0ng, \u0111\u1ED3ng vi\xEAn, AB = CD, g\xF3c ABC = g\xF3c DEF, d1 vu\xF4ng g\xF3c d2, song song, \u0111\u1ED3ng quy, ti\u1EBFp x\xFAc, thu\u1ED9c, tr\xF9ng");
+        return { kind: "check", claim: r[1](r[0].exec(chk[1]), c) };
+      }
+      const n0 = d.steps.length;
+      let name2 = null, body = t2;
+      const sp = /^(\S+) (?:thoa(?: man)?|sao cho|:) (.+)$/.exec(t2);
+      let main2;
+      if (sp && !/ = /.test(sp[1])) main2 = solvePointCmd(c, sp[1], sp[2]);
+      else {
+        const eq = /^([^\s=]+) = (.+)$/.exec(t2);
+        if (eq && !/^\(/.test(eq[1])) {
+          name2 = eq[1];
+          body = eq[2];
+        }
+        if (name2 && c.byName(name2)) fail(`T\xEAn ${name2} \u0111\xE3 c\xF3 tr\xEAn h\xECnh`);
+        const rule = RULES.find(([re]) => re.test(body));
+        if (!rule) fail("Kh\xF4ng hi\u1EC3u l\u1EC7nh \u2013 xem c\xE1c m\u1EABu l\u1EC7nh b\xEAn d\u01B0\u1EDBi");
+        main2 = rule[1](rule[0].exec(body), c);
+        if (name2) stepById(d, main2).name = name2;
+      }
+      const ids = d.steps.slice(n0).map((s) => s.id);
+      if (!c.vals.get(main2) && !ids.length) fail("Kh\xF4ng d\u1EF1ng \u0111\u01B0\u1EE3c");
+      c.refresh();
+      if (!c.vals.get(main2)) fail("\u0110\u1ED1i t\u01B0\u1EE3ng kh\xF4ng x\xE1c \u0111\u1ECBnh \u1EDF h\xECnh hi\u1EC7n t\u1EA1i");
+      return { kind: "build", ids, main: main2 };
+    };
+    try {
+      const trial = JSON.parse(JSON.stringify(doc2));
+      const r = attempt(trial);
+      if (r.kind === "check") return { ok: true, kind: "check", claim: r.claim, desc: "Ki\u1EC3m tra nh\u1EADn \u0111\u1ECBnh", run: (d = doc2) => attempt(d).claim };
+      const s = stepById(trial, r.main);
+      const extra = r.ids.filter((id) => id !== r.main).map((id) => stepById(trial, id));
+      const label = (x) => `${x.name ? x.name + " \u2013 " : ""}${(STEP_TYPES[x.type] || {}).label || x.type}`;
+      const desc = label(s) + (extra.length ? ` (k\xE8m ${extra.map((x) => (x.aux ? "\u0111\u01B0\u1EDDng ph\u1EE5 " : "") + (x.name || "")).join(", ")})` : "");
+      return { ok: true, kind: "build", desc, run: (d = doc2) => attempt(d) };
+    } catch (e) {
+      if (e instanceof Fail) return { ok: false, error: e.message };
+      return { ok: false, error: "Kh\xF4ng hi\u1EC3u l\u1EC7nh" };
+    }
+  }
+  var COMMAND_EXAMPLES = [
+    "M = trung \u0111i\u1EC3m BC",
+    "H = tr\u1EF1c t\xE2m ABC",
+    "O = t\xE2m ngo\u1EA1i ti\u1EBFp ABC",
+    "I = t\xE2m n\u1ED9i ti\u1EBFp ABC",
+    "G = tr\u1ECDng t\xE2m ABC",
+    "(ABC)",
+    "\u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp ABC",
+    "qua A vu\xF4ng g\xF3c BC",
+    "qua A song song BC",
+    "trung tr\u1EF1c BC",
+    "ph\xE2n gi\xE1c g\xF3c BAC",
+    "D = ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB A xu\u1ED1ng BC",
+    "A' = \u0111\u1ED1i x\u1EE9ng A qua BC",
+    "K = AD c\u1EAFt BC",
+    "S = (AEF) c\u1EAFt (O)",
+    "E = AC c\u1EAFt (O) kh\xE1c A",
+    "\u0111\u01B0\u1EDDng tr\xF2n t\xE2m O qua A",
+    "\u0111\u01B0\u1EDDng tr\xF2n \u0111\u01B0\u1EDDng k\xEDnh BC",
+    "P = \u0111i\u1EC3m tr\xEAn (O)",
+    "ti\u1EBFp tuy\u1EBFn t\u1EA1i A c\u1EE7a (O)",
+    "\u0111o\u1EA1n AB",
+    "\u0111\u01B0\u1EDDng th\u1EB3ng AB",
+    "P tho\u1EA3 g\xF3c PAB = g\xF3c PBC, g\xF3c PBC = g\xF3c PCA",
+    "Q sao cho QB = QC, g\xF3c BQC = 120",
+    "ki\u1EC3m tra A, B, C th\u1EB3ng h\xE0ng",
+    "ki\u1EC3m tra A, B, C, D \u0111\u1ED3ng vi\xEAn",
+    "ki\u1EC3m tra AB = CD"
+  ];
+
   // src/ui/shortcuts.js
   init_dialog();
   var KEY = "hinh-hoc-dong:phim-tat";
@@ -20281,7 +20715,7 @@ ${tk.v}
     else k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
     return `${e.ctrlKey || e.metaKey ? "Ctrl+" : ""}${e.altKey ? "Alt+" : ""}${e.shiftKey ? "Shift+" : ""}${k}`;
   }
-  var fold = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+  var fold2 = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
   function allTools(app) {
     const out = [];
     const seen = /* @__PURE__ */ new Set();
@@ -20296,9 +20730,9 @@ ${tk.v}
     return out;
   }
   function searchTools(list, q, recent = []) {
-    const words = fold(q).split(/\s+/).filter(Boolean);
+    const words = fold2(q).split(/\s+/).filter(Boolean);
     const score2 = (t2) => {
-      const name2 = fold(t2.label), hay = name2 + " " + fold(t2.group) + " " + t2.id.replace(/_/g, " ");
+      const name2 = fold2(t2.label), hay = name2 + " " + fold2(t2.group) + " " + t2.id.replace(/_/g, " ");
       if (!words.length) return recent.includes(t2.id) ? 100 - recent.indexOf(t2.id) : 0;
       const initials = name2.split(/[^a-z0-9]+/).filter(Boolean).map((w) => w[0]).join("");
       let s = 0;
@@ -20341,16 +20775,50 @@ ${tk.v}
     async function palette() {
       const list = allTools(app);
       const recent = app.recentTools || [];
-      const id = await modal((box, close2) => {
+      const esc9 = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+      const pick = await modal((box, close2) => {
         box.classList.add("palette");
-        box.innerHTML = `<input type="text" class="pal-q" placeholder="G\xF5 t\xEAn c\xF4ng c\u1EE5 (kh\xF4ng c\u1EA7n d\u1EA5u): giao, vuong goc, ngoai tiep, dtnt\u2026" spellcheck="false" autocomplete="off"><div class="pal-list"></div>
+        box.innerHTML = `<input type="text" class="pal-q" placeholder="T\xEAn c\xF4ng c\u1EE5 (giao, vuong goc\u2026) ho\u1EB7c l\u1EC7nh: M = trung \u0111i\u1EC3m BC, S = (AEF) c\u1EAFt (O)\u2026" spellcheck="false" autocomplete="off"><div class="pal-list"></div>
         <div class="pal-foot">\u2191\u2193 ch\u1ECDn \xB7 Enter d\xF9ng \xB7 Esc \u0111\xF3ng \xB7 <kbd>Ctrl+/</kbd> xem v\xE0 s\u1EEDa ph\xEDm t\u1EAFt${app.selection.size ? ` \xB7 \u0111ang ch\u1ECDn ${app.selection.size} \u0111\u1ED1i t\u01B0\u1EE3ng: d\u1EF1ng ngay tr\xEAn ch\xFAng n\u1EBFu h\u1EE3p` : ""}</div>`;
         const inp = box.querySelector(".pal-q"), host = box.querySelector(".pal-list");
         let rows = [], cur2 = 0;
         const paint = () => {
-          rows = searchTools(list, inp.value, recent).slice(0, 12);
-          cur2 = Math.min(cur2, Math.max(0, rows.length - 1));
-          host.innerHTML = rows.length ? rows.map((t2, i) => `<button class="pal-row ${i === cur2 ? "on" : ""}" data-i="${i}"><span class="pal-ti">${TOOL_BY_ID[t2.id].icon || ""}</span><span class="pal-l">${t2.label}</span><span class="pal-g">${t2.group}</span>${keyOf(t2.id) ? `<kbd>${keyOf(t2.id)}</kbd>` : ""}</button>`).join("") : '<div class="note">Kh\xF4ng c\xF3 c\xF4ng c\u1EE5 n\xE0o kh\u1EDBp.</div>';
+          const q = inp.value;
+          rows = [];
+          const cmd2 = q.trim() ? parseCommand(app.doc, q, { mouse: app.mouse }) : null;
+          const looksCmd = /=|\(|^\s*(kiem tra|qua|trung|giao|doan|duong|tia|diem|chan|doi xung|phan giac|tiep tuyen)\b|\b(thoa|sao cho|cat)\b/.test(fold(q.toLowerCase()));
+          if (cmd2 && cmd2.ok) rows.push({ cmd: cmd2 });
+          else if (cmd2 && looksCmd && cmd2.error) rows.push({ err: cmd2.error });
+          const words = fold(q.toLowerCase()).split(/\s+/).filter((w) => w.length > 1 && /^[a-z]+$/.test(w));
+          if (words.length && !(cmd2 && cmd2.ok)) for (const ex of COMMAND_EXAMPLES.filter((e) => words.every((w) => fold(e.toLowerCase()).includes(w))).slice(0, 4)) rows.push({ ex });
+          if (!(cmd2 && cmd2.ok)) for (const t2 of searchTools(list, q, recent).slice(0, 12 - rows.length)) rows.push({ tool: t2 });
+          const sel = rows.map((r, i) => r.err ? -1 : i).filter((i) => i >= 0);
+          if (!sel.includes(cur2)) cur2 = sel[0] ?? 0;
+          host.innerHTML = rows.length ? rows.map((r, i) => {
+            if (r.cmd) return `<button class="pal-row pal-cmd ${i === cur2 ? "on" : ""}" data-i="${i}"><span class="pal-ti">\u21B5</span><span class="pal-l">${r.cmd.kind === "check" ? "Ki\u1EC3m tra" : "D\u1EF1ng"}: ${esc9(r.cmd.desc)}</span><span class="pal-g">l\u1EC7nh</span></button>`;
+            if (r.err) return `<div class="pal-err">${esc9(r.err)}</div>`;
+            if (r.ex) return `<button class="pal-row pal-ex ${i === cur2 ? "on" : ""}" data-i="${i}"><span class="pal-ti">\u203A</span><span class="pal-l">${esc9(r.ex)}</span><span class="pal-g">m\u1EABu l\u1EC7nh</span></button>`;
+            const t2 = r.tool;
+            return `<button class="pal-row ${i === cur2 ? "on" : ""}" data-i="${i}"><span class="pal-ti">${TOOL_BY_ID[t2.id].icon || ""}</span><span class="pal-l">${t2.label}</span><span class="pal-g">${t2.group}</span>${keyOf(t2.id) ? `<kbd>${keyOf(t2.id)}</kbd>` : ""}</button>`;
+          }).join("") : '<div class="note">Kh\xF4ng c\xF3 c\xF4ng c\u1EE5 hay l\u1EC7nh n\xE0o kh\u1EDBp.</div>';
+        };
+        const choose = (i) => {
+          const r = rows[i];
+          if (!r || r.err) return;
+          if (r.ex) {
+            inp.value = r.ex;
+            inp.focus();
+            cur2 = 0;
+            paint();
+            return;
+          }
+          close2(r.cmd ? { cmd: inp.value } : { tool: r.tool.id });
+        };
+        const move = (d) => {
+          const sel = rows.map((r, i) => r.err ? -1 : i).filter((i) => i >= 0);
+          const j = sel.indexOf(cur2);
+          cur2 = sel[Math.max(0, Math.min(sel.length - 1, j + d))] ?? 0;
+          paint();
         };
         inp.oninput = () => {
           cur2 = 0;
@@ -20359,24 +20827,24 @@ ${tk.v}
         inp.onkeydown = (e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
-            cur2 = Math.min(rows.length - 1, cur2 + 1);
-            paint();
+            move(1);
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            cur2 = Math.max(0, cur2 - 1);
-            paint();
+            move(-1);
           } else if (e.key === "Enter") {
             e.preventDefault();
-            if (rows[cur2]) close2(rows[cur2].id);
+            choose(cur2);
           }
         };
         host.onclick = (e) => {
           const b2 = e.target.closest("[data-i]");
-          if (b2) close2(rows[+b2.dataset.i].id);
+          if (b2) choose(+b2.dataset.i);
         };
         paint();
       });
-      if (id) app.activateTool(id);
+      if (!pick) return;
+      if (pick.tool) return app.activateTool(pick.tool);
+      app.runCommand(pick.cmd);
     }
     async function keysDialog() {
       const list = allTools(app);
@@ -20387,7 +20855,7 @@ ${tk.v}
         <input type="text" class="keys-q" placeholder="L\u1ECDc c\xF4ng c\u1EE5\u2026" spellcheck="false">
         <div class="keys-list"></div>
         <details class="keys-fixed"><summary>C\xE1c ph\xEDm c\u1ED1 \u0111\u1ECBnh kh\xE1c</summary><div class="keys-grid">${Object.entries({
-          "Space": "t\xECm c\xF4ng c\u1EE5 theo t\xEAn",
+          "Space": "t\xECm c\xF4ng c\u1EE5 theo t\xEAn, ho\u1EB7c g\xF5 l\u1EC7nh (M = trung \u0111i\u1EC3m BC\u2026)",
           "Esc": "hu\u1EF7 / v\u1EC1 c\xF4ng c\u1EE5 Ch\u1ECDn",
           "Ctrl+Z / Ctrl+Y": "ho\xE0n t\xE1c / l\xE0m l\u1EA1i",
           "Delete": "xo\xE1 \u0111\u1ED1i t\u01B0\u1EE3ng \u0111ang ch\u1ECDn",
@@ -21211,6 +21679,11 @@ ${tk.v}
         this.awaitExtra = false;
         return this.completeTool(tool);
       }
+      if (tool.id === "solve_point") {
+        this.endTx();
+        this.askSolvePoint(this.toUser(sx, sy));
+        return;
+      }
       if (tool.id === "point") {
         const id2 = this.resolvePoint(sx, sy, hits);
         this.endTx();
@@ -21656,6 +22129,8 @@ ${tk.v}
           if (c) step.params = { ...step.params || {}, t: round9(paramOf(c, target)) };
         } else if (step.type === "point_in") {
           step.params = { ...step.params || {}, ...this.uvInTriangle(step.args, target) };
+        } else if (step.type === "solve_point") {
+          step.params = { ...step.params || {}, x: round9(target.x), y: round9(target.y) };
         }
         this.quickUpdate();
       };
@@ -21933,6 +22408,46 @@ ${tk.v}
         if (value === false || value == null) delete s[key];
         else s[key] = value;
       });
+    }
+    /** Công cụ "Điểm thoả điều kiện": hỏi điều kiện, giải từ chỗ vừa bấm (gõ sai thì hỏi lại kèm lỗi). */
+    async askSolvePoint(at) {
+      const name2 = nextName(this.doc, "point");
+      const ex = `${name2} tho\u1EA3 g\xF3c ${name2}AB = g\xF3c ${name2}BC, g\xF3c ${name2}BC = g\xF3c ${name2}CA`;
+      const hint = `M\u1ED9t ho\u1EB7c hai \u0111i\u1EC1u ki\u1EC7n, c\xE1ch nhau d\u1EA5u ph\u1EA9y: g\xF3c XYZ = g\xF3c UVW \xB7 g\xF3c XYZ = 60 \xB7 XY = ZT \xB7 ${name2} thu\u1ED9c (O) ho\u1EB7c BC. V\xED d\u1EE5: ${ex}. \u0110i\u1EC3m \u0111\u01B0\u1EE3c t\xECm g\u1EA7n ch\u1ED7 v\u1EEBa b\u1EA5m; k\xE9o \u0111i\u1EC3m \u0111\u1EC3 ch\u1ECDn nghi\u1EC7m kh\xE1c.`;
+      let text2 = `${name2} tho\u1EA3 `, error = "";
+      for (; ; ) {
+        text2 = await promptDialog("\u0110i\u1EC3m tho\u1EA3 \u0111i\u1EC1u ki\u1EC7n", text2, hint, { cursorEnd: true, error });
+        if (!text2) return;
+        const cmd2 = parseCommand(this.doc, text2, { mouse: at });
+        if (cmd2.ok) break;
+        error = cmd2.error || "Kh\xF4ng hi\u1EC3u \u0111i\u1EC1u ki\u1EC7n";
+      }
+      this.mouse = at;
+      this.runCommand(text2);
+    }
+    /** Chạy một câu lệnh tiếng Việt (bảng lệnh Space): dựng hình (hoàn tác được) hoặc kiểm tra nhận định. */
+    runCommand(text2) {
+      const cmd2 = parseCommand(this.doc, text2, { mouse: this.mouse });
+      if (!cmd2.ok) {
+        toast(cmd2.error || "Kh\xF4ng hi\u1EC3u l\u1EC7nh");
+        return false;
+      }
+      if (cmd2.kind === "check") {
+        const d = clone(this.doc);
+        showCheck(this, cmd2.run(d), d);
+        return true;
+      }
+      this.setTool("move");
+      let res = null;
+      this.commit((doc2) => {
+        res = cmd2.run(doc2);
+      });
+      this.selection = /* @__PURE__ */ new Set([res.main]);
+      this.refresh();
+      this.warnOutOfView();
+      toast(`\u0110\xE3 d\u1EF1ng: ${cmd2.desc}`);
+      (this.cmdHistory || (this.cmdHistory = [])).unshift(text2);
+      return true;
     }
     /** Đặt tham số mới cho nhiều bậc tự do một lần ({id: params}) – trường hợp đặc biệt, phản ví dụ; hoàn tác được. */
     applyOverrides(patch) {
@@ -23203,13 +23718,13 @@ ${tk.v}
       return Object.entries(this.index.buoi).filter(([, b]) => b.bai.includes(ma)).map(([bm, b]) => ({ ma: bm, ...b })).sort((a, b) => String(b.ngay).localeCompare(String(a.ngay)));
     }
   };
-  var fold2 = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+  var fold3 = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
   function filterIndex(index, q = "", f = {}, sort = "moi") {
-    const words = fold2(q).split(/\s+/).filter(Boolean);
+    const words = fold3(q).split(/\s+/).filter(Boolean);
     const taught = new Set(Object.values(index.buoi || {}).flatMap((b) => b.bai));
     let rows = Object.entries(index.bai || {}).filter(([ma, e]) => {
       if (words.length) {
-        const hay = fold2([e.ten, sourceLabel(e.nguon), (e.chuDe || []).join(" "), (e.the || []).join(" "), e.tom, e.ghiChu, ma].join(" "));
+        const hay = fold3([e.ten, sourceLabel(e.nguon), (e.chuDe || []).join(" "), (e.the || []).join(" "), e.tom, e.ghiChu, ma].join(" "));
         if (!words.every((w) => hay.includes(w))) return false;
       }
       if (f.chuDe && f.chuDe.size && !(e.chuDe || []).some((c) => f.chuDe.has(c))) return false;

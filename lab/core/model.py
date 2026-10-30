@@ -77,13 +77,13 @@ def compute_step(s, vals, overrides=None, doc=None):
     d = STEP_TYPES.get(s["type"])
     if d is None:
         return None
-    variadic = bool(d.args) and d.args[0] == "...point"
+    variadic = bool(d.args) and d.args[0].startswith("...")
     arg_vals = []
     for i, a in enumerate(s["args"]):
         v = vals.get(a)
         if v is None:
             return None
-        t = "...point" if variadic else (d.args[i] if i < len(d.args) else None)
+        t = d.args[0] if variadic else (d.args[i] if i < len(d.args) else None)
         if t is None or not arg_accepts(t, kind_of_value(v)):
             return None
         arg_vals.append(v)
@@ -311,14 +311,14 @@ def validate(doc) -> list:
             errs.append(f"{where}: thiếu args")
             seen.add(s["id"])
             continue
-        variadic = bool(d.args) and d.args[0] == "...point"
-        if (len(s["args"]) < 3) if variadic else (len(s["args"]) != len(d.args)):
+        variadic = bool(d.args) and d.args[0].startswith("...")
+        if (len(s["args"]) < d.min_args) if variadic else (len(s["args"]) != len(d.args)):
             errs.append(f"{where}: số đối số sai")
         for j, a in enumerate(s["args"]):
             if a not in seen:
                 errs.append(f'{where}: tham chiếu "{a}" chưa được dựng ở bước trước')
             else:
-                t = "...point" if variadic else (d.args[j] if j < len(d.args) else None)
+                t = d.args[0] if variadic else (d.args[j] if j < len(d.args) else None)
                 if t and not arg_accepts(t, k.get(a)):
                     errs.append(f'{where}: đối số "{a}" sai loại')
         k[s["id"]] = (k.get(s["args"][0]) if s["args"] else None) if d.kind == "same" else d.kind
