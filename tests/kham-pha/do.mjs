@@ -3,6 +3,7 @@
 // bằng bộ máy suy luận (có / không cần điểm phụ). Dùng chung với tests/kham-pha.test.mjs (chặn thụt lùi).
 import { THU_VIEN } from '../../src/core/thu-vien.js';
 import { explore } from '../../src/explore/explorer.js';
+import { discover } from '../../src/explore/discover.js';
 import { evaluate, clone } from '../../src/core/model.js';
 import { parseCommand } from '../../src/core/cmd.js';
 import { matchContext, relationImplies } from '../../src/explore/match.js';
@@ -82,8 +83,10 @@ export function measure({ explore: run = explore, prove = null, aux = false } = 
     }
     for (const L of spec.lemmas) {
       const d = withCommands(base, L.aux || []);
-      const r2 = L.aux && L.aux.length ? run(d) : res;
+      const goal0 = spec.goal.length ? claimOf(d, spec.goal[0]) : null;
       const claim = claimOf(d, L.claim);
+      // bổ đề: khám phá THEO MỤC TIÊU (nếu bộ khám phá nhận mục tiêu)
+      const r2 = run(d, goal0);
       const proof = prove ? prove(d, claim) : null;
       let auxR = null;
       if (aux && L.aux && L.aux.length) {
@@ -111,7 +114,8 @@ export function measure({ explore: run = explore, prove = null, aux = false } = 
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { rows, summary } = measure({ prove: (d, claim) => proveClaim(d, claim), aux: process.argv.includes('--diem-phu') });
+  const useOld = process.argv.includes('--cu');
+  const { rows, summary } = measure({ explore: useOld ? (d) => explore(d) : (d, goal) => discover(d, { goal }), prove: (d, claim) => proveClaim(d, claim), aux: process.argv.includes('--diem-phu') });
   if (process.argv.includes('--chi-tiet')) for (const r of rows) {
     console.log(`${r.id.padEnd(16)} ${String(r.count).padStart(3)} quan hệ ${String(r.ms).padStart(5)} ms`);
     for (const g of r.goals) console.log(`   KL  ${g.rank ? '#' + g.rank : '—'}  ${g.proved || ''}  ${g.text}${g.auxProof ? `  [điểm phụ #${g.auxProof.rank}: ${g.auxProof.label}]` : ''}`);

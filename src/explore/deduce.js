@@ -91,6 +91,7 @@ export class Deducer {
     this.reflections = []; // {x, y, line (chỉ số nút)} : y là ảnh của x qua đường
     this.pbisectors = []; // {line, a, b}
     this.diameters = []; // {circle, a, b}
+    this.midpoints = []; // {m, a, b}
     this.factKey = new Map();
     this.pts = doc.steps.filter((s) => this.k.get(s.id) === 'point' && this.vals.get(s.id)).map((s) => s.id);
     let x1 = Infinity, x2 = -Infinity, y1 = Infinity, y2 = -Infinity;
@@ -481,6 +482,7 @@ export class Deducer {
           this.setCenter(ci, s.id, f);
           this.addToCircle(ci, a[0], f); this.addToCircle(ci, a[1], f);
           this.diameters.push({ circle: ci, a: a[0], b: a[1], why: f });
+          this.midpoints.push({ m: s.id, a: a[0], b: a[1], why: f });
           break;
         }
         case 'reflect': case 'reflect_pts': {
@@ -497,6 +499,33 @@ export class Deducer {
             const li = this.lineThrough(a[0], s.id) ?? this.newLine([], []);
             this.addToLine(li, a[0], f); this.addToLine(li, a[1], f); this.addToLine(li, s.id, f);
             this.len.add([['S' + pairKey(a[0], a[1]), 1], ['S' + pairKey(a[1], s.id), -1]], f);
+          }
+          break;
+        }
+        case 'rotate': case 'rotate_by': case 'homothety': case 'homothety_by': case 'spiral': case 'translate': {
+          if (kind !== 'point') break;
+          const X = a[0], O = a[1];
+          const S2 = (p, q) => 'S' + pairKey(p, q);
+          if (s.type === 'translate') {
+            const f = P(`${s.name} là ảnh của ${nm(X)} qua phép tịnh tiến theo ${nm(a[1])}${nm(a[2])}`);
+            this.ang.add([[this.dirAB(X, s.id), 1], [this.dirAB(a[1], a[2]), -1]], f);
+            this.len.add([[S2(X, s.id), 1], [S2(a[1], a[2]), -1]], f);
+            break;
+          }
+          const f = P(`${s.name} là ảnh của ${nm(X)} qua phép ${s.type.startsWith('rotate') ? 'quay' : s.type.startsWith('homothety') ? 'vị tự' : 'đồng dạng'} tâm ${nm(O)}`);
+          if (s.type === 'rotate' || s.type === 'rotate_by') {
+            this.len.add([[S2(O, X), 1], [S2(O, s.id), -1]], f);
+            if (s.type === 'rotate_by') this.ang.add([[this.dirAB(O, s.id), 1], [this.dirAB(O, X), -1], [this.dirAB(a[3], a[4]), -1], [this.dirAB(a[3], a[2]), 1]], f);
+            else this.ang.add([[this.dirAB(O, s.id), 1], [this.dirAB(O, X), -1]], f); // góc quay cố định
+          } else if (s.type === 'homothety' || s.type === 'homothety_by') {
+            const li = this.lineThrough(O, X) ?? this.newLine([], []);
+            this.addToLine(li, O, f); this.addToLine(li, X, f); this.addToLine(li, s.id, f);
+            if (s.type === 'homothety_by') this.len.add([[S2(O, s.id), 1], [S2(O, X), -1], [S2(a[2], a[3]), -1], [S2(a[4], a[5]), 1]], f);
+            else this.len.add([[S2(O, s.id), 1], [S2(O, X), -1]], f); // tỉ số cố định
+          } else {
+            // spiral(X, O, A, B): quay góc AOB, vị tự tỉ số OB/OA
+            this.ang.add([[this.dirAB(O, s.id), 1], [this.dirAB(O, X), -1], [this.dirAB(O, a[3]), -1], [this.dirAB(O, a[2]), 1]], f);
+            this.len.add([[S2(O, s.id), 1], [S2(O, X), -1], [S2(O, a[3]), -1], [S2(O, a[2]), 1]], f);
           }
           break;
         }
@@ -708,6 +737,17 @@ export class Deducer {
         const S = (p, q) => 'S' + pairKey(p, q);
         this.len.add([[S(a, b), 1], [S(x, y), -1], [S(b, c), -1], [S(y, z), 1]], f);
         this.len.add([[S(a, b), 1], [S(x, y), -1], [S(a, c), -1], [S(x, z), 1]], f);
+        changed = true;
+      }
+      // trung điểm M của AB, X cách đều A, B (vd tâm đường tròn qua A, B) ⇒ XM ⊥ AB
+      for (const m of this.midpoints) for (const X of this.pts) {
+        if (X === m.m || X === m.a || X === m.b) continue;
+        const key = `mperp:${X}:${m.m}`;
+        if (this.factKey.has(key) || Math.abs(G.dist(this.V(X), this.V(m.a)) - G.dist(this.V(X), this.V(m.b))) > this.e) continue;
+        const u = this.len.implies([['S' + pairKey(X, m.a), 1], ['S' + pairKey(X, m.b), -1]]);
+        if (!u) continue;
+        const f = this.fact('perp', `${this.name(X)} cách đều ${this.name(m.a)}, ${this.name(m.b)} nên ${this.name(X)}${this.name(m.m)} ⊥ ${this.name(m.a)}${this.name(m.b)}`, 'equidistant-perp', [...u, m.why], null, key);
+        this.ang.add([[this.dirAB(X, m.m), 1], [this.dirAB(m.a, m.b), -1]], f);
         changed = true;
       }
       // phương tích: P nằm trên hai cát tuyến PAB, PCD của cùng một đường tròn ⇒ PA·PB = PC·PD
