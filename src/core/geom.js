@@ -506,3 +506,71 @@ export function trimmedRange(l, sub, pts, tol, minExt, maxExt) {
   const ext = Math.min(maxExt, Math.max(minExt, 0.15 * len)) / dd;
   return [sub === 'ray' ? 0 : t0 - ext, t1 + ext];
 }
+
+// ======================= ĐIỂM THOẢ ĐIỀU KIỆN (bản 1.8) =======================
+// Giải bằng Newton (đạo hàm số, sai phân trung tâm) từ (x0, y0). Một điều kiện: chiếu về đường r = 0 (P chạy trên
+// "quỹ tích" của điều kiện); hai điều kiện: hệ 2×2. Cùng thuật toán, cùng hằng số với lab/core/geom.py.
+const SOLVE_ITERS = 60;
+
+function condAngle(A, B, C) {
+  const a = directedAngle(A, B, C);
+  return a == null ? NaN : (Math.abs(a) * Math.PI) / 180;
+}
+
+function condResidual(c, P, objs) {
+  const g = (i) => (i < 0 ? P : objs[i]);
+  const a = c.a;
+  if (c.t === 'on') {
+    const X = objs[a[0]];
+    if (X.kind === 'line') return cross(unit(X.d), sub(P, X.p));
+    return dist(P, X.c) - X.r;
+  }
+  if (c.t === 'len') return dist(g(a[0]), g(a[1])) - dist(g(a[2]), g(a[3]));
+  if (c.t === 'ang') return condAngle(g(a[0]), g(a[1]), g(a[2])) - condAngle(g(a[3]), g(a[4]), g(a[5]));
+  if (c.t === 'angv') return condAngle(g(a[0]), g(a[1]), g(a[2])) - (c.v * Math.PI) / 180;
+  return NaN;
+}
+
+export function solvePoint(objs, conds, x0, y0) {
+  const n = conds.length;
+  if (n < 1 || n > 2) return null;
+  // cỡ hình: khoảng cách lớn nhất từ (x0, y0) tới các điểm / tâm liên quan
+  let S = 0;
+  for (const o of objs) {
+    const q = o.kind === 'point' ? o : o.kind === 'circle' ? o.c : o.p;
+    S = Math.max(S, Math.hypot(q.x - x0, q.y - y0));
+    if (o.kind === 'circle') S = Math.max(S, o.r);
+  }
+  if (!(S > 0)) S = 1;
+  const h = 1e-6 * S;
+  const R = (x, y) => conds.map((c) => condResidual(c, pt(x, y), objs));
+  let x = x0, y = y0;
+  for (let it = 0; it < SOLVE_ITERS; it++) {
+    const r = R(x, y);
+    if (r.some((v) => !Number.isFinite(v))) return null;
+    const rx1 = R(x + h, y), rx0 = R(x - h, y), ry1 = R(x, y + h), ry0 = R(x, y - h);
+    const J = r.map((_, i) => [(rx1[i] - rx0[i]) / (2 * h), (ry1[i] - ry0[i]) / (2 * h)]);
+    let dx, dy;
+    if (n === 1) {
+      const g2 = J[0][0] * J[0][0] + J[0][1] * J[0][1];
+      if (!(g2 > 1e-300)) return null;
+      dx = (r[0] * J[0][0]) / g2;
+      dy = (r[0] * J[0][1]) / g2;
+    } else {
+      const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+      if (!(Math.abs(det) > 1e-300)) return null;
+      dx = (r[0] * J[1][1] - r[1] * J[0][1]) / det;
+      dy = (J[0][0] * r[1] - J[1][0] * r[0]) / det;
+    }
+    // bước quá dài (gần chỗ đạo hàm bằng 0): cắt bớt để không văng xa
+    const L = Math.hypot(dx, dy);
+    if (L > 0.5 * S) { dx *= (0.5 * S) / L; dy *= (0.5 * S) / L; }
+    x -= dx;
+    y -= dy;
+    if (L < 1e-13 * S) break;
+  }
+  const r = R(x, y);
+  // kiểm tra nghiệm: độ dài sai < 1e-9·S, góc sai < 1e-9 rad
+  const ok = conds.every((c, i) => Number.isFinite(r[i]) && Math.abs(r[i]) < (c.t === 'ang' || c.t === 'angv' ? 1e-9 : 1e-9 * S));
+  return ok ? pt(x, y) : null;
+}

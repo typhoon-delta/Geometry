@@ -145,6 +145,14 @@ Trường mới: `steps[].aux: true` – **đường phụ** (vẽ nét đứt, 
 không chọn được, không xuất TikZ; vẫn tính, vẫn dùng làm đối số). `fixed_point` và `locus` được tính bằng cách lấy mẫu
 cả hình (`SAMPLERS` trong `src/core/model.js`, `lab/core/model.py` – hai bản cho cùng một kết quả số).
 
+### Bổ sung bản 1.8
+
+| `type` | `args` | `params` | Ý nghĩa |
+|---|---|---|---|
+| `solve_point` | ≥ 1 đối tượng (điểm, đường thẳng, đường tròn) | `x`, `y`, `conds` | Điểm P thoả 1–2 điều kiện, giải bằng Newton (đạo hàm số) xuất phát từ (x, y). `conds`: `[{t, a, v?}]`, chỉ số trong `a` trỏ vào `args` (−1 = chính P): `on [i]` – P thuộc đường `args[i]`; `len [i, j, k, l]` – ij = kl; `ang [i, j, k, l, m, n]` – góc ijk = góc lmn (góc thường 0–180°); `angv [i, j, k]` + `v` – góc ijk = v độ. Không hội tụ / sai lệch > 10⁻⁹ → không xác định. Khi kéo, (x, y) được cập nhật theo nghiệm vừa tìm (đi liên tục). Thuật toán và hằng số giống hệt trong `src/core/geom.js` (`solvePoint`) và `lab/core/geom.py` (`solve_point`). |
+
+Kiểu đối số mới: `...obj` (danh sách điểm/đường thẳng/đường tròn, ít nhất `minArgs` phần tử).
+
 ### Dấu trang trí (không tham gia khám phá, không cần khi dịch sang hệ khác)
 
 | `type` | `args` | `style` |

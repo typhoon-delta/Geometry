@@ -538,3 +538,19 @@ body code, body .modal-text, body .tb-editor .cm-editor, body .cm-tooltip { font
 .keys-grid { display: grid; grid-template-columns: max-content 1fr; gap: 5px 12px; margin-top: 8px; align-items: center; }
 .keys-grid kbd { margin: 0; justify-self: start; }
 .tb-body .tb-h { display: block; margin: .2em 0; }
+
+/* ---------- bản 1.8: kiểm tra nhận định, trường hợp đặc biệt ---------- */
+.check-row, .special-row { flex-wrap: wrap; gap: 4px; }
+.check-row .mini, .special-row .mini { font-size: 12px; }
+.check-win .modal-body p { margin: 6px 0; }
+.check-verdict { font-size: 18px; font-weight: 650; margin: 0 0 8px; }
+.check-verdict.ok { color: var(--ok); }
+.check-verdict.bad { color: var(--danger); }
+.check-verdict.warn { color: var(--warn); }
+.check-sp { margin: 2px 0 8px; padding-left: 20px; }
+.check-sp li { margin: 3px 0; }
+.check-sp .mini { margin-left: 6px; font-size: 11px; padding: 0 7px; }
+.palette .pal-cmd .pal-ti { color: var(--accent); font-weight: 700; }
+.palette .pal-ex .pal-l { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.palette .pal-err { padding: 7px 12px; font-size: 13px; color: var(--warn); }
+.modal-err { color: var(--danger); font-size: 13px; margin: 6px 0 0; }

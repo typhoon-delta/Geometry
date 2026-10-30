@@ -17,6 +17,8 @@ import { renameInText } from '../text/markup.js';
 import { tabDirty, tabDoc, isEmptyDoc } from './share.js';
 import { downloadFile } from './download.js';
 import { keyOf } from './shortcuts.js';
+import { parseCommand } from '../core/cmd.js';
+import { showCheck } from './checkPanel.js';
 
 const HISTORY_MAX = 200;
 const AUX_TOOLS = new Set(['perpendicular', 'parallel', 'perp_bisector', 'angle_bisector', 'ext_bisector', 'angle_line']);
@@ -772,6 +774,12 @@ export class App {
       return this.completeTool(tool);
     }
 
+    if (tool.id === 'solve_point') {
+      this.endTx();
+      this.askSolvePoint(this.toUser(sx, sy));
+      return;
+    }
+
     if (tool.id === 'point') {
       const id = this.resolvePoint(sx, sy, hits);
       this.endTx();
@@ -1206,7 +1214,7 @@ export class App {
     const step = stepById(this.doc, info.id);
     const P0 = this.values.get(info.id);
     if (info.kind === 'point' && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
-    if (info.kind === 'point') this.dragUpdater = makeUpdater(this.doc, [info.id]);
+    if (info.kind === 'point') this.dragUpdater = makeUpdater(this.doc, [info.id], { track: true });
     let pending = null;
     const anchors = info.kind === 'point' && step.type === 'free_point' ? this.dragAnchors(info.id) : [];
     const apply = () => {
@@ -1236,6 +1244,9 @@ export class App {
         if (c) step.params = { ...(step.params || {}), t: round9(G.paramOf(c, target)) };
       } else if (step.type === 'point_in') {
         step.params = { ...(step.params || {}), ...this.uvInTriangle(step.args, target) };
+      } else if (step.type === 'solve_point') {
+        // điểm thoả điều kiện: chỗ xuất phát của phép giải đi theo chuột (một điều kiện: điểm chạy trên quỹ tích)
+        step.params = { ...(step.params || {}), x: round9(target.x), y: round9(target.y) };
       }
       this.quickUpdate();
     };
@@ -1399,7 +1410,12 @@ export class App {
       else this.selection.add(id);
     } else this.selection = new Set([id]);
     if (rerender) this.refresh();
-    else this.renderPanels();
+    else {
+      // sắp kéo điểm: không dựng lại cảnh (đặt nhãn…) cho nhẹ, chỉ đánh dấu lại đối tượng đang chọn rồi vẽ lại
+      for (const it of this.renderer.items) it.sel = this.selection.has(it.s.id);
+      this.view.requestDraw();
+      this.renderPanels();
+    }
   }
 
   // ================= sửa đối tượng =================
@@ -1506,6 +1522,53 @@ export class App {
       if (!s) return;
       if (value === false || value == null) delete s[key];
       else s[key] = value;
+    });
+  }
+
+  /** Công cụ "Điểm thoả điều kiện": hỏi điều kiện, giải từ chỗ vừa bấm (gõ sai thì hỏi lại kèm lỗi). */
+  async askSolvePoint(at) {
+    const name = nextName(this.doc, 'point');
+    const ex = `${name} thoả góc ${name}AB = góc ${name}BC, góc ${name}BC = góc ${name}CA`;
+    const hint = `Một hoặc hai điều kiện, cách nhau dấu phẩy: góc XYZ = góc UVW · góc XYZ = 60 · XY = ZT · ${name} thuộc (O) hoặc BC. Ví dụ: ${ex}. Điểm được tìm gần chỗ vừa bấm; kéo điểm để chọn nghiệm khác.`;
+    let text = `${name} thoả `, error = '';
+    for (;;) {
+      text = await promptDialog('Điểm thoả điều kiện', text, hint, { cursorEnd: true, error });
+      if (!text) return;
+      const cmd = parseCommand(this.doc, text, { mouse: at });
+      if (cmd.ok) break;
+      error = cmd.error || 'Không hiểu điều kiện';
+    }
+    this.mouse = at;
+    this.runCommand(text);
+  }
+
+  /** Chạy một câu lệnh tiếng Việt (bảng lệnh Space): dựng hình (hoàn tác được) hoặc kiểm tra nhận định. */
+  runCommand(text) {
+    const cmd = parseCommand(this.doc, text, { mouse: this.mouse });
+    if (!cmd.ok) { toast(cmd.error || 'Không hiểu lệnh'); return false; }
+    if (cmd.kind === 'check') {
+      const d = clone(this.doc);
+      showCheck(this, cmd.run(d), d);
+      return true;
+    }
+    this.setTool('move');
+    let res = null;
+    this.commit((doc) => { res = cmd.run(doc); });
+    this.selection = new Set([res.main]);
+    this.refresh();
+    this.warnOutOfView();
+    toast(`Đã dựng: ${cmd.desc}`);
+    (this.cmdHistory ||= []).unshift(text);
+    return true;
+  }
+
+  /** Đặt tham số mới cho nhiều bậc tự do một lần ({id: params}) – trường hợp đặc biệt, phản ví dụ; hoàn tác được. */
+  applyOverrides(patch) {
+    this.commit((doc) => {
+      for (const [id, p] of Object.entries(patch)) {
+        const s = stepById(doc, id);
+        if (s) s.params = { ...(s.params || {}), ...p };
+      }
     });
   }
 

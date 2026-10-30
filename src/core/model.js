@@ -46,11 +46,11 @@ export function evaluate(doc, overrides = null) {
 export function computeStep(s, vals, overrides = null, doc = null) {
   const def = STEP_TYPES[s.type];
   if (!def) return null;
-  const variadic = def.args[0] === '...point';
+  const variadic = (def.args[0] || '').startsWith('...');
   const argVals = new Array(s.args.length);
   for (let i = 0; i < s.args.length; i++) {
     const a = vals.get(s.args[i]);
-    if (!a || !argAccepts(variadic ? '...point' : def.args[i], a.kind)) return null;
+    if (!a || !argAccepts(variadic ? def.args[0] : def.args[i], a.kind)) return null;
     argVals[i] = a;
   }
   const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
@@ -69,16 +69,40 @@ export function computeStep(s, vals, overrides = null, doc = null) {
  * chỉ cần tính lại chúng và các bước phụ thuộc. Trả về hàm update(vals) sửa trực tiếp Map giá trị
  * (theo đúng thứ tự dựng). Dùng khi kéo: lập kế hoạch một lần lúc nhấn chuột, gọi mỗi khung hình.
  */
-export function makeUpdater(doc, changedIds) {
+export function makeUpdater(doc, changedIds, { track = false } = {}) {
   const need = dependents(doc, changedIds);
   for (const id of changedIds) need.add(id);
   const plan = doc.steps.filter((s) => need.has(s.id));
   const update = (vals) => {
-    for (const s of plan) vals.set(s.id, computeStep(s, vals, null, doc));
+    for (const s of plan) {
+      if (track && TRACKED[s.type]) trackRoot(s, vals);
+      const v = computeStep(s, vals, null, doc);
+      vals.set(s.id, v);
+      // điểm thoả điều kiện: lần giải sau xuất phát từ nghiệm vừa tìm (đi liên tục theo hình)
+      if (track && v && s.type === 'solve_point') s.params = { ...s.params, x: Math.round(v.x * 1e9) / 1e9, y: Math.round(v.y * 1e9) / 1e9 };
+    }
     return vals;
   };
   update.size = plan.length;
   return update;
+}
+
+// Bám nghiệm khi kéo (bản 1.8): giao điểm / tiếp điểm có hai nghiệm chọn theo thứ tự chuẩn (which = 0/1); thứ tự này
+// có thể đảo khi hình đổi (vd hướng đường thẳng lật lại) làm điểm nhảy sang nghiệm kia. Khi kéo, nếu nghiệm đang chọn
+// ở xa vị trí cũ còn nghiệm kia ở sát vị trí cũ thì đổi which (ghi vào hình) – điểm đi liên tục như mắt thấy.
+const TRACKED = {
+  intersection: (s, vals) => G.intersect(vals.get(s.args[0]), vals.get(s.args[1])),
+  tangent_point: (s, vals) => G.tangentPoints(vals.get(s.args[0]), vals.get(s.args[1])),
+};
+
+function trackRoot(s, vals) {
+  const prev = vals.get(s.id);
+  if (!prev) return;
+  const roots = TRACKED[s.type](s, vals);
+  if (!roots || roots.length !== 2) return;
+  const w = paramsOf(s).which || 0;
+  const dCur = G.dist(roots[w], prev), dAlt = G.dist(roots[1 - w], prev);
+  if (dCur > 3 * dAlt && dCur > 1e-9) s.params = { ...(s.params || {}), which: 1 - w };
 }
 
 // ======================= DỜI THỬ (bản 1.7): điểm cố định, quỹ tích =======================
@@ -253,13 +277,13 @@ export function validate(doc) {
     const def = STEP_TYPES[s.type];
     if (!def) { errs.push(`${where}: loại bước không rõ "${s.type}"`); seen.add(s.id); continue; }
     if (!Array.isArray(s.args)) { errs.push(`${where}: thiếu args`); seen.add(s.id); continue; }
-    const variadic = def.args[0] === '...point';
-    if (variadic ? s.args.length < 3 : s.args.length !== def.args.length)
+    const variadic = (def.args[0] || '').startsWith('...');
+    if (variadic ? s.args.length < (def.minArgs ?? 3) : s.args.length !== def.args.length)
       errs.push(`${where}: số đối số sai`);
     s.args.forEach((a, j) => {
       if (!seen.has(a)) errs.push(`${where}: tham chiếu "${a}" chưa được dựng ở bước trước`);
       else {
-        const t = variadic ? '...point' : def.args[j];
+        const t = variadic ? def.args[0] : def.args[j];
         if (t && !argAccepts(t, k.get(a))) errs.push(`${where}: đối số "${a}" sai loại`);
       }
     });

@@ -148,4 +148,21 @@ cases.push(caseOf('ban-1.7:quy-tich', doc17([
   S('ad', 'line', ['A', 'D2'], null, 'd4'), S('X', 'fixed_point', ['ad', 'D2'], null, 'X'), S('X2', 'fixed_point', ['ad', 'D2'], { which: 1 }, 'X_2'),
   S('pd', 'parallel', ['D2', 'ca'], null, 'd5'), S('Z', 'fixed_point', ['pd', 'D2'], null, 'Z'),
 ]), false));
+// bản 1.8: điểm thoả điều kiện (Brocard, PB = PC và ∠BPC = 120°, ∠BRC = 90° – một điều kiện, điểm chính giữa cung)
+cases.push(caseOf('ban-1.8:diem-thoa-dieu-kien', doc17([
+  ...TRI,
+  S('P', 'solve_point', ['A', 'B', 'C'], { x: 0.3, y: 1.5, conds: [{ t: 'ang', a: [-1, 0, 1, -1, 1, 2] }, { t: 'ang', a: [-1, 1, 2, -1, 2, 0] }] }, 'P'),
+  S('Q', 'solve_point', ['B', 'C'], { x: 0.5, y: -1, conds: [{ t: 'len', a: [-1, 0, -1, 1] }, { t: 'angv', a: [0, -1, 1], v: 120 }] }, 'Q'),
+  S('R', 'solve_point', ['B', 'C'], { x: 1, y: 2, conds: [{ t: 'angv', a: [0, -1, 1], v: 90 }] }, 'R'),
+  S('w', 'circumcircle', ['A', 'B', 'C'], null, 'ω'),
+  S('T', 'solve_point', ['w', 'B', 'C'], { x: 0.5, y: -3, conds: [{ t: 'on', a: [0] }, { t: 'len', a: [-1, 1, -1, 2] }] }, 'T'),
+  S('U', 'solve_point', ['bc', 'A'], { x: 1, y: 0, conds: [{ t: 'on', a: [0] }] }, 'U'),
+]), false));
+// bộ khám phá trên hình có điểm trong tam giác (Python phải xê dịch (u, v) giống JS)
+cases.push(caseOf('ban-1.8:kham-pha-diem-trong', doc17([
+  ...TRI,
+  S('P', 'point_in', ['A', 'B', 'C'], { u: 0.3, v: 0.25 }, 'P'),
+  S('M', 'midpoint', ['A', 'P'], null, 'M'), S('N', 'midpoint', ['B', 'P'], null, 'N'), S('K', 'midpoint', ['C', 'P'], null, 'K'),
+  S('mn', 'segment', ['M', 'N'], null, 'd4'),
+]), true));
 console.log(JSON.stringify({ format: 'doi-chieu-js', cases }));

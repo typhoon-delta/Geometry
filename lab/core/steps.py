@@ -32,6 +32,7 @@ class StepType:
     facts: Callable | None = None
     tag: str | None = None
     sampler: bool = False  # bản 1.7: bước "dời thử" (điểm cố định, quỹ tích) – tính trong model.py
+    min_args: int = 3  # bản 1.8: số đối số tối thiểu của bước có danh sách đối số thay đổi ("...point", "...obj")
 
 
 def _tri(f):
@@ -421,6 +422,11 @@ STEP_TYPES: dict[str, StepType] = {
     "measure_angle": StepType("mark", PT3, _measure_angle, "Đo góc", {"dx": 0, "dy": 0}),
     "measure_ratio": StepType("mark", ["point"] * 4, _measure_ratio, "Đo tỉ số", {"dx": 0, "dy": 0}),
 
+    # ---------- BẢN 1.8: điểm thoả điều kiện (xem solvePoint trong src/core/geom.js) ----------
+    "solve_point": StepType(
+        "point", ["...obj"], lambda a, p: G.solve_point(a, p.get("conds") or [], p["x"], p["y"]),
+        "Điểm thoả điều kiện", {"x": 0, "y": 0, "conds": []}, min_args=1,
+    ),
     # ---------- ĐÁNH DẤU (không tham gia khám phá) ----------
     "polygon": StepType("mark", ["...point"], lambda a, p: {"kind": "polygon", "pts": [_P(x) for x in a]}, "Miền đa giác"),
     "angle_mark": StepType(
@@ -449,6 +455,8 @@ def arg_accepts(arg_type: str, kind: str | None) -> bool:
         return kind in ("point", "line")
     if arg_type == "...point":
         return kind == "point"
+    if arg_type == "...obj":
+        return kind in ("point", "line", "circle")
     return False
 
 

@@ -35,13 +35,14 @@ export function confirmDialog(title, message, okLabel = 'Đồng ý') {
   }).then((v) => !!v);
 }
 
-export function promptDialog(title, value = '', hint = '') {
+export function promptDialog(title, value = '', hint = '', { cursorEnd = false, error = '' } = {}) {
   return modal((box, close) => {
     box.innerHTML = `<h3>${esc(title)}</h3>${hint ? `<div class="modal-body">${esc(hint)}</div>` : ''}
-      <input type="text" class="modal-input" value="${esc(value)}">
+      <input type="text" class="modal-input" value="${esc(value)}">${error ? `<div class="modal-err">${esc(error)}</div>` : ''}
       <div class="modal-actions"><button class="cancel">Huỷ</button><button class="primary">OK</button></div>`;
     const inp = box.querySelector('input');
-    inp.select();
+    if (cursorEnd) setTimeout(() => { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 0);
+    else inp.select();
     inp.onkeydown = (e) => { if (e.key === 'Enter') close(inp.value); };
     box.querySelector('.cancel').onclick = () => close(null);
     box.querySelector('.primary').onclick = () => close(inp.value);

@@ -138,6 +138,33 @@ và mọi công cụ cần chọn điểm cũng vậy: bấm vào chỗ cắt l�
 * **Sửa đối tượng cha**: chọn một đối tượng, ở thẻ thuộc tính mục *Dựng từ* bấm tên đối tượng cha muốn thay rồi bấm đối
   tượng thay thế trên hình – vd trung điểm AB thành trung điểm AD, các đối tượng dựng sau vẫn giữ nguyên.
 
+### Bản 1.8: gõ lệnh, điểm thoả điều kiện, kiểm tra nhận định
+
+* **Gõ lệnh dựng hình** (bảng lệnh `Space`, có dấu hay không dấu đều được): `M = trung điểm BC`, `H = trực tâm ABC`,
+  `(ABC)`, `qua A vuông góc BC`, `trung trực BC`, `phân giác góc BAC`, `D = chân đường cao từ A xuống BC`,
+  `A' = đối xứng A qua BC`, `K = AD cắt BC`, `S = (AEF) cắt (O)`, `E = AC cắt (O) khác A`, `đường tròn đường kính BC`,
+  `P = điểm trên (O)`, `tiếp tuyến tại A của (O)`… Gõ tới đâu báo tới đó (lệnh hiểu thành gì, hoặc lỗi như *Chưa có điểm X*);
+  gõ vài chữ (`truc tam`, `cat`) thì hiện mẫu lệnh. `BC` là đường có sẵn qua B, C (chưa có thì tự dựng thành đường phụ),
+  `(O)` là đường tròn tâm O, `(ABC)` là đường tròn qua A, B, C (chưa có thì dựng). Cắt nhau mà một giao điểm đã có thì
+  lấy giao điểm còn lại; hai giao điểm mới thì lấy cái gần con trỏ chuột. `Ctrl+Z` bỏ lệnh vừa dựng.
+* **Điểm thoả điều kiện** (nhóm *Điểm*, hoặc gõ lệnh): bấm vào chỗ **gần** điểm cần tìm rồi gõ một hoặc hai điều kiện:
+  `P thoả góc PAB = góc PBC, góc PBC = góc PCA` (điểm Brocard), `Q sao cho QB = QC, góc BQC = 120`,
+  `R thoả R thuộc (O), RB = RC`. Điều kiện: `góc XYZ = góc UVW`, `góc XYZ = 60`, `XY = ZT`, `P thuộc (O)` / `P thuộc BC`.
+  Kéo hình thì điểm đi theo, luôn thoả điều kiện; kéo chính điểm đó để chọn nghiệm khác (hai điều kiện) hoặc cho nó chạy
+  trên quỹ tích của điều kiện (một điều kiện).
+* **Kiểm tra nhận định**: chọn các đối tượng (theo thứ tự) → thẻ thuộc tính hiện nút *Kiểm tra*: thẳng hàng (3 điểm), cùng
+  thuộc một đường tròn / bằng nhau AB = CD (4 điểm), góc bằng nhau (6 điểm: ∠ABC = ∠DEF), vuông góc / song song (2 đường),
+  đồng quy (3 đường), tiếp xúc, thuộc đường, trùng nhau. Hoặc gõ `kiểm tra A, B, C thẳng hàng`, `kiểm tra AB = CD`…
+  Chương trình thử vài chục hình ngẫu nhiên và các trường hợp đặc biệt rồi báo: **luôn đúng** (kèm *sai khi …* / *không
+  xác định khi …* – vd tam giác đều), **sai**, hoặc **không luôn đúng** (đúng trên hình đang vẽ nhưng có phản ví dụ – nút
+  *Xem phản ví dụ*), kèm *đúng khi …* (vd O, I, H thẳng hàng khi tam giác cân). Bấm *xem* cạnh một trường hợp để đưa hình về
+  trường hợp đó. Là kiểm tra bằng số, không thay cho chứng minh.
+* **Đưa về trường hợp đặc biệt**: chọn một điểm → thẻ thuộc tính *Đưa về*: tam giác cân / vuông tại đỉnh đó, đều; điểm trên
+  cạnh về trung điểm, chân đường cao, chân phân giác; điểm trên đường tròn về điểm đối tâm; điểm trong tam giác về trọng tâm,
+  tâm nội tiếp, trực tâm, tâm ngoại tiếp. `Ctrl+Z` để trở lại.
+* **Kéo không nhảy**: khi kéo, giao điểm và tiếp điểm bám nghiệm gần vị trí cũ (trước đây có lúc nhảy sang giao điểm kia).
+* **Xuất Asymptote** (*Tệp › Xuất Asymptote…*): mã Asymptote thuần, dán vào AoPS giữa `[asy]` và `[/asy]`.
+
 ### Menu Công cụ
 
 Biểu tượng cuối của thanh công cụ dọc (▶⋮) mở menu nhiều tầng:

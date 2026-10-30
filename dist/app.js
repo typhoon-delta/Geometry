@@ -53,13 +53,17 @@
       box.querySelector(".primary").onclick = () => close2(true);
     }).then((v) => !!v);
   }
-  function promptDialog(title, value = "", hint = "") {
+  function promptDialog(title, value = "", hint = "", { cursorEnd = false, error = "" } = {}) {
     return modal((box, close2) => {
       box.innerHTML = `<h3>${esc(title)}</h3>${hint ? `<div class="modal-body">${esc(hint)}</div>` : ""}
-      <input type="text" class="modal-input" value="${esc(value)}">
+      <input type="text" class="modal-input" value="${esc(value)}">${error ? `<div class="modal-err">${esc(error)}</div>` : ""}
       <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary">OK</button></div>`;
       const inp = box.querySelector("input");
-      inp.select();
+      if (cursorEnd) setTimeout(() => {
+        inp.focus();
+        inp.setSelectionRange(inp.value.length, inp.value.length);
+      }, 0);
+      else inp.select();
       inp.onkeydown = (e) => {
         if (e.key === "Enter") close2(inp.value);
       };
@@ -197,6 +201,7 @@
     reflectPointOverLine: () => reflectPointOverLine,
     reflectPointOverPoint: () => reflectPointOverPoint,
     rotatePoint: () => rotatePoint,
+    solvePoint: () => solvePoint,
     spiralPoint: () => spiralPoint,
     sub: () => sub,
     symmedianFoot: () => symmedianFoot,
@@ -587,6 +592,67 @@
     const len = (t1 - t0) * dd;
     const ext = Math.min(maxExt, Math.max(minExt, 0.15 * len)) / dd;
     return [sub4 === "ray" ? 0 : t0 - ext, t1 + ext];
+  }
+  var SOLVE_ITERS = 60;
+  function condAngle(A, B, C2) {
+    const a = directedAngle(A, B, C2);
+    return a == null ? NaN : Math.abs(a) * Math.PI / 180;
+  }
+  function condResidual(c, P2, objs) {
+    const g = (i) => i < 0 ? P2 : objs[i];
+    const a = c.a;
+    if (c.t === "on") {
+      const X = objs[a[0]];
+      if (X.kind === "line") return cross(unit(X.d), sub(P2, X.p));
+      return dist(P2, X.c) - X.r;
+    }
+    if (c.t === "len") return dist(g(a[0]), g(a[1])) - dist(g(a[2]), g(a[3]));
+    if (c.t === "ang") return condAngle(g(a[0]), g(a[1]), g(a[2])) - condAngle(g(a[3]), g(a[4]), g(a[5]));
+    if (c.t === "angv") return condAngle(g(a[0]), g(a[1]), g(a[2])) - c.v * Math.PI / 180;
+    return NaN;
+  }
+  function solvePoint(objs, conds, x0, y0) {
+    const n = conds.length;
+    if (n < 1 || n > 2) return null;
+    let S2 = 0;
+    for (const o of objs) {
+      const q = o.kind === "point" ? o : o.kind === "circle" ? o.c : o.p;
+      S2 = Math.max(S2, Math.hypot(q.x - x0, q.y - y0));
+      if (o.kind === "circle") S2 = Math.max(S2, o.r);
+    }
+    if (!(S2 > 0)) S2 = 1;
+    const h = 1e-6 * S2;
+    const R = (x2, y2) => conds.map((c) => condResidual(c, pt(x2, y2), objs));
+    let x = x0, y = y0;
+    for (let it = 0; it < SOLVE_ITERS; it++) {
+      const r2 = R(x, y);
+      if (r2.some((v) => !Number.isFinite(v))) return null;
+      const rx1 = R(x + h, y), rx0 = R(x - h, y), ry1 = R(x, y + h), ry0 = R(x, y - h);
+      const J = r2.map((_, i) => [(rx1[i] - rx0[i]) / (2 * h), (ry1[i] - ry0[i]) / (2 * h)]);
+      let dx, dy;
+      if (n === 1) {
+        const g2 = J[0][0] * J[0][0] + J[0][1] * J[0][1];
+        if (!(g2 > 1e-300)) return null;
+        dx = r2[0] * J[0][0] / g2;
+        dy = r2[0] * J[0][1] / g2;
+      } else {
+        const det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+        if (!(Math.abs(det) > 1e-300)) return null;
+        dx = (r2[0] * J[1][1] - r2[1] * J[0][1]) / det;
+        dy = (J[0][0] * r2[1] - J[1][0] * r2[0]) / det;
+      }
+      const L = Math.hypot(dx, dy);
+      if (L > 0.5 * S2) {
+        dx *= 0.5 * S2 / L;
+        dy *= 0.5 * S2 / L;
+      }
+      x -= dx;
+      y -= dy;
+      if (L < 1e-13 * S2) break;
+    }
+    const r = R(x, y);
+    const ok = conds.every((c, i) => Number.isFinite(r[i]) && Math.abs(r[i]) < (c.t === "ang" || c.t === "angv" ? 1e-9 : 1e-9 * S2));
+    return ok ? pt(x, y) : null;
   }
 
   // src/core/steps.js
@@ -1176,6 +1242,22 @@
         return cd < EPS ? null : { kind: "measure", m: "ratio", value: dist(A, B) / cd, at: { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } };
       }
     },
+    // ---------- BẢN 1.8: điểm thoả điều kiện ----------
+    solve_point: {
+      // Điểm P thoả 1–2 điều kiện, giải bằng Newton từ vị trí gần đúng (x, y) – luôn ra nghiệm gần chỗ đặt.
+      // conds: [{t, a, v?}], a là chỉ số trong args (−1 = chính P):
+      //   on   [i]            P thuộc đường thẳng / đường tròn args[i]
+      //   len  [i, j, k, l]   độ dài ij = kl
+      //   ang  [i,j,k,l,m,n]  góc ijk = góc lmn (góc thường, 0..180°)
+      //   angv [i, j, k], v   góc ijk = v độ
+      // Một điều kiện: P chạy trên "quỹ tích" đó (kéo được); hai điều kiện: P xác định (gần chỗ đặt).
+      kind: "point",
+      args: ["...obj"],
+      minArgs: 1,
+      params: { x: 0, y: 0, conds: [] },
+      label: "\u0110i\u1EC3m tho\u1EA3 \u0111i\u1EC1u ki\u1EC7n",
+      compute: (argVals, p) => solvePoint(argVals, p.conds || [], p.x, p.y)
+    },
     // ---------- ĐÁNH DẤU (không tham gia khám phá) ----------
     polygon: {
       kind: "mark",
@@ -1214,6 +1296,8 @@
         return kind === "point" || kind === "line";
       case "...point":
         return kind === "point";
+      case "...obj":
+        return kind === "point" || kind === "line" || kind === "circle";
       default:
         return false;
     }
@@ -1253,11 +1337,11 @@
   function computeStep(s, vals, overrides = null, doc2 = null) {
     const def = STEP_TYPES[s.type];
     if (!def) return null;
-    const variadic = def.args[0] === "...point";
+    const variadic = (def.args[0] || "").startsWith("...");
     const argVals = new Array(s.args.length);
     for (let i = 0; i < s.args.length; i++) {
       const a = vals.get(s.args[i]);
-      if (!a || !argAccepts(variadic ? "...point" : def.args[i], a.kind)) return null;
+      if (!a || !argAccepts(variadic ? def.args[0] : def.args[i], a.kind)) return null;
       argVals[i] = a;
     }
     const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
@@ -1270,16 +1354,34 @@
     if (v && def.kind !== "mark" && !valueFinite(v)) v = null;
     return v;
   }
-  function makeUpdater(doc2, changedIds) {
+  function makeUpdater(doc2, changedIds, { track = false } = {}) {
     const need = dependents(doc2, changedIds);
     for (const id of changedIds) need.add(id);
     const plan = doc2.steps.filter((s) => need.has(s.id));
     const update = (vals) => {
-      for (const s of plan) vals.set(s.id, computeStep(s, vals, null, doc2));
+      for (const s of plan) {
+        if (track && TRACKED[s.type]) trackRoot(s, vals);
+        const v = computeStep(s, vals, null, doc2);
+        vals.set(s.id, v);
+        if (track && v && s.type === "solve_point") s.params = { ...s.params, x: Math.round(v.x * 1e9) / 1e9, y: Math.round(v.y * 1e9) / 1e9 };
+      }
       return vals;
     };
     update.size = plan.length;
     return update;
+  }
+  var TRACKED = {
+    intersection: (s, vals) => intersect(vals.get(s.args[0]), vals.get(s.args[1])),
+    tangent_point: (s, vals) => tangentPoints(vals.get(s.args[0]), vals.get(s.args[1]))
+  };
+  function trackRoot(s, vals) {
+    const prev = vals.get(s.id);
+    if (!prev) return;
+    const roots = TRACKED[s.type](s, vals);
+    if (!roots || roots.length !== 2) return;
+    const w = paramsOf(s).which || 0;
+    const dCur = dist(roots[w], prev), dAlt = dist(roots[1 - w], prev);
+    if (dCur > 3 * dAlt && dCur > 1e-9) s.params = { ...s.params || {}, which: 1 - w };
   }
   var FIX_OFFS = [[0.31, 0.12], [-0.22, 0.27], [0.17, -0.33], [-0.36, -0.08], [0.05, 0.41], [0.26, -0.14]];
   var FIX_UV = [[0.2, 0.2], [0.55, 0.2], [0.2, 0.55], [0.33, 0.33], [0.12, 0.62], [0.6, 0.3]];
@@ -1444,13 +1546,13 @@
         seen.add(s.id);
         continue;
       }
-      const variadic = def.args[0] === "...point";
-      if (variadic ? s.args.length < 3 : s.args.length !== def.args.length)
+      const variadic = (def.args[0] || "").startsWith("...");
+      if (variadic ? s.args.length < (def.minArgs ?? 3) : s.args.length !== def.args.length)
         errs.push(`${where}: s\u1ED1 \u0111\u1ED1i s\u1ED1 sai`);
       s.args.forEach((a, j) => {
         if (!seen.has(a)) errs.push(`${where}: tham chi\u1EBFu "${a}" ch\u01B0a \u0111\u01B0\u1EE3c d\u1EF1ng \u1EDF b\u01B0\u1EDBc tr\u01B0\u1EDBc`);
         else {
-          const t2 = variadic ? "...point" : def.args[j];
+          const t2 = variadic ? def.args[0] : def.args[j];
           if (t2 && !argAccepts(t2, k.get(a))) errs.push(`${where}: \u0111\u1ED1i s\u1ED1 "${a}" sai lo\u1EA1i`);
         }
       });
@@ -1798,7 +1900,7 @@
     return st;
   }
   var isShown = (doc2, s) => !s.hidden && !(s.aux && doc2.hideAux);
-  var isDraggableType = (type) => type === "free_point" || type === "point_on" || type === "point_in";
+  var isDraggableType = (type) => type === "free_point" || type === "point_on" || type === "point_in" || type === "solve_point";
 
   // src/ui/render.js
   var LABEL = { mono: { font: 15 }, textbook: { font: 16 } };
@@ -3380,6 +3482,15 @@
       { extraClick: "B\u1EA5m v\xE0o trong tam gi\xE1c \u0111\u1EC3 \u0111\u1EB7t \u0111i\u1EC3m (khi k\xE9o, \u0111i\u1EC3m lu\xF4n \u1EDF trong tam gi\xE1c)" }
     ),
     T2(
+      "solve_point",
+      "\u0110i\u1EC3m tho\u1EA3 \u0111i\u1EC1u ki\u1EC7n",
+      "C\u01A1 b\u1EA3n",
+      "\u2316",
+      ["point"],
+      ["B\u1EA5m v\xE0o ch\u1ED7 G\u1EA6N \u0111i\u1EC3m c\u1EA7n t\xECm, r\u1ED3i g\xF5 \u0111i\u1EC1u ki\u1EC7n (vd: g\xF3c PAB = g\xF3c PBC, g\xF3c PBC = g\xF3c PCA)"],
+      () => []
+    ),
+    T2(
       "fixed_point",
       "\u0110i\u1EC3m c\u1ED1 \u0111\u1ECBnh",
       "Qu\u1EF9 t\xEDch",
@@ -3409,7 +3520,7 @@
   var TOOL_BY_ID = Object.fromEntries([...TOOLS, ...LIBRARY].map((t2) => [t2.id, t2]));
   var TOOLBAR = [
     { id: "move", label: "Ch\u1ECDn / k\xE9o", icon: "move", tools: ["move"] },
-    { id: "point", label: "\u0110i\u1EC3m", icon: "point", tools: ["point", "intersect", "midpoint", "point_in"] },
+    { id: "point", label: "\u0110i\u1EC3m", icon: "point", tools: ["point", "intersect", "midpoint", "point_in", "solve_point"] },
     { id: "circle", label: "\u0110\u01B0\u1EDDng tr\xF2n", icon: "circle", tools: ["circle", "circle_3pts", "circle_radius"] },
     { id: "line", label: "\u0110o\u1EA1n, tia, \u0111\u01B0\u1EDDng th\u1EB3ng", icon: "line", tools: ["segment", "ray", "line"] },
     { id: "construct", label: "D\u1EF1ng", icon: "construct", tools: ["perpendicular", "parallel", "perp_bisector", "angle_bisector", "ext_bisector", "projection", "reflect", "angle_point", "angle_line"] },
@@ -3533,8 +3644,1103 @@
   // src/ui/app.js
   init_dialog();
 
+  // src/explore/knowledge.js
+  var UF = class {
+    constructor() {
+      this.p = /* @__PURE__ */ new Map();
+    }
+    find(x) {
+      if (!this.p.has(x)) this.p.set(x, x);
+      let r = x;
+      while (this.p.get(r) !== r) r = this.p.get(r);
+      while (this.p.get(x) !== r) {
+        const n = this.p.get(x);
+        this.p.set(x, r);
+        x = n;
+      }
+      return r;
+    }
+    union(a, b) {
+      const ra = this.find(a), rb = this.find(b);
+      if (ra !== rb) this.p.set(ra, rb);
+      return ra !== rb;
+    }
+  };
+  var Knowledge = class {
+    /**
+     * @param doc  tài liệu
+     * @param rep  hàm id điểm → id đại diện (các điểm luôn trùng nhau gộp làm một)
+     */
+    constructor(doc2, rep = (x) => x) {
+      this.rep = rep;
+      this.lines = [];
+      this.circles = [];
+      this.dir = new UF();
+      this.perps = [];
+      this.tans = [];
+      const k = kinds(doc2);
+      this.kind = k;
+      for (const s of doc2.steps) {
+        const def = STEP_TYPES[s.type];
+        if (!def) continue;
+        const kind = k.get(s.id);
+        if (kind === "line") {
+          const i = this.newLine();
+          this.lines[i].objs.add(s.id);
+          if (s.type === "perp_bisector") this.addTag(i, "PB:" + sortKey(s.args.map(rep)));
+          if (s.type === "angle_bisector" && !(s.params && s.params.external)) this.addTag(i, abTag(s.args.map(rep)));
+        } else if (kind === "circle") {
+          const i = this.newCircle();
+          this.circles[i].objs.add(s.id);
+          if (s.type === "incircle") this.circles[i].tags.add("IC:" + sortKey(s.args.map(rep)));
+          if (s.type === "circumcircle" || s.type === "circle_3pts") for (const a of s.args) this.circles[i].pts.add(rep(a));
+        }
+      }
+      for (const s of doc2.steps) {
+        const def = STEP_TYPES[s.type];
+        if (!def || !def.facts) continue;
+        let facts = [];
+        try {
+          facts = def.facts(s, s.args.map((a) => k.get(a)), doc2) || [];
+        } catch {
+          facts = [];
+        }
+        for (const f of facts) this.addFact(f);
+      }
+      this.saturate();
+    }
+    newLine() {
+      this.lines.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
+      return this.lines.length - 1;
+    }
+    newCircle() {
+      this.circles.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
+      return this.circles.length - 1;
+    }
+    addTag(i, tag) {
+      this.lines[i].tags.add(tag);
+    }
+    /** Chỉ số thực thể đường thẳng ứng với tham chiếu (id đối tượng hoặc tham chiếu ảo). */
+    lineOf(ref) {
+      const L = this.lines;
+      if (typeof ref === "string") return L.findIndex((e) => e.alive && e.objs.has(ref));
+      if (ref.L) {
+        const [a, b] = ref.L.map(this.rep);
+        if (a === b) return -1;
+        let i = L.findIndex((e) => e.alive && e.pts.has(a) && e.pts.has(b));
+        if (i < 0) {
+          i = this.newLine();
+          L[i].pts.add(a);
+          L[i].pts.add(b);
+        }
+        return i;
+      }
+      if (ref.PB) return this.tagged("PB:" + sortKey(ref.PB.map(this.rep)), () => {
+        const j = this.lineOf({ L: ref.PB });
+        return j;
+      });
+      if (ref.AB) return this.tagged(abTag(ref.AB.map(this.rep)), null, this.rep(ref.AB[1]));
+      return -1;
+    }
+    tagged(tag, perpTo, through) {
+      let i = this.lines.findIndex((e) => e.alive && e.tags.has(tag));
+      if (i < 0) {
+        i = this.newLine();
+        this.lines[i].tags.add(tag);
+        if (through) this.lines[i].pts.add(through);
+      }
+      if (perpTo) {
+        const j = perpTo();
+        if (j >= 0) this.perps.push([i, j]);
+      }
+      return i;
+    }
+    circleOf(ref) {
+      const C2 = this.circles;
+      if (typeof ref === "string") return C2.findIndex((e) => e.alive && e.objs.has(ref));
+      if (ref.C) {
+        const ps = ref.C.map(this.rep);
+        if (new Set(ps).size < 3) return -1;
+        let i = C2.findIndex((e) => e.alive && ps.every((p) => e.pts.has(p)));
+        if (i < 0) {
+          i = this.newCircle();
+          ps.forEach((p) => C2[i].pts.add(p));
+        }
+        return i;
+      }
+      if (ref.IC) {
+        const tag = "IC:" + sortKey(ref.IC.map(this.rep));
+        let i = C2.findIndex((e) => e.alive && e.tags.has(tag));
+        if (i < 0) {
+          i = this.newCircle();
+          C2[i].tags.add(tag);
+        }
+        return i;
+      }
+      return -1;
+    }
+    curveOf(ref) {
+      if (typeof ref === "string") {
+        const kd = this.kind.get(ref);
+        if (kd === "line") return { t: "L", i: this.lineOf(ref) };
+        if (kd === "circle") return { t: "C", i: this.circleOf(ref) };
+        return null;
+      }
+      if (ref.C || ref.IC) return { t: "C", i: this.circleOf(ref) };
+      return { t: "L", i: this.lineOf(ref) };
+    }
+    addFact(f) {
+      if (f.on) {
+        const P2 = this.rep(f.on[0]);
+        const c = this.curveOf(f.on[1]);
+        if (!c || c.i < 0) return;
+        (c.t === "L" ? this.lines : this.circles)[c.i].pts.add(P2);
+      } else if (f.col) {
+        const ps = [...new Set(f.col.map(this.rep))];
+        if (ps.length < 2) return;
+        const i = this.lineOf({ L: [ps[0], ps[1]] });
+        ps.forEach((p) => this.lines[i].pts.add(p));
+      } else if (f.cyc) {
+        const ps = [...new Set(f.cyc.map(this.rep))];
+        if (ps.length < 3) return;
+        const i = this.circleOf({ C: ps.slice(0, 3) });
+        ps.forEach((p) => this.circles[i].pts.add(p));
+      } else if (f.par || f.perp) {
+        const [a, b] = (f.par || f.perp).map((r) => this.lineOf(r));
+        if (a < 0 || b < 0) return;
+        if (f.par) this.dir.union(a, b);
+        else this.perps.push([a, b]);
+      } else if (f.tan) {
+        const [a, b] = f.tan.map((r) => this.curveOf(r));
+        if (a && b && a.i >= 0 && b.i >= 0) this.tans.push([a, b]);
+      }
+    }
+    mergeLine(i, j) {
+      const a = this.lines[i], b = this.lines[j];
+      for (const p of b.pts) a.pts.add(p);
+      for (const o of b.objs) a.objs.add(o);
+      for (const t2 of b.tags) a.tags.add(t2);
+      b.alive = false;
+      this.dir.union(i, j);
+      this.perps = this.perps.map(([x, y]) => [x === j ? i : x, y === j ? i : y]);
+      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "L" && c.i === j ? { t: "L", i } : c));
+      this.redirect = this.redirect || /* @__PURE__ */ new Map();
+      this.redirect.set(j, i);
+    }
+    mergeCircle(i, j) {
+      const a = this.circles[i], b = this.circles[j];
+      for (const p of b.pts) a.pts.add(p);
+      for (const o of b.objs) a.objs.add(o);
+      for (const t2 of b.tags) a.tags.add(t2);
+      b.alive = false;
+      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "C" && c.i === j ? { t: "C", i } : c));
+    }
+    saturate() {
+      for (let round4 = 0; round4 < 20; round4++) {
+        let changed = false;
+        const perpOf = /* @__PURE__ */ new Map();
+        for (const [x, y] of this.perps) {
+          const rx = this.dir.find(x), ry = this.dir.find(y);
+          if (perpOf.has(ry)) changed = this.dir.union(perpOf.get(ry), rx) || changed;
+          else perpOf.set(ry, rx);
+          if (perpOf.has(rx)) changed = this.dir.union(perpOf.get(rx), ry) || changed;
+          else perpOf.set(rx, ry);
+        }
+        const L = this.lines;
+        for (let i = 0; i < L.length; i++) {
+          if (!L[i].alive) continue;
+          for (let j = i + 1; j < L.length; j++) {
+            if (!L[j].alive) continue;
+            let common = 0;
+            for (const p of L[j].pts) if (L[i].pts.has(p)) common++;
+            const sameTag = [...L[j].tags].some((t2) => L[i].tags.has(t2));
+            if (common >= 2 || sameTag || common >= 1 && this.dir.find(i) === this.dir.find(j)) {
+              this.mergeLine(i, j);
+              changed = true;
+            }
+          }
+        }
+        const C2 = this.circles;
+        for (let i = 0; i < C2.length; i++) {
+          if (!C2[i].alive) continue;
+          for (let j = i + 1; j < C2.length; j++) {
+            if (!C2[j].alive) continue;
+            let common = 0;
+            for (const p of C2[j].pts) if (C2[i].pts.has(p)) common++;
+            const sameTag = [...C2[j].tags].some((t2) => C2[i].tags.has(t2));
+            if (common >= 3 || sameTag) {
+              this.mergeCircle(i, j);
+              changed = true;
+            }
+          }
+        }
+        if (!changed) break;
+      }
+    }
+    // ---------- truy vấn ----------
+    pointOnLineObj(P2, lineId) {
+      const i = this.lineOf(lineId);
+      return i >= 0 && this.lines[i].pts.has(this.rep(P2));
+    }
+    pointOnCircleObj(P2, cId) {
+      const i = this.circleOf(cId);
+      return i >= 0 && this.circles[i].pts.has(this.rep(P2));
+    }
+    collinear(ps) {
+      const r = ps.map(this.rep);
+      return this.lines.some((e) => e.alive && r.every((p) => e.pts.has(p)));
+    }
+    concyclic(ps) {
+      const r = ps.map(this.rep);
+      return this.circles.some((e) => e.alive && r.every((p) => e.pts.has(p)));
+    }
+    sameLine(a, b) {
+      const i = this.lineOf(a), j = this.lineOf(b);
+      return i >= 0 && i === j;
+    }
+    sameCircle(a, b) {
+      const i = this.circleOf(a), j = this.circleOf(b);
+      return i >= 0 && i === j;
+    }
+    parallel(a, b) {
+      const i = this.lineOf(a), j = this.lineOf(b);
+      return i >= 0 && j >= 0 && this.dir.find(i) === this.dir.find(j);
+    }
+    perpendicular(a, b) {
+      const i = this.lineOf(a), j = this.lineOf(b);
+      if (i < 0 || j < 0) return false;
+      const ri = this.dir.find(i), rj = this.dir.find(j);
+      return this.perps.some(([x, y]) => {
+        const rx = this.dir.find(x), ry = this.dir.find(y);
+        return rx === ri && ry === rj || rx === rj && ry === ri;
+      });
+    }
+    tangent(a, b) {
+      const ca = this.curveOf(a), cb = this.curveOf(b);
+      if (!ca || !cb) return false;
+      const eq = (u, v) => u.t === v.t && u.i === v.i;
+      return this.tans.some(([x, y]) => eq(x, ca) && eq(y, cb) || eq(x, cb) && eq(y, ca));
+    }
+  };
+  var sortKey = (arr) => [...arr].sort().join(",");
+  var abTag = ([A, V, C2]) => `AB:${V}:${sortKey([A, C2])}`;
+
+  // src/explore/explorer.js
+  var DEFAULTS = {
+    samples: 12,
+    // số cấu hình ngẫu nhiên hợp lệ cần có (ngoài cấu hình gốc)
+    maxAttempts: 150,
+    // số lần thử tối đa (cấu hình suy biến bị loại)
+    perturb: 0.3,
+    // biên độ xê dịch điểm tự do, tính theo kích thước hình
+    tol: 1e-6,
+    // dung sai TƯƠNG ĐỐI theo kích thước hình
+    minSep: 0.012,
+    // hai điểm (vốn khác nhau) gần hơn minSep·kích thước → cấu hình suy biến
+    minAngle: 4,
+    // tam giác có góc < minAngle độ → suy biến
+    maxRadius: 25,
+    // đường tròn bán kính > maxRadius·kích thước → gần suy biến (3 điểm gần thẳng hàng)
+    seed: 12345,
+    maxPoints: 90
+    // giới hạn để tránh bùng nổ tổ hợp
+  };
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = a + 1831565813 >>> 0;
+      let t2 = a;
+      t2 = Math.imul(t2 ^ t2 >>> 15, t2 | 1);
+      t2 ^= t2 + Math.imul(t2 ^ t2 >>> 7, t2 | 61);
+      return ((t2 ^ t2 >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function figureScale(vals, pointIds) {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const id of pointIds) {
+      const v = vals.get(id);
+      if (!v) continue;
+      x1 = Math.min(x1, v.x);
+      x2 = Math.max(x2, v.x);
+      y1 = Math.min(y1, v.y);
+      y2 = Math.max(y2, v.y);
+    }
+    const s = Math.hypot(x2 - x1, y2 - y1);
+    return Number.isFinite(s) && s > 1e-12 ? s : 1;
+  }
+  var TRIANGLE_TYPES = /* @__PURE__ */ new Set([
+    "circumcenter",
+    "orthocenter",
+    "incenter",
+    "centroid",
+    "nine_point_center",
+    "altitude_foot",
+    "incircle_touch",
+    "arc_midpoint",
+    "circle_3pts",
+    "circumcircle",
+    "incircle",
+    "nine_point_circle",
+    "angle_bisector",
+    "excenter",
+    "excircle",
+    "lemoine",
+    "kosnita",
+    "symmedian_foot",
+    "mixtilinear"
+  ]);
+  function findTriangles(doc2, kindOf, { strict = false, drawn = false } = {}) {
+    const tri2 = /* @__PURE__ */ new Map();
+    const addTri = (ids) => {
+      if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === "point")) return;
+      const key = [...ids].sort().join(",");
+      if (!tri2.has(key)) tri2.set(key, ids);
+    };
+    for (const s of doc2.steps)
+      if (!drawn && TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === "circle_3pts" || s.type === "angle_bisector"))) addTri(s.args);
+    const adj = /* @__PURE__ */ new Map();
+    const link = (a, b) => {
+      if (!adj.has(a)) adj.set(a, /* @__PURE__ */ new Set());
+      if (!adj.has(b)) adj.set(b, /* @__PURE__ */ new Set());
+      adj.get(a).add(b);
+      adj.get(b).add(a);
+    };
+    for (const s of doc2.steps) if (["line", "segment", "ray"].includes(s.type)) link(s.args[0], s.args[1]);
+    for (const [a, nb] of adj) for (const b of nb) for (const c of nb) if (a < b && b < c && adj.get(b).has(c)) addTri([a, b, c]);
+    return [...tri2.values()];
+  }
+  function randomOverrides(doc2, base2, scale, rand, perturb) {
+    const ov = /* @__PURE__ */ new Map();
+    for (const s of doc2.steps) {
+      const p = paramsOf(s);
+      if (s.type === "free_point") {
+        const r = perturb * scale * Math.sqrt(rand()), a = 2 * Math.PI * rand();
+        ov.set(s.id, { x: p.x + r * Math.cos(a), y: p.y + r * Math.sin(a) });
+      } else if (s.type === "point_on") {
+        const host = base2.get(s.args[0]);
+        if (!host) continue;
+        let t2 = p.t;
+        if (host.kind === "circle") t2 += (rand() * 2 - 1) * 0.9;
+        else if (host.sub === "segment") t2 = Math.min(0.92, Math.max(0.08, t2 + (rand() * 2 - 1) * 0.3));
+        else if (host.sub === "ray") t2 = Math.max(0.05, t2 * Math.exp((rand() * 2 - 1) * 0.5));
+        else t2 += (rand() * 2 - 1) * 0.4;
+        ov.set(s.id, { t: t2 });
+      } else if (s.type === "point_in") {
+        let u = rand(), v = rand();
+        if (u + v > 1) {
+          u = 1 - u;
+          v = 1 - v;
+        }
+        ov.set(s.id, { u: 0.08 + 0.84 * u, v: 0.08 + 0.84 * v });
+      }
+    }
+    return ov;
+  }
+  function degenerate(doc2, vals, ctx) {
+    const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments, tangentAtBase } = ctx;
+    const scale = figureScale(vals, pointIds);
+    for (const id of [...pointIds, ...curveIds]) if (!vals.get(id)) return "kh\xF4ng x\xE1c \u0111\u1ECBnh";
+    const sep = opts.minSep * scale;
+    for (let i = 0; i < pointIds.length; i++) {
+      const a = vals.get(pointIds[i]);
+      for (let j = i + 1; j < pointIds.length; j++) {
+        if (sameClassPairs.has(pointIds[i] + "|" + pointIds[j])) continue;
+        const d = dist(a, vals.get(pointIds[j]));
+        if (d < sep && (!baseDist || d < 0.3 * baseDist[i][j])) return "\u0111i\u1EC3m g\u1EA7n tr\xF9ng";
+      }
+    }
+    const sinMin = Math.sin(opts.minAngle * Math.PI / 180);
+    const ang = (P2, Q, R) => Math.abs(cross(sub(Q, P2), sub(R, P2))) / (dist(P2, Q) * dist(P2, R) + 1e-300);
+    for (const t2 of triangles) {
+      const [A, B, C2] = t2.map((a) => vals.get(a));
+      if (Math.min(ang(A, B, C2), ang(B, C2, A), ang(C2, A, B)) < sinMin) return "tam gi\xE1c d\u1EB9t";
+    }
+    if (onSegments) {
+      for (const [pid, sid] of onSegments) if (!insideSegment(vals.get(pid), vals.get(sid))) return "ra ngo\xE0i \u0111o\u1EA1n th\u1EB3ng";
+    }
+    if (baseShape) for (let i = 0; i < shapeTriangles.length; i++) {
+      const sh = triShape(shapeTriangles[i].map((a) => vals.get(a)));
+      if (baseShape[i].some((x, j) => x !== 0 && x !== sh[j])) return "\u0111\u1ED5i d\u1EA1ng tam gi\xE1c";
+    }
+    for (const s of doc2.steps) {
+      const v = vals.get(s.id);
+      if (v && v.kind === "circle" && v.r > opts.maxRadius * scale) return "\u0111\u01B0\u1EDDng tr\xF2n qu\xE1 l\u1EDBn";
+      if (s.type === "intersection" || s.type === "intersection_other") {
+        const r = intersect(vals.get(s.args[0]), vals.get(s.args[1]));
+        if (r.length === 2 && dist(r[0], r[1]) < sep * 2 && !(tangentAtBase && tangentAtBase.has(s.id))) return "g\u1EA7n ti\u1EBFp x\xFAc";
+        if (r.length === 1 && kindOf.get(s.args[0]) === "line" && kindOf.get(s.args[1]) === "line") {
+          const l1 = vals.get(s.args[0]), l2 = vals.get(s.args[1]);
+          if (Math.abs(cross(unit(l1.d), unit(l2.d))) < sinMin) return "hai \u0111\u01B0\u1EDDng g\u1EA7n song song";
+        }
+      }
+    }
+    return null;
+  }
+  var insideSegment = (P2, l) => {
+    const t2 = lineParam(P2, l);
+    return t2 > -1e-9 && t2 < 1 + 1e-9;
+  };
+  function pointsOnSegments(doc2, base2) {
+    const out = [];
+    const typeOf = new Map(doc2.steps.map((s) => [s.id, s.type]));
+    for (const s of doc2.steps) {
+      if (s.type !== "intersection" && s.type !== "intersection_other") continue;
+      const P2 = base2.get(s.id);
+      if (!P2) continue;
+      for (const a of s.args.slice(0, 2)) if (typeOf.get(a) === "segment" && base2.get(a) && insideSegment(P2, base2.get(a))) out.push([s.id, a]);
+    }
+    return out;
+  }
+  function triShape([A, B, C2]) {
+    const area = cross(sub(B, A), sub(C2, A));
+    const cosAt = (P2, Q, R) => dot(sub(Q, P2), sub(R, P2)) / (dist(P2, Q) * dist(P2, R) + 1e-300);
+    const sg = (c) => Math.abs(c) < 0.05 ? 0 : Math.sign(c);
+    return [Math.sign(area), sg(cosAt(A, B, C2)), sg(cosAt(B, C2, A)), sg(cosAt(C2, A, B))];
+  }
+  var T3 = {
+    coincide: (P2, Q, e) => dist(P2, Q) < e,
+    onLine: (P2, l, e) => distPointLine(P2, l) < e,
+    onCircle: (P2, c, e) => Math.abs(dist(P2, c.c) - c.r) < e,
+    collinear: (P2, Q, R, e) => distPointLine(R, lineThrough(P2, Q)) < e,
+    parallel: (l1, l2, e, s) => Math.abs(cross(unit(l1.d), unit(l2.d))) < e / s,
+    perpendicular: (l1, l2, e, s) => Math.abs(dot(unit(l1.d), unit(l2.d))) < e / s,
+    sameLine: (l1, l2, e, s) => T3.parallel(l1, l2, e, s) && distPointLine(l2.p, l1) < e,
+    sameCircle: (c1, c2, e) => dist(c1.c, c2.c) < e && Math.abs(c1.r - c2.r) < e,
+    tangentLC: (l, c, e) => Math.abs(distPointLine(c.c, l) - c.r) < e,
+    tangentCC: (c1, c2, e) => {
+      const d = dist(c1.c, c2.c);
+      if (d < e) return false;
+      return Math.abs(d - (c1.r + c2.r)) < e || Math.abs(d - Math.abs(c1.r - c2.r)) < e;
+    }
+  };
+  function makeSampler(doc2, opts = DEFAULTS, kindOf = kinds(doc2)) {
+    opts = { ...DEFAULTS, ...opts };
+    const base2 = evaluate(doc2);
+    const pointIds = [], lineIds = [], circleIds = [];
+    for (const s of doc2.steps) {
+      if (!base2.get(s.id)) continue;
+      const kd = kindOf.get(s.id);
+      if (kd === "point") pointIds.push(s.id);
+      else if (kd === "line") lineIds.push(s.id);
+      else if (kd === "circle") circleIds.push(s.id);
+    }
+    if (pointIds.length > opts.maxPoints) pointIds.length = opts.maxPoints;
+    const curveIds = [...lineIds, ...circleIds];
+    const scale0 = figureScale(base2, pointIds);
+    const sameClassPairs = /* @__PURE__ */ new Set();
+    for (let i = 0; i < pointIds.length; i++)
+      for (let j = i + 1; j < pointIds.length; j++)
+        if (dist(base2.get(pointIds[i]), base2.get(pointIds[j])) < opts.tol * scale0) sameClassPairs.add(pointIds[i] + "|" + pointIds[j]);
+    const triangles = findTriangles(doc2, kindOf);
+    const baseDist = pointIds.map((a) => pointIds.map((b) => dist(base2.get(a), base2.get(b))));
+    const shapeTriangles = findTriangles(doc2, kindOf, { drawn: true });
+    const baseShape = shapeTriangles.map((t2) => t2.every((a) => base2.get(a)) ? triShape(t2.map((a) => base2.get(a))) : [0, 0, 0, 0]);
+    const tangentAtBase = new Set(doc2.steps.filter((s) => (s.type === "intersection" || s.type === "intersection_other") && (() => {
+      const r = intersect(base2.get(s.args[0]), base2.get(s.args[1]));
+      return r.length === 2 && dist(r[0], r[1]) < 1e-6 * scale0;
+    })()).map((s) => s.id));
+    const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments: pointsOnSegments(doc2, base2), tangentAtBase };
+    return {
+      base: base2,
+      kindOf,
+      pointIds,
+      lineIds,
+      circleIds,
+      curveIds,
+      scale0,
+      sameClassPairs,
+      baseDegenerate: () => degenerate(doc2, base2, { ...ctx, baseDist: null, baseShape: null, onSegments: null }),
+      sample(rand, perturb = opts.perturb) {
+        const ov = randomOverrides(doc2, base2, scale0, rand, perturb);
+        const vals = evaluate(doc2, ov);
+        return { ov, vals, why: degenerate(doc2, vals, ctx) };
+      }
+    };
+  }
+  function explore(doc2, options = {}) {
+    const opts = { ...DEFAULTS, ...options };
+    const t0 = Date.now();
+    const kindOf = kinds(doc2);
+    const S2 = makeSampler(doc2, opts, kindOf);
+    const { base: base2, pointIds, lineIds, circleIds, curveIds, scale0, sameClassPairs } = S2;
+    const rand = rng(opts.seed);
+    const samples = [{ vals: base2, scale: scale0 }];
+    let attempts = 0;
+    const rejected = {};
+    const baseDegenerate = S2.baseDegenerate();
+    while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
+      attempts++;
+      const { vals, why } = S2.sample(rand);
+      if (why) {
+        rejected[why] = (rejected[why] || 0) + 1;
+        continue;
+      }
+      samples.push({ vals, scale: figureScale(vals, pointIds) });
+    }
+    const all = (fn) => samples.every(({ vals, scale }) => fn(vals, opts.tol * scale, scale));
+    const repOf = new Map(pointIds.map((id) => [id, id]));
+    const classes = [];
+    for (const id of pointIds) {
+      if (repOf.get(id) !== id) continue;
+      const cls = [id];
+      for (const j of pointIds) {
+        if (j === id || repOf.get(j) !== j || !sameClassPairs.has(id + "|" + j)) continue;
+        if (all((v, e) => T3.coincide(v.get(id), v.get(j), e))) {
+          cls.push(j);
+          repOf.set(j, id);
+        }
+      }
+      if (cls.length > 1) classes.push(cls);
+    }
+    const rep = (id) => repOf.get(id) || id;
+    const reps = pointIds.filter((id) => rep(id) === id);
+    const know = new Knowledge(doc2, rep);
+    const special = recognizeSpecial(doc2, samples, reps, circleIds, kindOf, opts, findTriangles(doc2, kindOf, { strict: true }));
+    const rel2 = [];
+    const name2 = (id) => stepById(doc2, id)?.name || id;
+    const desc = (id) => describe(doc2, id);
+    const list = (ids) => ids.map(name2).join(", ");
+    for (const cls of classes) rel2.push({ type: "coincide", ids: cls, text: `${cls.map(name2).join(" \u2261 ")} (tr\xF9ng nhau)` });
+    const lineRep = new Map(lineIds.map((id) => [id, id]));
+    for (let i = 0; i < lineIds.length; i++) {
+      const a = lineIds[i];
+      if (lineRep.get(a) !== a) continue;
+      for (let j = i + 1; j < lineIds.length; j++) {
+        const b = lineIds[j];
+        if (lineRep.get(b) !== b) continue;
+        if (all((v, e, s) => T3.sameLine(v.get(a), v.get(b), e, s))) {
+          lineRep.set(b, a);
+          if (!know.sameLine(a, b)) rel2.push({ type: "same_line", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
+        }
+      }
+    }
+    const circRep = new Map(circleIds.map((id) => [id, id]));
+    for (let i = 0; i < circleIds.length; i++) {
+      const a = circleIds[i];
+      if (circRep.get(a) !== a) continue;
+      for (let j = i + 1; j < circleIds.length; j++) {
+        const b = circleIds[j];
+        if (circRep.get(b) !== b) continue;
+        if (all((v, e) => T3.sameCircle(v.get(a), v.get(b), e))) {
+          circRep.set(b, a);
+          if (!know.sameCircle(a, b)) rel2.push({ type: "same_circle", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
+        }
+      }
+    }
+    const lines = lineIds.filter((id) => lineRep.get(id) === id);
+    const circles = circleIds.filter((id) => circRep.get(id) === id);
+    const v0 = base2, e0 = opts.tol * scale0;
+    const onLineSets = /* @__PURE__ */ new Map();
+    for (const l of lines) {
+      const on = reps.filter((P2) => T3.onLine(v0.get(P2), v0.get(l), e0) && all((v, e) => T3.onLine(v.get(P2), v.get(l), e)));
+      onLineSets.set(l, on);
+      const fresh = on.filter((P2) => !lineIdsSameAs(l, lineIds, lineRep).some((ll) => know.pointOnLineObj(P2, ll)));
+      if (fresh.length) rel2.push({ type: "on_line", ids: [l, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(l)}` });
+    }
+    const onCircleSets = /* @__PURE__ */ new Map();
+    for (const c of circles) {
+      const on = reps.filter((P2) => T3.onCircle(v0.get(P2), v0.get(c), e0) && all((v, e) => T3.onCircle(v.get(P2), v.get(c), e)));
+      onCircleSets.set(c, on);
+      const fresh = on.filter((P2) => !lineIdsSameAs(c, circleIds, circRep).some((cc) => know.pointOnCircleObj(P2, cc)));
+      if (fresh.length) rel2.push({ type: "on_circle", ids: [c, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(c)}` });
+    }
+    const seenCol = /* @__PURE__ */ new Set();
+    for (let i = 0; i < reps.length; i++)
+      for (let j = i + 1; j < reps.length; j++) {
+        const A = reps[i], B = reps[j];
+        const pa = v0.get(A), pb = v0.get(B);
+        const set = [A, B];
+        for (let k = 0; k < reps.length; k++) {
+          if (k === i || k === j) continue;
+          if (T3.collinear(pa, pb, v0.get(reps[k]), e0)) set.push(reps[k]);
+        }
+        if (set.length < 3) continue;
+        const verified = [A, B, ...set.slice(2).filter((C2) => all((v, e) => T3.collinear(v.get(A), v.get(B), v.get(C2), e)))];
+        if (verified.length < 3) continue;
+        const key = [...verified].sort().join(",");
+        if (seenCol.has(key)) continue;
+        seenCol.add(key);
+        if ([...onLineSets.values()].some((on) => verified.every((P2) => on.includes(P2)))) continue;
+        if (know.collinear(verified)) continue;
+        rel2.push({ type: "collinear", ids: sortByDoc(doc2, verified), text: `${list(sortByDoc(doc2, verified))} th\u1EB3ng h\xE0ng` });
+      }
+    const seenCyc = /* @__PURE__ */ new Set();
+    const nR = reps.length;
+    for (let i = 0; i < nR; i++)
+      for (let j = i + 1; j < nR; j++)
+        for (let k = j + 1; k < nR; k++) {
+          const A = reps[i], B = reps[j], C2 = reps[k];
+          const circ = circleThrough(v0.get(A), v0.get(B), v0.get(C2));
+          if (!circ || circ.r > opts.maxRadius * scale0) continue;
+          const set = [A, B, C2];
+          for (let m = k + 1; m < nR; m++) if (T3.onCircle(v0.get(reps[m]), circ, e0)) set.push(reps[m]);
+          if (set.length < 4) continue;
+          const key0 = set.join(",");
+          if (seenCyc.has("raw:" + key0)) continue;
+          const full = reps.filter((P2) => T3.onCircle(v0.get(P2), circ, e0));
+          const ok = full.filter((P2, idx) => idx < 3 || all((v, e) => {
+            const c = circleThrough(v.get(full[0]), v.get(full[1]), v.get(full[2]));
+            return c && T3.onCircle(v.get(P2), c, e);
+          }));
+          const key = [...ok].sort().join(",");
+          seenCyc.add("raw:" + key0);
+          if (ok.length < 4 || seenCyc.has(key)) continue;
+          seenCyc.add(key);
+          if ([...onCircleSets.values()].some((on) => ok.every((P2) => on.includes(P2)))) continue;
+          if (know.concyclic(ok)) continue;
+          const ids = sortByDoc(doc2, ok);
+          rel2.push({ type: "concyclic", ids, text: `${list(ids)} \u0111\u1ED3ng vi\xEAn` });
+        }
+    for (let i = 0; i < lines.length; i++)
+      for (let j = i + 1; j < lines.length; j++) {
+        const a = lines[i], b = lines[j];
+        if (T3.parallel(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T3.parallel(v.get(a), v.get(b), e, s)) && !know.parallel(a, b))
+          rel2.push({ type: "parallel", ids: [a, b], text: `${desc(a)} \u2225 ${desc(b)}` });
+        if (T3.perpendicular(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T3.perpendicular(v.get(a), v.get(b), e, s)) && !know.perpendicular(a, b))
+          rel2.push({ type: "perpendicular", ids: [a, b], text: `${desc(a)} \u22A5 ${desc(b)}` });
+      }
+    for (const l of lines)
+      for (const c of circles)
+        if (T3.tangentLC(v0.get(l), v0.get(c), e0) && all((v, e) => T3.tangentLC(v.get(l), v.get(c), e)) && !know.tangent(l, c))
+          rel2.push({ type: "tangent", ids: [l, c], text: `${desc(l)} ti\u1EBFp x\xFAc ${desc(c)}` });
+    for (let i = 0; i < circles.length; i++)
+      for (let j = i + 1; j < circles.length; j++) {
+        const a = circles[i], b = circles[j];
+        if (T3.tangentCC(v0.get(a), v0.get(b), e0) && all((v, e) => T3.tangentCC(v.get(a), v.get(b), e)) && !know.tangent(a, b))
+          rel2.push({ type: "tangent", ids: [a, b], text: `${desc(a)} ti\u1EBFp x\xFAc ${desc(b)}` });
+      }
+    const curves = [...lines, ...circles];
+    const seenConc = /* @__PURE__ */ new Set();
+    for (let i = 0; i < curves.length; i++)
+      for (let j = i + 1; j < curves.length; j++) {
+        const a = curves[i], b = curves[j];
+        for (const X of intersect(v0.get(a), v0.get(b))) {
+          if (dist(X, { x: 0, y: 0 }) > 1e6 || reps.some((P2) => dist(v0.get(P2), X) < 1e3 * e0)) continue;
+          if (pointIds.length && minDistToPoints(X, v0, pointIds) > 20 * scale0) continue;
+          const through = curves.filter((c) => c !== a && c !== b && onCurve(X, v0.get(c), e0));
+          if (!through.length) continue;
+          const set = [a, b, ...through];
+          const key = [...set].sort().join(",");
+          if (seenConc.has(key)) continue;
+          seenConc.add(key);
+          const ok = all((v, e) => intersect(v.get(a), v.get(b)).some((Y) => through.every((c) => onCurve(Y, v.get(c), e))));
+          if (!ok) continue;
+          const allLines = set.every((c) => kindOf.get(c) === "line");
+          rel2.push({ type: "concurrent", ids: set, text: allLines ? `${set.map(desc).join(", ")} \u0111\u1ED3ng quy` : `${set.map(desc).join(", ")} c\xF9ng \u0111i qua m\u1ED9t \u0111i\u1EC3m` });
+        }
+      }
+    const final = rel2.filter((r) => !((r.type === "collinear" || r.type === "concyclic") && rel2.some((o) => o !== r && o.type === r.type && o.ids.length > r.ids.length && r.ids.every((x) => o.ids.includes(x)))));
+    for (const r of final) {
+      r.score = scoreOf(r, doc2, kindOf, special);
+      const notes = [...new Set(r.ids.filter((id) => special.has(id) && !STEP_TYPES[stepById(doc2, id)?.type]?.tag).map((id) => `${describe(doc2, id)} l\xE0 ${special.get(id).label}`))];
+      if (notes.length) r.note = notes.join("; ");
+    }
+    final.sort((a, b) => b.score - a.score || a.ids.length - b.ids.length);
+    return {
+      relations: final,
+      stats: {
+        samples: samples.length - 1,
+        attempts,
+        rejected,
+        baseDegenerate,
+        points: reps.length,
+        lines: lines.length,
+        circles: circles.length,
+        ms: Date.now() - t0
+      }
+    };
+  }
+  function lineIdsSameAs(id, ids, repMap) {
+    return ids.filter((x) => repMap.get(x) === id);
+  }
+  function onCurve(P2, c, e) {
+    return c.kind === "line" ? T3.onLine(P2, c, e) : T3.onCircle(P2, c, e);
+  }
+  function minDistToPoints(X, vals, ids) {
+    let m = Infinity;
+    for (const id of ids) m = Math.min(m, dist(vals.get(id), X));
+    return m;
+  }
+  function sortByDoc(doc2, ids) {
+    const idx = new Map(doc2.steps.map((s, i) => [s.id, i]));
+    return [...ids].sort((a, b) => idx.get(a) - idx.get(b));
+  }
+  var BASE_SCORE = { tangent: 6, concurrent: 5, concyclic: 5, on_circle: 5, collinear: 5, on_line: 3.5, perpendicular: 3, parallel: 3, coincide: 3, same_line: 3, same_circle: 3 };
+  var SPECIAL_NAMES = /* @__PURE__ */ new Set(["O", "I", "H"]);
+  function specialWeight(step) {
+    const tag = STEP_TYPES[step.type]?.tag;
+    if (tag === "circumcircle" || tag === "incircle" || tag === "ninepoint") return 3;
+    if (tag === "O" || tag === "I" || tag === "H") return 3;
+    if (SPECIAL_NAMES.has(step.name)) return 2.5;
+    if (tag === "G" || tag === "N") return 2;
+    return 0;
+  }
+  function scoreOf(r, doc2, kindOf, recognized) {
+    let s = BASE_SCORE[r.type] || 2;
+    let special = 0;
+    for (const id of r.ids) special += Math.max(specialWeight(stepById(doc2, id) || {}), recognized.get(id)?.weight || 0);
+    s += Math.min(special, 7);
+    if (r.ids.some((id) => kindOf.get(id) === "circle")) s += 0.5;
+    return Math.round(s * 10) / 10;
+  }
+  function recognizeSpecial(doc2, samples, reps, circleIds, kindOf, opts, tri2) {
+    const out = /* @__PURE__ */ new Map();
+    const name2 = (id) => stepById(doc2, id)?.name || id;
+    let count = 0;
+    for (const [A, B, C2] of tri2) {
+      if (++count > 12) break;
+      const triName = name2(A) + name2(B) + name2(C2);
+      const at = (v) => [v.get(A), v.get(B), v.get(C2)];
+      const PTS = [
+        ["O", 3, "t\xE2m ngo\u1EA1i ti\u1EBFp", circumcenter],
+        ["H", 3, "tr\u1EF1c t\xE2m", orthocenter],
+        ["I", 3, "t\xE2m n\u1ED9i ti\u1EBFp", incenter],
+        ["G", 2, "tr\u1ECDng t\xE2m", centroid],
+        ["N", 2, "t\xE2m \u0111\u01B0\u1EDDng tr\xF2n Euler", ninePointCenter]
+      ];
+      for (const [, w, label, f] of PTS)
+        for (const P2 of reps) {
+          if (out.has(P2) && out.get(P2).weight >= w) continue;
+          if (samples.every(({ vals, scale }) => {
+            const X = f(...at(vals));
+            return X && dist(X, vals.get(P2)) < opts.tol * scale;
+          }))
+            out.set(P2, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
+        }
+      const CIRC = [
+        [3, "\u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", (a, b, c) => circleThrough(a, b, c)],
+        [3, "\u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp", (a, b, c) => circle(incenter(a, b, c), inradius(a, b, c))],
+        [3, "\u0111\u01B0\u1EDDng tr\xF2n Euler", (a, b, c) => circleThrough(mid(a, b), mid(b, c), mid(c, a))]
+      ];
+      for (const [w, label, f] of CIRC)
+        for (const c of circleIds) {
+          if (out.has(c)) continue;
+          if (samples.every(({ vals, scale }) => {
+            const X = f(...at(vals));
+            const Y = vals.get(c);
+            return X && Y && T3.sameCircle(X, Y, opts.tol * scale);
+          }))
+            out.set(c, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
+        }
+    }
+    return out;
+  }
+
+  // src/explore/special.js
+  var nm = (doc2, id) => stepById(doc2, id)?.name || "?";
+  function specialCases(doc2, values = evaluate(doc2)) {
+    const kindOf = kinds(doc2);
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    const add2 = (key, label, about, patch) => {
+      if (seen.has(key) || !Object.keys(patch).length) return;
+      for (const p of Object.values(patch)) if (Object.values(p).some((x) => !Number.isFinite(x))) return;
+      seen.add(key);
+      out.push({ key, label, about, patch });
+    };
+    const free = (id) => stepById(doc2, id)?.type === "free_point";
+    const xy3 = (P2) => ({ x: round(P2.x), y: round(P2.y) });
+    const tris = [...findTriangles(doc2, kindOf, { strict: true }), ...findTriangles(doc2, kindOf, { drawn: true })];
+    for (const t2 of tris) {
+      const V = t2.map((id) => values.get(id));
+      if (V.some((v) => !v) || Math.abs(cross(sub(V[1], V[0]), sub(V[2], V[0]))) < 1e-12) continue;
+      const triName = t2.map((id) => nm(doc2, id)).join("");
+      const tkey = [...t2].sort().join(",");
+      for (let i = 0; i < 3; i++) {
+        const X = t2[i], Y = t2[(i + 1) % 3], Z = t2[(i + 2) % 3];
+        const [x, y, z] = [X, Y, Z].map((id) => values.get(id));
+        const M = mid(y, z), yz = dist(y, z);
+        const n = unit({ x: -(z.y - y.y), y: z.x - y.x });
+        const h = dot(sub(x, M), n);
+        if (free(X)) add2(`can:${tkey}:${X}`, `tam gi\xE1c ${triName} c\xE2n t\u1EA1i ${nm(doc2, X)}`, [X, Y, Z], { [X]: xy3(add(M, mul(n, h))) });
+        else if (free(Y)) add2(`can:${tkey}:${X}`, `tam gi\xE1c ${triName} c\xE2n t\u1EA1i ${nm(doc2, X)}`, [X, Y, Z], { [Y]: xy3(add(x, mul(unit(sub(y, x)), dist(x, z)))) });
+        else if (free(Z)) add2(`can:${tkey}:${X}`, `tam gi\xE1c ${triName} c\xE2n t\u1EA1i ${nm(doc2, X)}`, [X, Y, Z], { [Z]: xy3(add(x, mul(unit(sub(z, x)), dist(x, y)))) });
+        if (free(X)) {
+          const d = dist(x, M);
+          if (d > 1e-12) add2(`vuong:${tkey}:${X}`, `tam gi\xE1c ${triName} vu\xF4ng t\u1EA1i ${nm(doc2, X)}`, [X, Y, Z], { [X]: xy3(add(M, mul(sub(x, M), yz / 2 / d))) });
+        } else if (free(Y)) {
+          const u = unit({ x: -(z.y - x.y), y: z.x - x.x });
+          add2(`vuong:${tkey}:${X}`, `tam gi\xE1c ${triName} vu\xF4ng t\u1EA1i ${nm(doc2, X)}`, [X, Y, Z], { [Y]: xy3(add(x, mul(u, dot(sub(y, x), u)))) });
+        } else if (free(Z)) {
+          const u = unit({ x: -(y.y - x.y), y: y.x - x.x });
+          add2(`vuong:${tkey}:${X}`, `tam gi\xE1c ${triName} vu\xF4ng t\u1EA1i ${nm(doc2, X)}`, [X, Y, Z], { [Z]: xy3(add(x, mul(u, dot(sub(z, x), u)))) });
+        }
+        if (free(X)) add2(`deu:${tkey}`, `tam gi\xE1c ${triName} \u0111\u1EC1u`, [X, Y, Z], { [X]: xy3(add(M, mul(n, Math.sign(h || 1) * yz * Math.sqrt(3) / 2))) });
+      }
+    }
+    for (const s of doc2.steps) {
+      const P2 = values.get(s.id);
+      if (!P2) continue;
+      if (s.type === "point_on") {
+        const host = values.get(s.args[0]);
+        const hs = stepById(doc2, s.args[0]);
+        if (!host) continue;
+        const tOf = (Q) => round(paramOf(host, Q));
+        if (host.kind === "line" && ["segment", "line", "ray"].includes(hs.type)) {
+          const [E, F] = hs.args;
+          const e = values.get(E), f = values.get(F);
+          add2(`trung-diem:${s.id}`, `${nm(doc2, s.id)} l\xE0 trung \u0111i\u1EC3m ${nm(doc2, E)}${nm(doc2, F)}`, [s.id, E, F], { [s.id]: { t: tOf(mid(e, f)) } });
+          for (const t2 of tris) {
+            if (!t2.includes(E) || !t2.includes(F)) continue;
+            const R = t2.find((id) => id !== E && id !== F);
+            const foot = proj(values.get(R), host);
+            add2(`chan-cao:${s.id}:${R}`, `${nm(doc2, s.id)} l\xE0 ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB ${nm(doc2, R)}`, [s.id, R], { [s.id]: { t: tOf(foot) } });
+            const re = dist(values.get(R), e), rf = dist(values.get(R), f);
+            add2(`chan-pg:${s.id}:${R}`, `${nm(doc2, s.id)} l\xE0 ch\xE2n ph\xE2n gi\xE1c t\u1EEB ${nm(doc2, R)}`, [s.id, R], { [s.id]: { t: tOf(add(e, mul(sub(f, e), re / (re + rf)))) } });
+          }
+        } else if (host.kind === "circle") {
+          for (const o of doc2.steps) {
+            const Q = values.get(o.id);
+            if (o.id === s.id || kindOf.get(o.id) !== "point" || !Q || Math.abs(dist(Q, host.c) - host.r) > 1e-9 * (1 + host.r)) continue;
+            add2(`doi-tam:${s.id}:${o.id}`, `${nm(doc2, s.id)} \u0111\u1ED1i x\u1EE9ng v\u1EDBi ${nm(doc2, o.id)} qua t\xE2m`, [s.id, o.id], { [s.id]: { t: tOf(sub(mul(host.c, 2), Q)) } });
+          }
+        }
+      } else if (s.type === "point_in") {
+        const [A, B, C2] = s.args.map((id) => values.get(id));
+        if (!A || !B || !C2) continue;
+        const a = dist(B, C2), b = dist(C2, A), c = dist(A, B);
+        const N = nm(doc2, s.id);
+        const bary = (wa, wb, wc) => {
+          const sm = wa + wb + wc;
+          return { u: round(wb / sm), v: round(wc / sm) };
+        };
+        add2(`trong-tam:${s.id}`, `${N} l\xE0 tr\u1ECDng t\xE2m`, [s.id, ...s.args], { [s.id]: bary(1, 1, 1) });
+        add2(`noi-tiep:${s.id}`, `${N} l\xE0 t\xE2m n\u1ED9i ti\u1EBFp`, [s.id, ...s.args], { [s.id]: bary(a, b, c) });
+        const cosA = (b * b + c * c - a * a) / (2 * b * c), cosB = (a * a + c * c - b * b) / (2 * a * c), cosC = (a * a + b * b - c * c) / (2 * a * b);
+        if (cosA > 1e-6 && cosB > 1e-6 && cosC > 1e-6) {
+          const tan = (x) => Math.sqrt(1 - x * x) / x;
+          add2(`truc-tam:${s.id}`, `${N} l\xE0 tr\u1EF1c t\xE2m`, [s.id, ...s.args], { [s.id]: bary(tan(cosA), tan(cosB), tan(cosC)) });
+          add2(`ngoai-tiep:${s.id}`, `${N} l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp`, [s.id, ...s.args], { [s.id]: bary(a * a * (b * b + c * c - a * a), b * b * (c * c + a * a - b * b), c * c * (a * a + b * b - c * c)) });
+        }
+      }
+    }
+    return out;
+  }
+  function caseOverrides(doc2, sc) {
+    return new Map(Object.entries(sc.patch).map(([id, p]) => [id, { ...paramsOf(stepById(doc2, id)), ...p }]));
+  }
+  function proj(P2, l) {
+    const u = unit(l.d);
+    return add(l.p, mul(u, dot(sub(P2, l.p), u)));
+  }
+  var round = (v) => Math.round(v * 1e9) / 1e9;
+
+  // src/explore/check.js
+  var TOL = 1e-7;
+  var segLen = (l) => Math.hypot(l.d.x, l.d.y);
+  var angleAt = (A, B, C2) => {
+    const a = directedAngle(A, B, C2);
+    return a == null ? null : Math.abs(a);
+  };
+  var CLAIMS = {
+    coincide: { title: "Tr\xF9ng nhau", text: (n) => `${n[0]} tr\xF9ng ${n[1]}`, res: ([P2, Q], s) => dist(P2, Q) / s },
+    collinear: {
+      title: "Th\u1EB3ng h\xE0ng",
+      text: (n) => `${n.join(", ")} th\u1EB3ng h\xE0ng`,
+      res: ([P2, Q, R], s) => {
+        const L = Math.max(dist(P2, Q), dist(Q, R), dist(R, P2));
+        return L < 1e-9 * s ? null : Math.abs(cross(sub(Q, P2), sub(R, P2))) / (L * L);
+      }
+    },
+    concyclic: {
+      title: "C\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n",
+      text: (n) => `${n.join(", ")} c\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n`,
+      res: ([P2, Q, R, S2], s) => {
+        const c = circle3(P2, Q, R);
+        if (!c || c.r > 1e3 * s) return null;
+        return Math.abs(dist(S2, c.c) - c.r) / s;
+      }
+    },
+    equal_len: { title: "B\u1EB1ng nhau", text: (n) => `${n[0]}${n[1]} = ${n[2]}${n[3]}`, res: ([A, B, C2, D2], s) => Math.abs(dist(A, B) - dist(C2, D2)) / s },
+    equal_seg: { title: "B\u1EB1ng nhau", text: (n, d) => `${d[0]} = ${d[1]}`, res: ([l1, l2], s) => Math.abs(segLen(l1) - segLen(l2)) / s },
+    equal_angle: {
+      title: "G\xF3c b\u1EB1ng nhau",
+      text: (n) => `\u2220${n[0]}${n[1]}${n[2]} = \u2220${n[3]}${n[4]}${n[5]}`,
+      res: ([A, B, C2, D2, E, F]) => {
+        const a = angleAt(A, B, C2), b = angleAt(D2, E, F);
+        return a == null || b == null ? null : Math.abs(a - b) / 180;
+      }
+    },
+    on_line: { title: "\u0110i\u1EC3m thu\u1ED9c \u0111\u01B0\u1EDDng th\u1EB3ng", text: (n, d) => `${n[0]} n\u1EB1m tr\xEAn ${d[1]}`, res: ([P2, l], s) => distPointLine(P2, l) / s },
+    on_circle: { title: "\u0110i\u1EC3m thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n", text: (n, d) => `${n[0]} n\u1EB1m tr\xEAn ${d[1]}`, res: ([P2, c], s) => Math.abs(dist(P2, c.c) - c.r) / s },
+    perpendicular: { title: "Vu\xF4ng g\xF3c", text: (n, d) => `${d[0]} \u22A5 ${d[1]}`, res: ([l1, l2]) => Math.abs(dot(unit(l1.d), unit(l2.d))) },
+    parallel: { title: "Song song", text: (n, d) => `${d[0]} \u2225 ${d[1]}`, res: ([l1, l2]) => Math.abs(cross(unit(l1.d), unit(l2.d))) },
+    concurrent: {
+      title: "\u0110\u1ED3ng quy",
+      text: (n, d) => `${d.join(", ")} \u0111\u1ED3ng quy`,
+      res: ([l1, l2, l3], s) => {
+        const X = intersectLL(l1, l2);
+        if (!X || Math.hypot(X.x - l1.p.x, X.y - l1.p.y) > 1e3 * s) return null;
+        return distPointLine(X, l3) / s;
+      }
+    },
+    tangent: {
+      title: "Ti\u1EBFp x\xFAc",
+      text: (n, d) => `${d[0]} ti\u1EBFp x\xFAc ${d[1]}`,
+      res: ([a, b], s) => {
+        if (a.kind === "line") return Math.abs(distPointLine(b.c, a) - b.r) / s;
+        const d = dist(a.c, b.c);
+        if (d < 1e-9 * s) return null;
+        return Math.min(Math.abs(d - (a.r + b.r)), Math.abs(d - Math.abs(a.r - b.r))) / s;
+      }
+    }
+  };
+  function claimsFor(doc2, ids) {
+    const k = kinds(doc2);
+    const kd = ids.map((id) => k.get(id));
+    const cnt = (t2) => kd.filter((x) => x === t2).length;
+    const out = [];
+    const of = (type, order) => out.push({ type, ids: order });
+    const pts = ids.filter((id, i) => kd[i] === "point"), lines = ids.filter((id, i) => kd[i] === "line"), circs = ids.filter((id, i) => kd[i] === "circle");
+    if (pts.length === ids.length) {
+      if (ids.length === 2) of("coincide", ids);
+      if (ids.length === 3) of("collinear", ids);
+      if (ids.length === 4) {
+        of("concyclic", ids);
+        of("equal_len", ids);
+      }
+      if (ids.length === 6) of("equal_angle", ids);
+    }
+    if (ids.length === 2 && cnt("point") === 1 && cnt("line") === 1) of("on_line", [pts[0], lines[0]]);
+    if (ids.length === 2 && cnt("point") === 1 && cnt("circle") === 1) of("on_circle", [pts[0], circs[0]]);
+    if (ids.length === 2 && cnt("line") === 2) {
+      of("perpendicular", lines);
+      of("parallel", lines);
+      if (lines.every((id) => stepById(doc2, id).type === "segment")) of("equal_seg", lines);
+    }
+    if (ids.length === 3 && cnt("line") === 3) of("concurrent", lines);
+    if (ids.length === 2 && cnt("circle") >= 1 && cnt("point") === 0) of("tangent", [...lines, ...circs]);
+    return out;
+  }
+  function claimText(doc2, claim) {
+    const n = claim.ids.map((id) => stepById(doc2, id)?.name || "?");
+    const d = claim.ids.map((id) => describe(doc2, id));
+    return CLAIMS[claim.type].text(n, d);
+  }
+  function subDoc(doc2, ids) {
+    const need = new Set(ids);
+    for (let i = doc2.steps.length - 1; i >= 0; i--) {
+      const s = doc2.steps[i];
+      if (need.has(s.id)) for (const a of s.args) need.add(a);
+    }
+    return { ...doc2, steps: doc2.steps.filter((s) => need.has(s.id)) };
+  }
+  function residual(claim, vals, scale) {
+    const v = claim.ids.map((id) => vals.get(id));
+    if (v.some((x) => !x)) return null;
+    const r = CLAIMS[claim.type].res(v, scale);
+    return r == null || !Number.isFinite(r) ? null : r;
+  }
+  function checkClaim(doc2, claim, { samples = 80, maxAttempts = 600, seed = 2024 } = {}) {
+    const t0 = Date.now();
+    const sub4 = subDoc(doc2, claim.ids);
+    const S2 = makeSampler(sub4, {});
+    const scaleOf = (vals) => figureScale(vals, S2.pointIds);
+    const r0 = residual(claim, S2.base, S2.scale0);
+    const rand = rng(seed);
+    let tested = 0, ok = 0, bad = 0, undef = 0, attempts = 0;
+    const rejected = {};
+    let counter = null;
+    while (tested < samples && attempts < maxAttempts) {
+      attempts++;
+      const { ov, vals, why } = S2.sample(rand, attempts % 2 ? 0.3 : 0.75);
+      if (why) {
+        rejected[why] = (rejected[why] || 0) + 1;
+        continue;
+      }
+      tested++;
+      const r = residual(claim, vals, scaleOf(vals));
+      if (r == null) undef++;
+      else if (r < TOL) ok++;
+      else {
+        bad++;
+        if (!counter || r > counter.res) counter = { ov: Object.fromEntries(ov), res: r };
+      }
+    }
+    const inSub = new Set(sub4.steps.map((x) => x.id));
+    const special = [];
+    for (const sc of specialCases(doc2)) {
+      if (!Object.keys(sc.patch).every((id) => inSub.has(id))) continue;
+      const vals = evaluate(sub4, caseOverrides(sub4, sc));
+      const r = residual(claim, vals, scaleOf(vals));
+      special.push({ key: sc.key, label: sc.label, status: r == null ? "undef" : r < TOL ? "true" : "false", patch: sc.patch, about: sc.about });
+    }
+    let verdict;
+    if (r0 == null) verdict = "undef_here";
+    else if (r0 >= TOL) verdict = "false";
+    else if (ok + bad < 5) verdict = "unknown";
+    else if (bad === 0) verdict = "always";
+    else verdict = "not_always";
+    return { verdict, base: r0, tested, ok, bad, undef, rejected, counter, special, ms: Date.now() - t0 };
+  }
+  function circle3(A, B, C2) {
+    const d = 2 * (A.x * (B.y - C2.y) + B.x * (C2.y - A.y) + C2.x * (A.y - B.y));
+    if (Math.abs(d) < 1e-12) return null;
+    const a2 = A.x * A.x + A.y * A.y, b2 = B.x * B.x + B.y * B.y, c2 = C2.x * C2.x + C2.y * C2.y;
+    const c = { x: (a2 * (B.y - C2.y) + b2 * (C2.y - A.y) + c2 * (A.y - B.y)) / d, y: (a2 * (C2.x - B.x) + b2 * (A.x - C2.x) + c2 * (B.x - A.x)) / d };
+    return { c, r: dist(A, c) };
+  }
+
+  // src/ui/checkPanel.js
+  init_dialog();
+  var esc2 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  function showCheck(app, claim, doc2 = app.doc) {
+    const q = claimText(doc2, claim);
+    const r = checkClaim(doc2, claim);
+    const sp = (st) => r.special.filter((x) => x.status === st);
+    let head, cls, body = "";
+    const tried = `th\u1EED ${r.tested} h\xECnh ng\u1EABu nhi\xEAn${r.undef ? ` (${r.undef} h\xECnh kh\xF4ng x\xE1c \u0111\u1ECBnh)` : ""} v\xE0 ${r.special.length} tr\u01B0\u1EDDng h\u1EE3p \u0111\u1EB7c bi\u1EC7t`;
+    if (r.verdict === "always") {
+      cls = "ok";
+      head = "\u2713 Lu\xF4n \u0111\xFAng";
+      body += `<p>\u0110\xFAng tr\xEAn m\u1ECDi h\xECnh \u0111\xE3 th\u1EED: ${tried}.</p>`;
+      const bad = sp("false"), und = sp("undef");
+      if (bad.length) body += `<p><b>Nh\u01B0ng sai khi:</b></p>${list(bad)}`;
+      if (und.length) body += `<p><b>Kh\xF4ng x\xE1c \u0111\u1ECBnh (suy bi\u1EBFn) khi:</b></p>${list(und)}`;
+      if (!bad.length && !und.length && r.special.length) body += '<p class="note">Kh\xF4ng c\xF3 ngo\u1EA1i l\u1EC7 trong c\xE1c tr\u01B0\u1EDDng h\u1EE3p \u0111\u1EB7c bi\u1EC7t \u0111\xE3 th\u1EED.</p>';
+    } else if (r.verdict === "false" || r.verdict === "not_always") {
+      cls = "bad";
+      head = r.verdict === "false" ? "\u2717 Sai ngay tr\xEAn h\xECnh n\xE0y" : "\u2717 Kh\xF4ng lu\xF4n \u0111\xFAng";
+      body += r.verdict === "false" ? `<p>Sai l\u1EC7ch tr\xEAn h\xECnh hi\u1EC7n t\u1EA1i: ${fmt(r.base)} (so v\u1EDBi c\u1EE1 h\xECnh).</p>` : `<p>\u0110\xFAng tr\xEAn h\xECnh hi\u1EC7n t\u1EA1i nh\u01B0ng sai \u1EDF ${r.bad}/${r.ok + r.bad} h\xECnh th\u1EED \u2013 c\xF3 th\u1EC3 do h\xECnh \u0111ang v\u1EBD r\u01A1i \u0111\xFAng v\xE0o tr\u01B0\u1EDDng h\u1EE3p \u0111\u1EB7c bi\u1EC7t.</p>`;
+      const good = sp("true");
+      if (good.length) body += `<p><b>\u0110\xFAng khi:</b></p>${list(good)}`;
+    } else if (r.verdict === "undef_here") {
+      cls = "warn";
+      head = "Kh\xF4ng x\xE1c \u0111\u1ECBnh tr\xEAn h\xECnh n\xE0y";
+      body += "<p>C\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng tr\xF9ng nhau ho\u1EB7c kh\xF4ng d\u1EF1ng \u0111\u01B0\u1EE3c (vd hai \u0111\u01B0\u1EDDng song song) n\xEAn kh\xF4ng ki\u1EC3m tra \u0111\u01B0\u1EE3c.</p>";
+    } else {
+      cls = "warn";
+      head = "Ch\u01B0a \u0111\u1EE7 h\xECnh \u0111\u1EC3 k\u1EBFt lu\u1EADn";
+      body += `<p>Ch\u1EC9 c\xF3 ${r.ok + r.bad} h\xECnh h\u1EE3p l\u1EC7 (h\xECnh g\u1EA7n suy bi\u1EBFn).</p>`;
+    }
+    return modal((box, close2) => {
+      box.classList.add("check-win");
+      box.innerHTML = `<h3>Ki\u1EC3m tra: ${esc2(q)}?</h3>
+      <div class="check-verdict ${cls}">${head}</div>
+      <div class="modal-body">${body}<p class="note">Ki\u1EC3m tra b\u1EB1ng s\u1ED1 (${CLAIMS[claim.type].title.toLowerCase()}, sai s\u1ED1 t\u01B0\u01A1ng \u0111\u1ED1i 10\u207B\u2077, ${r.ms} ms) \u2013 kh\xF4ng thay cho ch\u1EE9ng minh.</p></div>
+      <div class="modal-actions">${r.counter && r.verdict === "not_always" ? '<button class="ce">Xem ph\u1EA3n v\xED d\u1EE5</button>' : ""}<button class="primary">\u0110\xF3ng</button></div>`;
+      box.querySelector(".primary").onclick = () => close2(null);
+      const ce = box.querySelector(".ce");
+      if (ce) ce.onclick = () => {
+        close2(null);
+        app.applyOverrides(r.counter.ov);
+        toast("\u0110\xE3 \u0111\u1EB7t h\xECnh v\u1EC1 ph\u1EA3n v\xED d\u1EE5 \u2013 Ctrl+Z \u0111\u1EC3 tr\u1EDF l\u1EA1i h\xECnh c\u0169", 4e3);
+      };
+      box.querySelectorAll("[data-sp]").forEach((b) => b.onclick = () => {
+        const s = r.special[+b.dataset.sp];
+        close2(null);
+        app.applyOverrides(s.patch);
+        toast(`\u0110\xE3 \u0111\u01B0a h\xECnh v\u1EC1: ${s.label} \u2013 Ctrl+Z \u0111\u1EC3 tr\u1EDF l\u1EA1i`, 3500);
+      });
+    });
+    function list(items) {
+      return `<ul class="check-sp">${items.map((x) => `<li>${esc2(x.label)} <button class="mini" data-sp="${r.special.indexOf(x)}" title="\u0110\u01B0a h\xECnh v\u1EC1 tr\u01B0\u1EDDng h\u1EE3p n\xE0y">xem</button></li>`).join("")}</ul>`;
+    }
+  }
+  var fmt = (x) => (x >= 0.01 ? x.toFixed(3) : x.toExponential(1)).replace(".", ",");
+
   // src/ui/panels.js
-  var esc2 = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  var esc3 = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   function stepTitle(doc2, s, values = null) {
     const def = STEP_TYPES[s.type];
     const n = (a) => stepById(doc2, a)?.name || "?";
@@ -3581,9 +4787,9 @@
       return `<div class="${cls.join(" ")}${newFrame ? " frame-start" : ""}" data-id="${s.id}">
       <span class="sn">${newFrame ? `<span class="fbadge" title="Khung tr\xECnh b\xE0y">${f + 1}</span>` : ""}</span>
       <button class="eye" data-act="eye" title="${s.hidden ? "Hi\u1EC7n" : "\u1EA8n"}">${s.hidden ? "\u25CC" : "\u25CF"}</button>
-      <span class="dot" style="background:${esc2(st.fillColor && k.get(s.id) === "point" ? st.fillColor : st.color)}"></span>
+      <span class="dot" style="background:${esc3(st.fillColor && k.get(s.id) === "point" ? st.fillColor : st.color)}"></span>
       <span class="nm">${s.name ? labelHTML(s.name) : ""}</span>
-      <span class="ds">${esc2(stepTitle(doc2, s, app.values))}${valid ? "" : ' <i class="undef">(kh\xF4ng x\xE1c \u0111\u1ECBnh)</i>'}</span>
+      <span class="ds">${esc3(stepTitle(doc2, s, app.values))}${valid ? "" : ' <i class="undef">(kh\xF4ng x\xE1c \u0111\u1ECBnh)</i>'}</span>
       <button class="join ${s.joinPrev ? "on" : ""}" data-act="join" title="G\u1ED9p v\xE0o c\xF9ng khung tr\xECnh b\xE0y v\u1EDBi b\u01B0\u1EDBc ph\xEDa tr\xEAn" ${i === 0 ? "disabled" : ""}>\u2912</button>
     </div>`;
     });
@@ -3652,8 +4858,8 @@
     const swatches = PALETTE.map((c) => `<button class="sw ${st.color === c.hex ? "on" : ""}" data-color="${c.hex}" title="${c.name}" style="background:${c.hex}"></button>`).join("");
     let html = "";
     if (one2) {
-      html += `<div class="prop-title">${s.name ? `<b>${labelHTML(s.name)}</b> \xB7 ` : ""}${esc2(stepTitle(app.doc, s, app.values))}</div>`;
-      if (s.name) html += `<label class="row">T\xEAn <input id="p-name" type="text" value="${esc2(s.name)}"></label>`;
+      html += `<div class="prop-title">${s.name ? `<b>${labelHTML(s.name)}</b> \xB7 ` : ""}${esc3(stepTitle(app.doc, s, app.values))}</div>`;
+      if (s.name) html += `<label class="row">T\xEAn <input id="p-name" type="text" value="${esc3(s.name)}"></label>`;
     } else {
       html += `<div class="prop-title">\u0110ang ch\u1ECDn ${steps.length} \u0111\u1ED1i t\u01B0\u1EE3ng</div>`;
     }
@@ -3677,6 +4883,10 @@
       const v = app.values.get(s.id);
       if (v) html += `<div class="row coords">(${v.x.toFixed(3)}; ${v.y.toFixed(3)})</div>`;
     }
+    const claims = claimsFor(app.doc, ids);
+    if (claims.length) html += `<div class="row check-row">Ki\u1EC3m tra ${claims.map((c, i) => `<button class="mini" data-claim="${i}">${CLAIMS[c.type].title}?</button>`).join("")}</div>`;
+    const specials = one2 && kind === "point" ? specialCases(app.doc, app.values).filter((c) => c.about[0] === s.id || c.key.startsWith("deu:") && c.about.includes(s.id)).slice(0, 8) : [];
+    if (specials.length) html += `<div class="row special-row">\u0110\u01B0a v\u1EC1 ${specials.map((c, i) => `<button class="mini" data-special="${i}" title="${esc3(c.label)}">${esc3(shortLabel(c))}</button>`).join("")}</div>`;
     if (one2 && (kind === "line" || kind === "circle")) html += `<label class="row" title="\u0110\u01B0\u1EDDng ph\u1EE5: n\xE9t \u0111\u1EE9t, \u1EA9n/hi\u1EC7n t\u1EA5t c\u1EA3 c\xF9ng l\xFAc b\u1EB1ng Ctrl+Shift+D. B\u1ECF ch\u1ECDn: \u0111\u01B0\u1EDDng ch\xEDnh."><input id="p-aux" type="checkbox" ${s.aux ? "checked" : ""}> \u0110\u01B0\u1EDDng ph\u1EE5 (b\u1ECF ch\u1ECDn: \u0111\u01B0\u1EDDng ch\xEDnh)</label>`;
     if (one2 && kind !== "mark") html += `<label class="row"><input id="p-trace" type="checkbox" ${app.traceIds.has(s.id) ? "checked" : ""}> \u0110\u1EC3 l\u1EA1i v\u1EBFt khi k\xE9o</label>`;
     if (one2 && s.args.length && STEP_TYPES[s.type] && !["locus", "fixed_point"].includes(s.type)) {
@@ -3703,6 +4913,12 @@
     host.querySelectorAll("[data-ticks]").forEach((b) => b.onclick = () => app.setStyle(ids, { ticks: +b.dataset.ticks }));
     if (q("#p-swap")) q("#p-swap").onclick = () => app.setParams(s.id, { which: 1 - (paramsOf(s).which || 0) });
     if (q("#p-arc")) q("#p-arc").onclick = () => app.setParams(s.id, { contains: !paramsOf(s).contains });
+    host.querySelectorAll("[data-claim]").forEach((b) => b.onclick = () => showCheck(app, claims[+b.dataset.claim]));
+    host.querySelectorAll("[data-special]").forEach((b) => b.onclick = () => {
+      const c = specials[+b.dataset.special];
+      app.applyOverrides(c.patch);
+      app.showHint(`\u0110\xE3 \u0111\u01B0a v\u1EC1: ${c.label} \u2013 Ctrl+Z \u0111\u1EC3 tr\u1EDF l\u1EA1i`);
+    });
     if (q("#p-aux")) q("#p-aux").onchange = (e) => app.setStepProp(s.id, "aux", e.target.checked);
     if (q("#p-trace")) q("#p-trace").onchange = (e) => app.toggleTrace(s.id, e.target.checked);
     host.querySelectorAll("[data-redef]").forEach((b) => b.onclick = () => app.startRedefine(s.id, +b.dataset.redef));
@@ -3710,6 +4926,9 @@
     if (q("#p-join")) q("#p-join").onchange = (e) => app.setStepProp(s.id, "joinPrev", e.target.checked);
     q("#p-del").onclick = () => app.deleteSteps(ids);
     placeCard(app, host, ids);
+  }
+  function shortLabel(c) {
+    return c.label.replace(/^tam giác \S+ /, "").replace(/^\S+ là /, "").replace(/^\S+ (đối xứng)/, "$1");
   }
   function placeCard(app, host, ids) {
     host.classList.remove("alt");
@@ -4195,22 +5414,22 @@
   };
   var D = 0;
   var Dc = 1;
-  var T3 = 2;
+  var T4 = 2;
   var Tc = 3;
   var S = 4;
   var Sc = 5;
   var SS = 6;
   var SSc = 7;
-  var styles = [new Style(D, 0, false), new Style(Dc, 0, true), new Style(T3, 1, false), new Style(Tc, 1, true), new Style(S, 2, false), new Style(Sc, 2, true), new Style(SS, 3, false), new Style(SSc, 3, true)];
+  var styles = [new Style(D, 0, false), new Style(Dc, 0, true), new Style(T4, 1, false), new Style(Tc, 1, true), new Style(S, 2, false), new Style(Sc, 2, true), new Style(SS, 3, false), new Style(SSc, 3, true)];
   var sup = [S, Sc, S, Sc, SS, SSc, SS, SSc];
   var sub3 = [Sc, Sc, Sc, Sc, SSc, SSc, SSc, SSc];
-  var fracNum = [T3, Tc, S, Sc, SS, SSc, SS, SSc];
+  var fracNum = [T4, Tc, S, Sc, SS, SSc, SS, SSc];
   var fracDen = [Tc, Tc, Sc, Sc, SSc, SSc, SSc, SSc];
   var cramp = [Dc, Dc, Tc, Tc, Sc, Sc, SSc, SSc];
-  var text$1 = [D, Dc, T3, Tc, T3, Tc, T3, Tc];
+  var text$1 = [D, Dc, T4, Tc, T4, Tc, T4, Tc];
   var Style$1 = {
     DISPLAY: styles[D],
-    TEXT: styles[T3],
+    TEXT: styles[T4],
     SCRIPT: styles[S],
     SCRIPTSCRIPT: styles[SS]
   };
@@ -18251,7 +19470,7 @@
     });
     return out;
   }
-  var esc3 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  var esc4 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   var MACROS = {
     "\\goc": "\\angle",
     "\\tamgiac": "\\triangle",
@@ -18343,7 +19562,7 @@
     return out;
   }
   function markdownInline(s) {
-    return esc3(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>");
+    return esc4(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>");
   }
   var TEXT_WRAP = {
     textbf: ["<b>", "</b>"],
@@ -18536,7 +19755,7 @@
     try {
       return katex.renderToString(linkNames(tex, names), { ...KATEX_OPTS, displayMode: display, macros: { ...MACROS } });
     } catch (e) {
-      return `<span class="tex-err" title="${esc3(e.message)}">${esc3(tex)}</span>`;
+      return `<span class="tex-err" title="${esc4(e.message)}">${esc4(tex)}</span>`;
     }
   }
   function renderStep(text2, opts = {}) {
@@ -18561,7 +19780,7 @@
       if (tk.t === "math") return renderMath(tk.v, false, opts.names);
       if (tk.t === "dmath") return `<div class="dmath">${renderMath(tk.v.replace(/\\begin\{eqnarray(\*?)\}([\s\S]*)\\end\{eqnarray\*?\}/, "\\begin{align$1}$2\\end{align$1}"), true, opts.names)}</div>`;
       const url = opts.image ? opts.image(tk.v) : null;
-      return url ? `<img class="tb-img" src="${esc3(url)}" alt="\u1EA3nh">` : '<span class="tb-noimg">[\u1EA3nh kh\xF4ng c\xF3 trong link chia s\u1EBB \u2013 m\u1EDF t\u1EC7p .json \u0111\u1EC3 xem]</span>';
+      return url ? `<img class="tb-img" src="${esc4(url)}" alt="\u1EA3nh">` : '<span class="tb-noimg">[\u1EA3nh kh\xF4ng c\xF3 trong link chia s\u1EBB \u2013 m\u1EDF t\u1EC7p .json \u0111\u1EC3 xem]</span>';
     }).join("");
   }
   function toLatex(text2, imageFile = (id) => id + ".png") {
@@ -19072,6 +20291,345 @@ ${tk.v}
     later(500);
   }
 
+  // src/core/cmd.js
+  var fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+  function normalize(text2) {
+    return text2.replace(/∠/g, " g\xF3c ").replace(/∈/g, " thu\u1ED9c ").replace(/⊥/g, " vu\xF4ng g\xF3c ").replace(/∥/g, " song song ").replace(/∩/g, " c\u1EAFt ").replace(/([=,;:()])/g, " $1 ").split(/\s+/).filter(Boolean).map((w) => (/^[a-zà-ỹđ]+$/u.test(w) || /^[A-ZĐ][a-zà-ỹđ]{2,}$/u.test(w)) && !/^[α-ω]/.test(w) ? fold(w.toLowerCase()) : w).join(" ").replace(/\( /g, "(").replace(/ \)/g, ")");
+  }
+  var Fail = class extends Error {
+  };
+  var fail = (msg) => {
+    throw new Fail(msg);
+  };
+  var Ctx = class {
+    constructor(doc2, opts = {}) {
+      this.doc = doc2;
+      this.mouse = opts.mouse || null;
+      this.extraNames = new Set(opts.extraNames || []);
+      this.refresh();
+    }
+    refresh() {
+      this.k = kinds(this.doc);
+      this.vals = evaluate(this.doc);
+    }
+    byName(n, kind) {
+      const s = this.doc.steps.find((x) => x.name === n && (!kind || this.k.get(x.id) === kind));
+      return s ? s.id : null;
+    }
+    /** Tách chuỗi thành các tên điểm có trên hình (khớp tên dài nhất trước): "ABC", "A, B, C", "I_AB" → I_A, B. */
+    points(str, { allowNew = false } = {}) {
+      const names = this.doc.steps.filter((s) => this.k.get(s.id) === "point" && s.name).map((s) => s.name);
+      for (const n of this.extraNames) names.push(n);
+      names.sort((a, b) => b.length - a.length);
+      const out = [];
+      let i = 0;
+      const t2 = str.replace(/[\s,]+/g, " ").trim();
+      while (i < t2.length) {
+        if (t2[i] === " ") {
+          i++;
+          continue;
+        }
+        const n = names.find((x) => t2.startsWith(x, i) && !/^['_\d]/.test(t2.slice(i + x.length, i + x.length + 1)));
+        if (!n) {
+          const m = /^[A-Z](?:_\{[^}]*\}|_[A-Za-z0-9])?\d*'*/.exec(t2.slice(i));
+          if (!m) fail(`Kh\xF4ng hi\u1EC3u "${t2.slice(i)}"`);
+          if (!allowNew) fail(`Ch\u01B0a c\xF3 \u0111i\u1EC3m ${m[0]} tr\xEAn h\xECnh`);
+          out.push(m[0]);
+          i += m[0].length;
+          continue;
+        }
+        out.push(n);
+        i += n.length;
+      }
+      return out;
+    }
+    pointIds(str, n) {
+      const ps = this.points(str);
+      if (n && ps.length !== n) fail(`C\u1EA7n ${n} \u0111i\u1EC3m, g\xF5 \u0111\u01B0\u1EE3c ${ps.length} (${ps.join(", ") || "\u2013"})`);
+      return ps.map((x) => this.byName(x, "point"));
+    }
+    add(type, args, extra = {}) {
+      const [id] = addSpecs(this.doc, [{ type, args, ...extra }], { join: true });
+      if (extra.aux) stepById(this.doc, id).aux = true;
+      this.refresh();
+      return id;
+    }
+    /** Đường thẳng: tên (d1) hoặc hai điểm (BC) – dùng đường có sẵn qua hai điểm, không có thì dựng đường phụ. */
+    line(tok) {
+      const named = this.byName(tok, "line");
+      if (named) return named;
+      const [P2, Q] = this.pointIds(tok, 2);
+      const own = this.doc.steps.find((s) => ["segment", "line", "ray"].includes(s.type) && (s.args[0] === P2 && s.args[1] === Q || s.args[0] === Q && s.args[1] === P2));
+      if (own) return own.id;
+      const p = this.vals.get(P2), q = this.vals.get(Q);
+      const tol = 1e-9 * (1 + dist(p, q));
+      const any = this.doc.steps.find((s) => this.k.get(s.id) === "line" && this.vals.get(s.id) && distPointLine(p, this.vals.get(s.id)) < tol && distPointLine(q, this.vals.get(s.id)) < tol);
+      if (any) return any.id;
+      return this.add("line", [P2, Q], { aux: true });
+    }
+    /** Đường tròn: tên (ω1), (O) – tâm O, (ABC) – qua A, B, C (chưa có thì dựng đường tròn ngoại tiếp). */
+    circle(tok) {
+      const named = this.byName(tok, "circle");
+      if (named) return named;
+      const m = /^\((.+)\)$/.exec(tok);
+      if (!m) fail(`"${tok}" kh\xF4ng ph\u1EA3i \u0111\u01B0\u1EDDng tr\xF2n \u2013 vi\u1EBFt (O), (ABC) ho\u1EB7c t\xEAn \u0111\u01B0\u1EDDng tr\xF2n`);
+      const pts = this.points(m[1]);
+      const circles = this.doc.steps.filter((s) => this.k.get(s.id) === "circle" && this.vals.get(s.id));
+      if (pts.length === 1) {
+        const O = this.vals.get(this.byName(pts[0], "point"));
+        const c2 = circles.find((s) => dist(this.vals.get(s.id).c, O) < 1e-9 * (1 + this.vals.get(s.id).r));
+        if (!c2) fail(`Ch\u01B0a c\xF3 \u0111\u01B0\u1EDDng tr\xF2n t\xE2m ${pts[0]}`);
+        return c2.id;
+      }
+      if (pts.length !== 3) fail(`\u0110\u01B0\u1EDDng tr\xF2n (${m[1]}): c\u1EA7n t\xE2m (1 \u0111i\u1EC3m) ho\u1EB7c 3 \u0111i\u1EC3m`);
+      const ids = pts.map((x) => this.byName(x, "point"));
+      const V = ids.map((id) => this.vals.get(id));
+      const c = circles.find((s) => V.every((P2) => Math.abs(dist(P2, this.vals.get(s.id).c) - this.vals.get(s.id).r) < 1e-9 * (1 + this.vals.get(s.id).r)));
+      if (c) return c.id;
+      return this.add("circumcircle", ids);
+    }
+    curve(tok) {
+      if (/^\(/.test(tok) || this.byName(tok, "circle")) return this.circle(tok);
+      return this.line(tok);
+    }
+    /** Đối tượng: điểm, đường thẳng hoặc đường tròn. */
+    obj(tok) {
+      const p = this.byName(tok, "point");
+      if (p) return p;
+      return this.curve(tok);
+    }
+    name(id) {
+      return stepById(this.doc, id)?.name || "?";
+    }
+  };
+  var NAME = String.raw`([^\s=,;:]+)`;
+  var REST = String.raw`(.+?)`;
+  var TYPE_OF_CENTER = {
+    "truc tam": "orthocenter",
+    "trong tam": "centroid",
+    "tam noi tiep": "incenter",
+    "tam duong tron noi tiep": "incenter",
+    "tam ngoai tiep": "circumcenter",
+    "tam duong tron ngoai tiep": "circumcenter",
+    "tam euler": "nine_point_center",
+    "tam duong tron euler": "nine_point_center",
+    "diem lemoine": "lemoine"
+  };
+  var TYPE_OF_CIRCLE = { "ngoai tiep": "circumcircle", "noi tiep": "incircle", "euler": "nine_point_circle" };
+  var RULES = [
+    [/^trung diem (?:cua )?(?:doan )?(.+)$/, (m, c) => {
+      const seg = c.byName(m[1], "line");
+      const [A, B] = seg ? stepById(c.doc, seg).args : c.pointIds(m[1], 2);
+      return c.add("midpoint", [A, B]);
+    }],
+    [new RegExp(`^(${Object.keys(TYPE_OF_CENTER).join("|")}) (?:cua )?(?:tam giac )?(.+)$`), (m, c) => c.add(TYPE_OF_CENTER[m[1]], c.pointIds(m[2], 3))],
+    [/^duong tron (ngoai tiep|noi tiep|euler) (?:cua )?(?:tam giac )?(.+)$/, (m, c) => c.add(TYPE_OF_CIRCLE[m[1]], c.pointIds(m[2], 3))],
+    [/^\(([^()]+)\)$/, (m, c) => c.add("circumcircle", c.pointIds(m[1], 3))],
+    [/^(?:duong thang |duong )?qua (\S+) (vuong goc|song song)(?: voi)? (\S+)$/, (m, c) => c.add(m[2] === "vuong goc" ? "perpendicular" : "parallel", [c.pointIds(m[1], 1)[0], c.line(m[3])], { aux: true })],
+    [/^(?:duong )?trung truc (?:cua )?(?:doan )?(.+)$/, (m, c) => c.add("perp_bisector", c.pointIds(m[1], 2), { aux: true })],
+    [/^(?:duong )?phan giac (trong |ngoai )?(?:cua )?(?:goc )?(.+)$/, (m, c) => c.add("angle_bisector", c.pointIds(m[2], 3), { aux: true, params: m[1] === "ngoai " ? { external: true } : void 0 })],
+    [/^(?:chan duong cao|chan duong vuong goc|hinh chieu) (?:ke )?(?:tu |cua )?(\S+) (?:xuong|len|tren) (\S+)$/, (m, c) => {
+      const P2 = c.pointIds(m[1], 1)[0];
+      const named = c.byName(m[2], "line");
+      if (named) return c.add("projection", [P2, named]);
+      const [A, B] = c.pointIds(m[2], 2);
+      return c.add("foot", [P2, A, B]);
+    }],
+    [/^doi xung (?:cua )?(\S+) qua (\S+)$/, (m, c) => {
+      const X = c.obj(m[1]);
+      const M = c.byName(m[2], "point") || c.line(m[2]);
+      return c.add("reflect", [X, M], { prime: true });
+    }],
+    [/^(?:giao (?:diem )?(?:cua )?)?(\S+) (?:cat|giao|va|voi) (\S+)(?: khac (\S+))?$/, (m, c) => intersect2(c, m[1], m[2], m[3])],
+    [/^(?:doan thang|doan) (\S+)$/, (m, c) => c.add("segment", c.pointIds(m[1], 2))],
+    [/^duong thang (\S+)$/, (m, c) => c.add("line", c.pointIds(m[1], 2))],
+    [/^tia (\S+)$/, (m, c) => c.add("ray", c.pointIds(m[1], 2))],
+    [/^duong tron tam (\S+) (?:qua|di qua) (\S+)$/, (m, c) => c.add("circle", [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]])],
+    [/^duong tron tam (\S+) ban kinh (\S+)$/, (m, c) => c.add("circle_radius", [c.pointIds(m[1], 1)[0], ...c.pointIds(m[2], 2)])],
+    [/^duong tron duong kinh (\S+)$/, (m, c) => c.add("circle_diameter", c.pointIds(m[1], 2))],
+    [/^diem (?:tren|thuoc) (\S+)$/, (m, c) => {
+      const host = c.curve(m[1]);
+      const v = c.vals.get(host);
+      const t2 = c.mouse && v ? paramOf(v, c.mouse) : v && v.kind === "circle" ? 0.6 : 0.4;
+      return c.add("point_on", [host], { params: { t: Math.round(t2 * 1e9) / 1e9 } });
+    }],
+    [/^tiep tuyen (?:tai|o) (\S+) (?:cua|voi) (\S+)$/, (m, c) => c.add("tangent_at", [c.circle(m[2]), c.pointIds(m[1], 1)[0]])],
+    [/^(\S+)$/, (m, c) => {
+      const ps = c.points(m[1]);
+      if (ps.length !== 2) fail("Kh\xF4ng hi\u1EC3u l\u1EC7nh");
+      return c.add("segment", ps.map((x) => c.byName(x, "point")));
+    }]
+  ];
+  function intersect2(c, t1, t2, other) {
+    const a = c.curve(t1), b = c.curve(t2);
+    const roots = intersect(c.vals.get(a), c.vals.get(b));
+    if (!roots.length) fail(`${t1} v\xE0 ${t2} kh\xF4ng c\u1EAFt nhau (\u1EDF h\xECnh hi\u1EC7n t\u1EA1i)`);
+    if (other) return c.add("intersection_other", [a, b, c.pointIds(other, 1)[0]]);
+    const pts = c.doc.steps.filter((s) => c.k.get(s.id) === "point" && c.vals.get(s.id));
+    if (roots.length === 1) {
+      const same = pts.find((s) => dist(c.vals.get(s.id), roots[0]) < 1e-9 * (1 + Math.hypot(roots[0].x, roots[0].y)));
+      if (same) fail(`Giao \u0111i\u1EC3m ch\xEDnh l\xE0 \u0111i\u1EC3m ${same.name} \u0111\xE3 c\xF3`);
+      return c.add("intersection", [a, b], { params: { which: 0 } });
+    }
+    const tol = 1e-9 * (1 + dist(roots[0], roots[1]));
+    const known = roots.map((R) => pts.find((s) => dist(c.vals.get(s.id), R) < tol));
+    if (known[0] && known[1]) fail(`Hai giao \u0111i\u1EC3m \u0111\u1EC1u \u0111\xE3 c\xF3 tr\xEAn h\xECnh: ${known[0].name}, ${known[1].name}`);
+    if (known[0] && !known[1]) return c.add("intersection_other", [a, b, known[0].id]);
+    if (known[1] && !known[0]) return c.add("intersection_other", [a, b, known[1].id]);
+    const which = c.mouse && dist(roots[1], c.mouse) < dist(roots[0], c.mouse) ? 1 : 0;
+    return c.add("intersection", [a, b], { params: { which } });
+  }
+  var COND_RULES = [
+    [/^goc (\S+) = goc (\S+)$/, "ang"],
+    [/^goc (\S+) = (\d+(?:[.,]\d+)?)(?: ?(?:do|°))?$/, "angv"],
+    [/^(\S+) = (\S+)$/, "len"],
+    [/^(\S+) (?:thuoc|nam tren|tren) (\S+)$/, "on"]
+  ];
+  function solvePointCmd(c, name2, condText) {
+    if (c.byName(name2)) fail(`T\xEAn ${name2} \u0111\xE3 c\xF3 tr\xEAn h\xECnh`);
+    c.extraNames.add(name2);
+    const args = [];
+    const ref = (id) => {
+      let i = args.indexOf(id);
+      if (i < 0) {
+        args.push(id);
+        i = args.length - 1;
+      }
+      return i;
+    };
+    const pt2 = (n) => n === name2 ? -1 : ref(c.byName(n, "point"));
+    const conds = [];
+    for (const part of condText.split(/ ?[,;] ?| va /).map((x) => x.trim()).filter(Boolean)) {
+      const rule = COND_RULES.find(([re]) => re.test(part));
+      if (!rule) fail(`Kh\xF4ng hi\u1EC3u \u0111i\u1EC1u ki\u1EC7n "${part}" \u2013 d\xF9ng: g\xF3c XYZ = g\xF3c UVW, g\xF3c XYZ = 30, XY = ZT, ${name2} thu\u1ED9c (O) / BC`);
+      const m = rule[0].exec(part);
+      if (rule[1] === "ang") {
+        const p1 = c.points(m[1]), p2 = c.points(m[2]);
+        if (p1.length !== 3 || p2.length !== 3) fail(`G\xF3c c\u1EA7n 3 \u0111i\u1EC3m: "${part}"`);
+        conds.push({ t: "ang", a: [...p1, ...p2].map(pt2) });
+      } else if (rule[1] === "angv") {
+        const p1 = c.points(m[1]);
+        if (p1.length !== 3) fail(`G\xF3c c\u1EA7n 3 \u0111i\u1EC3m: "${part}"`);
+        conds.push({ t: "angv", a: p1.map(pt2), v: parseFloat(m[2].replace(",", ".")) });
+      } else if (rule[1] === "len") {
+        const p1 = c.points(m[1]), p2 = c.points(m[2]);
+        if (p1.length !== 2 || p2.length !== 2) fail(`\u0110\u1ED9 d\xE0i c\u1EA7n 2 \u0111i\u1EC3m m\u1ED7i v\u1EBF: "${part}"`);
+        conds.push({ t: "len", a: [...p1, ...p2].map(pt2) });
+      } else {
+        if (c.points(m[1]).join() !== name2) fail(`"${part}": v\u1EBF tr\xE1i ph\u1EA3i l\xE0 ${name2}`);
+        conds.push({ t: "on", a: [ref(c.curve(m[2]))] });
+      }
+    }
+    if (!conds.length) fail("C\u1EA7n \xEDt nh\u1EA5t m\u1ED9t \u0111i\u1EC1u ki\u1EC7n");
+    if (conds.length > 2) fail("T\u1ED1i \u0111a hai \u0111i\u1EC1u ki\u1EC7n (m\u1ED9t \u0111i\u1EC3m c\xF3 hai b\u1EADc t\u1EF1 do)");
+    if (conds.every((x) => !x.a.includes(-1)) && conds.some((x) => x.t !== "on")) fail(`\u0110i\u1EC1u ki\u1EC7n ph\u1EA3i nh\u1EAFc t\u1EDBi \u0111i\u1EC3m ${name2}`);
+    c.extraNames.delete(name2);
+    const objs = args.map((id) => c.vals.get(id));
+    const ptsV = objs.filter((o) => o.kind === "point");
+    const cen = ptsV.length ? { x: ptsV.reduce((s, p) => s + p.x, 0) / ptsV.length, y: ptsV.reduce((s, p) => s + p.y, 0) / ptsV.length } : { x: 0, y: 0 };
+    const size = Math.max(1, ...ptsV.map((p) => dist(p, cen)));
+    const guesses = [c.mouse, cen, ...[0, 1, 2, 3, 4, 5].map((i) => ({ x: cen.x + 0.6 * size * Math.cos(i + 0.3), y: cen.y + 0.6 * size * Math.sin(i + 0.3) }))].filter(Boolean);
+    let sol = null;
+    for (const g of guesses) {
+      sol = solvePoint(objs, conds, g.x, g.y);
+      if (sol) break;
+    }
+    if (!sol) fail("Kh\xF4ng t\xECm \u0111\u01B0\u1EE3c \u0111i\u1EC3m tho\u1EA3 c\xE1c \u0111i\u1EC1u ki\u1EC7n (th\u1EED \u0111\u1EB7t con tr\u1ECF chu\u1ED9t g\u1EA7n ch\u1ED7 \u0111i\u1EC3m c\u1EA7n t\xECm r\u1ED3i g\xF5 l\u1EA1i)");
+    return c.add("solve_point", args, { params: { x: Math.round(sol.x * 1e9) / 1e9, y: Math.round(sol.y * 1e9) / 1e9, conds }, name: name2 });
+  }
+  var CHECK_RULES = [
+    [/^(.+) thang hang$/, (m, c) => ({ type: "collinear", ids: c.pointIds(m[1], 3) })],
+    [/^(.+) (?:dong vien|cung thuoc (?:mot )?duong tron)$/, (m, c) => ({ type: "concyclic", ids: c.pointIds(m[1], 4) })],
+    [/^goc (\S+) = goc (\S+)$/, (m, c) => ({ type: "equal_angle", ids: [...c.pointIds(m[1], 3), ...c.pointIds(m[2], 3)] })],
+    [/^(\S+) (?:vuong goc|⊥)(?: voi)? (\S+)$/, (m, c) => ({ type: "perpendicular", ids: [c.line(m[1]), c.line(m[2])] })],
+    [/^(\S+) song song(?: voi)? (\S+)$/, (m, c) => ({ type: "parallel", ids: [c.line(m[1]), c.line(m[2])] })],
+    [/^(\S+) , (\S+) , (\S+) dong quy$/, (m, c) => ({ type: "concurrent", ids: [c.line(m[1]), c.line(m[2]), c.line(m[3])] })],
+    [/^(\S+) tiep xuc(?: voi)? (\S+)$/, (m, c) => ({ type: "tangent", ids: [c.curve(m[1]), c.circle(m[2])] })],
+    [/^(\S+) (?:thuoc|nam tren) (\S+)$/, (m, c) => {
+      const P2 = c.pointIds(m[1], 1)[0], X = c.curve(m[2]);
+      return { type: c.k.get(X) === "circle" ? "on_circle" : "on_line", ids: [P2, X] };
+    }],
+    [/^(\S+) trung(?: voi)? (\S+)$/, (m, c) => ({ type: "coincide", ids: [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]] })],
+    [/^(\S+) = (\S+)$/, (m, c) => ({ type: "equal_len", ids: [...c.pointIds(m[1], 2), ...c.pointIds(m[2], 2)] })]
+  ];
+  function parseCommand(doc2, text2, ctx = {}) {
+    const t2 = normalize(text2 || "").trim();
+    if (!t2) return { ok: false, error: "" };
+    const attempt = (d) => {
+      const c = new Ctx(d, ctx);
+      const chk = /^kiem tra (.+?)\??$/.exec(t2);
+      if (chk) {
+        const r = CHECK_RULES.find(([re]) => re.test(chk[1]));
+        if (!r) fail("Ki\u1EC3m tra: th\u1EB3ng h\xE0ng, \u0111\u1ED3ng vi\xEAn, AB = CD, g\xF3c ABC = g\xF3c DEF, d1 vu\xF4ng g\xF3c d2, song song, \u0111\u1ED3ng quy, ti\u1EBFp x\xFAc, thu\u1ED9c, tr\xF9ng");
+        return { kind: "check", claim: r[1](r[0].exec(chk[1]), c) };
+      }
+      const n0 = d.steps.length;
+      let name2 = null, body = t2;
+      const sp = /^(\S+) (?:thoa(?: man)?|sao cho|:) (.+)$/.exec(t2);
+      let main2;
+      if (sp && !/ = /.test(sp[1])) main2 = solvePointCmd(c, sp[1], sp[2]);
+      else {
+        const eq = /^([^\s=]+) = (.+)$/.exec(t2);
+        if (eq && !/^\(/.test(eq[1])) {
+          name2 = eq[1];
+          body = eq[2];
+        }
+        if (name2 && c.byName(name2)) fail(`T\xEAn ${name2} \u0111\xE3 c\xF3 tr\xEAn h\xECnh`);
+        const rule = RULES.find(([re]) => re.test(body));
+        if (!rule) fail("Kh\xF4ng hi\u1EC3u l\u1EC7nh \u2013 xem c\xE1c m\u1EABu l\u1EC7nh b\xEAn d\u01B0\u1EDBi");
+        main2 = rule[1](rule[0].exec(body), c);
+        if (name2) stepById(d, main2).name = name2;
+      }
+      const ids = d.steps.slice(n0).map((s) => s.id);
+      if (!c.vals.get(main2) && !ids.length) fail("Kh\xF4ng d\u1EF1ng \u0111\u01B0\u1EE3c");
+      c.refresh();
+      if (!c.vals.get(main2)) fail("\u0110\u1ED1i t\u01B0\u1EE3ng kh\xF4ng x\xE1c \u0111\u1ECBnh \u1EDF h\xECnh hi\u1EC7n t\u1EA1i");
+      return { kind: "build", ids, main: main2 };
+    };
+    try {
+      const trial = JSON.parse(JSON.stringify(doc2));
+      const r = attempt(trial);
+      if (r.kind === "check") return { ok: true, kind: "check", claim: r.claim, desc: "Ki\u1EC3m tra nh\u1EADn \u0111\u1ECBnh", run: (d = doc2) => attempt(d).claim };
+      const s = stepById(trial, r.main);
+      const extra = r.ids.filter((id) => id !== r.main).map((id) => stepById(trial, id));
+      const label = (x) => `${x.name ? x.name + " \u2013 " : ""}${(STEP_TYPES[x.type] || {}).label || x.type}`;
+      const desc = label(s) + (extra.length ? ` (k\xE8m ${extra.map((x) => (x.aux ? "\u0111\u01B0\u1EDDng ph\u1EE5 " : "") + (x.name || "")).join(", ")})` : "");
+      return { ok: true, kind: "build", desc, run: (d = doc2) => attempt(d) };
+    } catch (e) {
+      if (e instanceof Fail) return { ok: false, error: e.message };
+      return { ok: false, error: "Kh\xF4ng hi\u1EC3u l\u1EC7nh" };
+    }
+  }
+  var COMMAND_EXAMPLES = [
+    "M = trung \u0111i\u1EC3m BC",
+    "H = tr\u1EF1c t\xE2m ABC",
+    "O = t\xE2m ngo\u1EA1i ti\u1EBFp ABC",
+    "I = t\xE2m n\u1ED9i ti\u1EBFp ABC",
+    "G = tr\u1ECDng t\xE2m ABC",
+    "(ABC)",
+    "\u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp ABC",
+    "qua A vu\xF4ng g\xF3c BC",
+    "qua A song song BC",
+    "trung tr\u1EF1c BC",
+    "ph\xE2n gi\xE1c g\xF3c BAC",
+    "D = ch\xE2n \u0111\u01B0\u1EDDng cao t\u1EEB A xu\u1ED1ng BC",
+    "A' = \u0111\u1ED1i x\u1EE9ng A qua BC",
+    "K = AD c\u1EAFt BC",
+    "S = (AEF) c\u1EAFt (O)",
+    "E = AC c\u1EAFt (O) kh\xE1c A",
+    "\u0111\u01B0\u1EDDng tr\xF2n t\xE2m O qua A",
+    "\u0111\u01B0\u1EDDng tr\xF2n \u0111\u01B0\u1EDDng k\xEDnh BC",
+    "P = \u0111i\u1EC3m tr\xEAn (O)",
+    "ti\u1EBFp tuy\u1EBFn t\u1EA1i A c\u1EE7a (O)",
+    "\u0111o\u1EA1n AB",
+    "\u0111\u01B0\u1EDDng th\u1EB3ng AB",
+    "P tho\u1EA3 g\xF3c PAB = g\xF3c PBC, g\xF3c PBC = g\xF3c PCA",
+    "Q sao cho QB = QC, g\xF3c BQC = 120",
+    "ki\u1EC3m tra A, B, C th\u1EB3ng h\xE0ng",
+    "ki\u1EC3m tra A, B, C, D \u0111\u1ED3ng vi\xEAn",
+    "ki\u1EC3m tra AB = CD"
+  ];
+
   // src/ui/shortcuts.js
   init_dialog();
   var KEY = "hinh-hoc-dong:phim-tat";
@@ -19157,7 +20715,7 @@ ${tk.v}
     else k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
     return `${e.ctrlKey || e.metaKey ? "Ctrl+" : ""}${e.altKey ? "Alt+" : ""}${e.shiftKey ? "Shift+" : ""}${k}`;
   }
-  var fold = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+  var fold2 = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
   function allTools(app) {
     const out = [];
     const seen = /* @__PURE__ */ new Set();
@@ -19172,9 +20730,9 @@ ${tk.v}
     return out;
   }
   function searchTools(list, q, recent = []) {
-    const words = fold(q).split(/\s+/).filter(Boolean);
+    const words = fold2(q).split(/\s+/).filter(Boolean);
     const score2 = (t2) => {
-      const name2 = fold(t2.label), hay = name2 + " " + fold(t2.group) + " " + t2.id.replace(/_/g, " ");
+      const name2 = fold2(t2.label), hay = name2 + " " + fold2(t2.group) + " " + t2.id.replace(/_/g, " ");
       if (!words.length) return recent.includes(t2.id) ? 100 - recent.indexOf(t2.id) : 0;
       const initials = name2.split(/[^a-z0-9]+/).filter(Boolean).map((w) => w[0]).join("");
       let s = 0;
@@ -19217,16 +20775,50 @@ ${tk.v}
     async function palette() {
       const list = allTools(app);
       const recent = app.recentTools || [];
-      const id = await modal((box, close2) => {
+      const esc9 = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+      const pick = await modal((box, close2) => {
         box.classList.add("palette");
-        box.innerHTML = `<input type="text" class="pal-q" placeholder="G\xF5 t\xEAn c\xF4ng c\u1EE5 (kh\xF4ng c\u1EA7n d\u1EA5u): giao, vuong goc, ngoai tiep, dtnt\u2026" spellcheck="false" autocomplete="off"><div class="pal-list"></div>
+        box.innerHTML = `<input type="text" class="pal-q" placeholder="T\xEAn c\xF4ng c\u1EE5 (giao, vuong goc\u2026) ho\u1EB7c l\u1EC7nh: M = trung \u0111i\u1EC3m BC, S = (AEF) c\u1EAFt (O)\u2026" spellcheck="false" autocomplete="off"><div class="pal-list"></div>
         <div class="pal-foot">\u2191\u2193 ch\u1ECDn \xB7 Enter d\xF9ng \xB7 Esc \u0111\xF3ng \xB7 <kbd>Ctrl+/</kbd> xem v\xE0 s\u1EEDa ph\xEDm t\u1EAFt${app.selection.size ? ` \xB7 \u0111ang ch\u1ECDn ${app.selection.size} \u0111\u1ED1i t\u01B0\u1EE3ng: d\u1EF1ng ngay tr\xEAn ch\xFAng n\u1EBFu h\u1EE3p` : ""}</div>`;
         const inp = box.querySelector(".pal-q"), host = box.querySelector(".pal-list");
         let rows = [], cur2 = 0;
         const paint = () => {
-          rows = searchTools(list, inp.value, recent).slice(0, 12);
-          cur2 = Math.min(cur2, Math.max(0, rows.length - 1));
-          host.innerHTML = rows.length ? rows.map((t2, i) => `<button class="pal-row ${i === cur2 ? "on" : ""}" data-i="${i}"><span class="pal-ti">${TOOL_BY_ID[t2.id].icon || ""}</span><span class="pal-l">${t2.label}</span><span class="pal-g">${t2.group}</span>${keyOf(t2.id) ? `<kbd>${keyOf(t2.id)}</kbd>` : ""}</button>`).join("") : '<div class="note">Kh\xF4ng c\xF3 c\xF4ng c\u1EE5 n\xE0o kh\u1EDBp.</div>';
+          const q = inp.value;
+          rows = [];
+          const cmd2 = q.trim() ? parseCommand(app.doc, q, { mouse: app.mouse }) : null;
+          const looksCmd = /=|\(|^\s*(kiem tra|qua|trung|giao|doan|duong|tia|diem|chan|doi xung|phan giac|tiep tuyen)\b|\b(thoa|sao cho|cat)\b/.test(fold(q.toLowerCase()));
+          if (cmd2 && cmd2.ok) rows.push({ cmd: cmd2 });
+          else if (cmd2 && looksCmd && cmd2.error) rows.push({ err: cmd2.error });
+          const words = fold(q.toLowerCase()).split(/\s+/).filter((w) => w.length > 1 && /^[a-z]+$/.test(w));
+          if (words.length && !(cmd2 && cmd2.ok)) for (const ex of COMMAND_EXAMPLES.filter((e) => words.every((w) => fold(e.toLowerCase()).includes(w))).slice(0, 4)) rows.push({ ex });
+          if (!(cmd2 && cmd2.ok)) for (const t2 of searchTools(list, q, recent).slice(0, 12 - rows.length)) rows.push({ tool: t2 });
+          const sel = rows.map((r, i) => r.err ? -1 : i).filter((i) => i >= 0);
+          if (!sel.includes(cur2)) cur2 = sel[0] ?? 0;
+          host.innerHTML = rows.length ? rows.map((r, i) => {
+            if (r.cmd) return `<button class="pal-row pal-cmd ${i === cur2 ? "on" : ""}" data-i="${i}"><span class="pal-ti">\u21B5</span><span class="pal-l">${r.cmd.kind === "check" ? "Ki\u1EC3m tra" : "D\u1EF1ng"}: ${esc9(r.cmd.desc)}</span><span class="pal-g">l\u1EC7nh</span></button>`;
+            if (r.err) return `<div class="pal-err">${esc9(r.err)}</div>`;
+            if (r.ex) return `<button class="pal-row pal-ex ${i === cur2 ? "on" : ""}" data-i="${i}"><span class="pal-ti">\u203A</span><span class="pal-l">${esc9(r.ex)}</span><span class="pal-g">m\u1EABu l\u1EC7nh</span></button>`;
+            const t2 = r.tool;
+            return `<button class="pal-row ${i === cur2 ? "on" : ""}" data-i="${i}"><span class="pal-ti">${TOOL_BY_ID[t2.id].icon || ""}</span><span class="pal-l">${t2.label}</span><span class="pal-g">${t2.group}</span>${keyOf(t2.id) ? `<kbd>${keyOf(t2.id)}</kbd>` : ""}</button>`;
+          }).join("") : '<div class="note">Kh\xF4ng c\xF3 c\xF4ng c\u1EE5 hay l\u1EC7nh n\xE0o kh\u1EDBp.</div>';
+        };
+        const choose = (i) => {
+          const r = rows[i];
+          if (!r || r.err) return;
+          if (r.ex) {
+            inp.value = r.ex;
+            inp.focus();
+            cur2 = 0;
+            paint();
+            return;
+          }
+          close2(r.cmd ? { cmd: inp.value } : { tool: r.tool.id });
+        };
+        const move = (d) => {
+          const sel = rows.map((r, i) => r.err ? -1 : i).filter((i) => i >= 0);
+          const j = sel.indexOf(cur2);
+          cur2 = sel[Math.max(0, Math.min(sel.length - 1, j + d))] ?? 0;
+          paint();
         };
         inp.oninput = () => {
           cur2 = 0;
@@ -19235,24 +20827,24 @@ ${tk.v}
         inp.onkeydown = (e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
-            cur2 = Math.min(rows.length - 1, cur2 + 1);
-            paint();
+            move(1);
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            cur2 = Math.max(0, cur2 - 1);
-            paint();
+            move(-1);
           } else if (e.key === "Enter") {
             e.preventDefault();
-            if (rows[cur2]) close2(rows[cur2].id);
+            choose(cur2);
           }
         };
         host.onclick = (e) => {
           const b2 = e.target.closest("[data-i]");
-          if (b2) close2(rows[+b2.dataset.i].id);
+          if (b2) choose(+b2.dataset.i);
         };
         paint();
       });
-      if (id) app.activateTool(id);
+      if (!pick) return;
+      if (pick.tool) return app.activateTool(pick.tool);
+      app.runCommand(pick.cmd);
     }
     async function keysDialog() {
       const list = allTools(app);
@@ -19263,7 +20855,7 @@ ${tk.v}
         <input type="text" class="keys-q" placeholder="L\u1ECDc c\xF4ng c\u1EE5\u2026" spellcheck="false">
         <div class="keys-list"></div>
         <details class="keys-fixed"><summary>C\xE1c ph\xEDm c\u1ED1 \u0111\u1ECBnh kh\xE1c</summary><div class="keys-grid">${Object.entries({
-          "Space": "t\xECm c\xF4ng c\u1EE5 theo t\xEAn",
+          "Space": "t\xECm c\xF4ng c\u1EE5 theo t\xEAn, ho\u1EB7c g\xF5 l\u1EC7nh (M = trung \u0111i\u1EC3m BC\u2026)",
           "Esc": "hu\u1EF7 / v\u1EC1 c\xF4ng c\u1EE5 Ch\u1ECDn",
           "Ctrl+Z / Ctrl+Y": "ho\xE0n t\xE1c / l\xE0m l\u1EA1i",
           "Delete": "xo\xE1 \u0111\u1ED1i t\u01B0\u1EE3ng \u0111ang ch\u1ECDn",
@@ -19906,8 +21498,8 @@ ${tk.v}
       this.crossKey = key;
       const P2 = cross2.P;
       this.crossMark = this.renderer.addExtra({ type: "point", pts: [() => P2], style: { color: "#3150d6", fill: "#dfe6ff", size: 7 } });
-      const nm = (id) => stepById(this.doc, id)?.name || "";
-      this.showHint(`B\u1EA5m \u0111\u1EC3 l\u1EA5y giao \u0111i\u1EC3m c\u1EE7a ${nm(cross2.a)} v\xE0 ${nm(cross2.b)}`);
+      const nm2 = (id) => stepById(this.doc, id)?.name || "";
+      this.showHint(`B\u1EA5m \u0111\u1EC3 l\u1EA5y giao \u0111i\u1EC3m c\u1EE7a ${nm2(cross2.a)} v\xE0 ${nm2(cross2.b)}`);
     }
     clearCrossMark() {
       if (!this.crossMark) return;
@@ -20086,6 +21678,11 @@ ${tk.v}
         this.extraPos = this.toUser(sx, sy);
         this.awaitExtra = false;
         return this.completeTool(tool);
+      }
+      if (tool.id === "solve_point") {
+        this.endTx();
+        this.askSolvePoint(this.toUser(sx, sy));
+        return;
       }
       if (tool.id === "point") {
         const id2 = this.resolvePoint(sx, sy, hits);
@@ -20502,7 +22099,7 @@ ${tk.v}
       const step = stepById(this.doc, info.id);
       const P0 = this.values.get(info.id);
       if (info.kind === "point" && P0) info.grab = { x: P0.x - this.mouse.x, y: P0.y - this.mouse.y };
-      if (info.kind === "point") this.dragUpdater = makeUpdater(this.doc, [info.id]);
+      if (info.kind === "point") this.dragUpdater = makeUpdater(this.doc, [info.id], { track: true });
       let pending = null;
       const anchors = info.kind === "point" && step.type === "free_point" ? this.dragAnchors(info.id) : [];
       const apply = () => {
@@ -20532,6 +22129,8 @@ ${tk.v}
           if (c) step.params = { ...step.params || {}, t: round9(paramOf(c, target)) };
         } else if (step.type === "point_in") {
           step.params = { ...step.params || {}, ...this.uvInTriangle(step.args, target) };
+        } else if (step.type === "solve_point") {
+          step.params = { ...step.params || {}, x: round9(target.x), y: round9(target.y) };
         }
         this.quickUpdate();
       };
@@ -20697,7 +22296,11 @@ ${tk.v}
         else this.selection.add(id);
       } else this.selection = /* @__PURE__ */ new Set([id]);
       if (rerender) this.refresh();
-      else this.renderPanels();
+      else {
+        for (const it of this.renderer.items) it.sel = this.selection.has(it.s.id);
+        this.view.requestDraw();
+        this.renderPanels();
+      }
     }
     // ================= sửa đối tượng =================
     async renameStep(id) {
@@ -20804,6 +22407,55 @@ ${tk.v}
         if (!s) return;
         if (value === false || value == null) delete s[key];
         else s[key] = value;
+      });
+    }
+    /** Công cụ "Điểm thoả điều kiện": hỏi điều kiện, giải từ chỗ vừa bấm (gõ sai thì hỏi lại kèm lỗi). */
+    async askSolvePoint(at) {
+      const name2 = nextName(this.doc, "point");
+      const ex = `${name2} tho\u1EA3 g\xF3c ${name2}AB = g\xF3c ${name2}BC, g\xF3c ${name2}BC = g\xF3c ${name2}CA`;
+      const hint = `M\u1ED9t ho\u1EB7c hai \u0111i\u1EC1u ki\u1EC7n, c\xE1ch nhau d\u1EA5u ph\u1EA9y: g\xF3c XYZ = g\xF3c UVW \xB7 g\xF3c XYZ = 60 \xB7 XY = ZT \xB7 ${name2} thu\u1ED9c (O) ho\u1EB7c BC. V\xED d\u1EE5: ${ex}. \u0110i\u1EC3m \u0111\u01B0\u1EE3c t\xECm g\u1EA7n ch\u1ED7 v\u1EEBa b\u1EA5m; k\xE9o \u0111i\u1EC3m \u0111\u1EC3 ch\u1ECDn nghi\u1EC7m kh\xE1c.`;
+      let text2 = `${name2} tho\u1EA3 `, error = "";
+      for (; ; ) {
+        text2 = await promptDialog("\u0110i\u1EC3m tho\u1EA3 \u0111i\u1EC1u ki\u1EC7n", text2, hint, { cursorEnd: true, error });
+        if (!text2) return;
+        const cmd2 = parseCommand(this.doc, text2, { mouse: at });
+        if (cmd2.ok) break;
+        error = cmd2.error || "Kh\xF4ng hi\u1EC3u \u0111i\u1EC1u ki\u1EC7n";
+      }
+      this.mouse = at;
+      this.runCommand(text2);
+    }
+    /** Chạy một câu lệnh tiếng Việt (bảng lệnh Space): dựng hình (hoàn tác được) hoặc kiểm tra nhận định. */
+    runCommand(text2) {
+      const cmd2 = parseCommand(this.doc, text2, { mouse: this.mouse });
+      if (!cmd2.ok) {
+        toast(cmd2.error || "Kh\xF4ng hi\u1EC3u l\u1EC7nh");
+        return false;
+      }
+      if (cmd2.kind === "check") {
+        const d = clone(this.doc);
+        showCheck(this, cmd2.run(d), d);
+        return true;
+      }
+      this.setTool("move");
+      let res = null;
+      this.commit((doc2) => {
+        res = cmd2.run(doc2);
+      });
+      this.selection = /* @__PURE__ */ new Set([res.main]);
+      this.refresh();
+      this.warnOutOfView();
+      toast(`\u0110\xE3 d\u1EF1ng: ${cmd2.desc}`);
+      (this.cmdHistory || (this.cmdHistory = [])).unshift(text2);
+      return true;
+    }
+    /** Đặt tham số mới cho nhiều bậc tự do một lần ({id: params}) – trường hợp đặc biệt, phản ví dụ; hoàn tác được. */
+    applyOverrides(patch) {
+      this.commit((doc2) => {
+        for (const [id, p] of Object.entries(patch)) {
+          const s = stepById(doc2, id);
+          if (s) s.params = { ...s.params || {}, ...p };
+        }
       });
     }
     setParams(id, patch) {
@@ -22066,13 +23718,13 @@ ${tk.v}
       return Object.entries(this.index.buoi).filter(([, b]) => b.bai.includes(ma)).map(([bm, b]) => ({ ma: bm, ...b })).sort((a, b) => String(b.ngay).localeCompare(String(a.ngay)));
     }
   };
-  var fold2 = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+  var fold3 = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
   function filterIndex(index, q = "", f = {}, sort = "moi") {
-    const words = fold2(q).split(/\s+/).filter(Boolean);
+    const words = fold3(q).split(/\s+/).filter(Boolean);
     const taught = new Set(Object.values(index.buoi || {}).flatMap((b) => b.bai));
     let rows = Object.entries(index.bai || {}).filter(([ma, e]) => {
       if (words.length) {
-        const hay = fold2([e.ten, sourceLabel(e.nguon), (e.chuDe || []).join(" "), (e.the || []).join(" "), e.tom, e.ghiChu, ma].join(" "));
+        const hay = fold3([e.ten, sourceLabel(e.nguon), (e.chuDe || []).join(" "), (e.the || []).join(" "), e.tom, e.ghiChu, ma].join(" "));
         if (!words.every((w) => hay.includes(w))) return false;
       }
       if (f.chuDe && f.chuDe.size && !(e.chuDe || []).some((c) => f.chuDe.has(c))) return false;
@@ -22213,9 +23865,9 @@ ${tk.v}
         if (NAMED_COLORS[hex] !== "black") colorDefs.set(NAMED_COLORS[hex], hex);
         return NAMED_COLORS[hex];
       }
-      const nm = "c" + hex.replace("#", "");
-      colorDefs.set(nm, hex);
-      return nm;
+      const nm2 = "c" + hex.replace("#", "");
+      colorDefs.set(nm2, hex);
+      return nm2;
     };
     const col = (s) => hexName(full(s).color || "#000000");
     const baseWidth = styleOf({ type: "line" }, "line", theme2).width;
@@ -22380,24 +24032,24 @@ ${tk.v}
     const boxes = doc2.boxes || [];
     const of = (role) => boxes.filter((b) => (b.role || "ghichu") === role && b.text && b.text.trim());
     const L = [];
-    for (const b of of("de")) L.push(`\\noindent\\textbf{${esc4(b.title || "\u0110\u1EC1 b\xE0i")}.} ` + splitSteps(b.text).map((s) => toLatex(s.text, imageFile)).join("\n\n"), "");
+    for (const b of of("de")) L.push(`\\noindent\\textbf{${esc5(b.title || "\u0110\u1EC1 b\xE0i")}.} ` + splitSteps(b.text).map((s) => toLatex(s.text, imageFile)).join("\n\n"), "");
     if (doc2.steps.length) L.push("\\begin{center}", toTikZ(doc2, { values: opts.values, theme: opts.theme, trimLines: opts.trimLines }).trim(), "\\end{center}", "");
     if (opts.loiGiai !== false) {
       for (const b of of("loigiai")) {
         const st = splitSteps(b.text).filter((s) => s.text.trim());
-        L.push(`\\noindent\\textbf{${esc4(b.title || "L\u1EDDi gi\u1EA3i")}.}`);
+        L.push(`\\noindent\\textbf{${esc5(b.title || "L\u1EDDi gi\u1EA3i")}.}`);
         if (st.length > 1) L.push("\\begin{enumerate}", ...st.map((s) => `  \\item ${toLatex(s.text, imageFile)}`), "\\end{enumerate}");
         else if (st.length) L.push(toLatex(st[0].text, imageFile));
         L.push("");
       }
-      for (const b of of("ghichu")) L.push(`\\noindent\\textbf{${esc4(b.title || "Ghi ch\xFA")}.} ` + splitSteps(b.text).map((s) => toLatex(s.text, imageFile)).join("\n\n"), "");
+      for (const b of of("ghichu")) L.push(`\\noindent\\textbf{${esc5(b.title || "Ghi ch\xFA")}.} ` + splitSteps(b.text).map((s) => toLatex(s.text, imageFile)).join("\n\n"), "");
     }
     return L;
   }
   function toLatexHandout(doc2, opts = {}) {
     const files = [];
     const L = [LATEX_PREAMBLE, "", "\\begin{document}"];
-    if (doc2.title) L.push(`\\section*{${esc4(doc2.title)}}`);
+    if (doc2.title) L.push(`\\section*{${esc5(doc2.title)}}`);
     L.push(...docBody(doc2, opts, imageNamer(files, opts.imageSrc)));
     L.push("\\end{document}", "");
     return { tex: L.join("\n"), files };
@@ -22405,9 +24057,9 @@ ${tk.v}
   function toLatexSet(items, opts = {}) {
     const files = [];
     const L = [LATEX_PREAMBLE, "", "\\begin{document}"];
-    if (opts.title) L.push(`\\begin{center}{\\Large\\bfseries ${esc4(opts.title)}}${opts.subtitle ? `\\\\[2pt]${esc4(opts.subtitle)}` : ""}\\end{center}`, "");
+    if (opts.title) L.push(`\\begin{center}{\\Large\\bfseries ${esc5(opts.title)}}${opts.subtitle ? `\\\\[2pt]${esc5(opts.subtitle)}` : ""}\\end{center}`, "");
     items.forEach((it, i) => {
-      L.push(`\\subsection*{B\xE0i ${i + 1}. ${esc4(it.title || "")}}`);
+      L.push(`\\subsection*{B\xE0i ${i + 1}. ${esc5(it.title || "")}}`);
       for (const doc2 of it.docs) {
         const name2 = imageNamer(files, (id) => (doc2.imageData || {})[id] || null);
         L.push(...docBody(doc2, { ...opts, values: void 0 }, name2));
@@ -22417,13 +24069,13 @@ ${tk.v}
     L.push("\\end{document}", "");
     return { tex: L.join("\n"), files };
   }
-  var esc4 = (s) => String(s).replace(/[\\#%&_{}~^$]/g, (c) => "\\" + c);
+  var esc5 = (s) => String(s).replace(/[\\#%&_{}~^$]/g, (c) => "\\" + c);
 
   // src/kho/ui.js
   var CONF_KEY = "hinh-hoc-dong:kho";
   var QUEUE_KEY = "hang-cho-kho";
   var COMMON_KY = ["VMO", "IMO", "TST", "ISL", "APMO", "EGMO", "Olympic 30/4", "HSG t\u1EC9nh", "Chuy\xEAn KHTN", "T\u1EF1 ra"];
-  var esc5 = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  var esc6 = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   var fmtDate = (iso) => {
     if (!iso) return "";
     const d = new Date(iso);
@@ -22477,7 +24129,7 @@ ${tk.v}
         chip.classList.add("warn");
       } else if (S2.kho) label = `Kho \xB7 ${Object.keys(S2.kho.index.bai).length} b\xE0i`;
       else label = "Kho\u2026";
-      chip.innerHTML = `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2 5.5L8 2.5l6 3v5L8 13.5l-6-3z"/><path d="M2 5.5l6 3 6-3M8 8.5v5"/></svg><span>${esc5(label)}</span>`;
+      chip.innerHTML = `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2 5.5L8 2.5l6 3v5L8 13.5l-6-3z"/><path d="M2 5.5l6 3 6-3M8 8.5v5"/></svg><span>${esc6(label)}</span>`;
       chip.title = S2.conf ? `Kho b\xE0i: ${S2.conf.repo}${S2.error ? " \u2013 " + S2.error : ""}${n ? ` \u2013 ${n} l\u1EA7n l\u01B0u \u0111ang ch\u1EDD c\xF3 m\u1EA1ng` : ""} (Ctrl+K: m\u1EDF kho)` : "K\u1EBFt n\u1ED1i m\u1ED9t repo GitHub ri\xEAng t\u01B0 l\xE0m kho b\xE0i t\u1EADp";
       const k1 = document.querySelector("#btn-save kbd"), k2 = document.querySelector("#btn-kho-save kbd");
       if (k1) k1.style.display = S2.conf ? "none" : "";
@@ -22519,7 +24171,7 @@ ${tk.v}
         updateChip();
         if (silent) return null;
         if (e.code === "offline") toast("M\u1EA5t m\u1EA1ng \u2013 ch\u01B0a m\u1EDF \u0111\u01B0\u1EE3c kho", 4e3);
-        else await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c kho", esc5(e.message) + "<br>Ki\u1EC3m tra l\u1EA1i \u1EDF <i>Kho \u203A K\u1EBFt n\u1ED1i kho\u2026</i>", "OK");
+        else await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c kho", esc6(e.message) + "<br>Ki\u1EC3m tra l\u1EA1i \u1EDF <i>Kho \u203A K\u1EBFt n\u1ED1i kho\u2026</i>", "OK");
         return null;
       } finally {
         S2.connecting = null;
@@ -22538,8 +24190,8 @@ ${tk.v}
             <li>D\xE1n v\xE0o \u0111\xE2y. Token ch\u1EC9 l\u01B0u trong tr\xECnh duy\u1EC7t c\u1EE7a m\xE1y n\xE0y \u2013 ch\u1EC9 n\xEAn d\xF9ng tr\xEAn m\xE1y ri\xEAng.</li>
           </ol>
         </div>
-        <label class="row">Repo <input type="text" class="k-repo" placeholder="t\xEAn-t\xE0i-kho\u1EA3n/kho-bai" value="${esc5(S2.conf ? S2.conf.repo : "")}" spellcheck="false"></label>
-        <label class="row">Token <input type="password" class="k-token" placeholder="github_pat_\u2026" value="${esc5(S2.conf ? S2.conf.token : "")}" spellcheck="false" autocomplete="off"></label>
+        <label class="row">Repo <input type="text" class="k-repo" placeholder="t\xEAn-t\xE0i-kho\u1EA3n/kho-bai" value="${esc6(S2.conf ? S2.conf.repo : "")}" spellcheck="false"></label>
+        <label class="row">Token <input type="password" class="k-token" placeholder="github_pat_\u2026" value="${esc6(S2.conf ? S2.conf.token : "")}" spellcheck="false" autocomplete="off"></label>
         <div class="k-msg note"></div>
         <div class="modal-actions">${S2.conf ? '<button class="k-off danger" style="margin-right:auto">Ng\u1EAFt k\u1EBFt n\u1ED1i</button>' : ""}<button class="cancel">Hu\u1EF7</button><button class="primary">K\u1EBFt n\u1ED1i</button></div>`;
         const msg = box.querySelector(".k-msg");
@@ -22556,7 +24208,7 @@ ${tk.v}
           msg.textContent = "\u0110ang k\u1EBFt n\u1ED1i\u2026";
           try {
             const info = await connect({ repo, token });
-            if (!info.private && !await confirmDialog("Repo \u0111ang c\xF4ng khai", `Repo <b>${esc5(repo)}</b> \u0111ang \u0111\u1EC3 <b>c\xF4ng khai</b>: ai c\u0169ng xem \u0111\u01B0\u1EE3c \u0111\u1EC1 v\xE0 l\u1EDDi gi\u1EA3i trong kho (c\u1EA3 h\u1ECDc sinh). N\xEAn \u0111\u1ED5i sang Private trong Settings c\u1EE7a repo. V\u1EABn d\xF9ng repo n\xE0y?`, "V\u1EABn d\xF9ng")) {
+            if (!info.private && !await confirmDialog("Repo \u0111ang c\xF4ng khai", `Repo <b>${esc6(repo)}</b> \u0111ang \u0111\u1EC3 <b>c\xF4ng khai</b>: ai c\u0169ng xem \u0111\u01B0\u1EE3c \u0111\u1EC1 v\xE0 l\u1EDDi gi\u1EA3i trong kho (c\u1EA3 h\u1ECDc sinh). N\xEAn \u0111\u1ED5i sang Private trong Settings c\u1EE7a repo. V\u1EABn d\xF9ng repo n\xE0y?`, "V\u1EABn d\xF9ng")) {
               S2.kho = null;
               msg.textContent = "";
               return;
@@ -22668,7 +24320,7 @@ ${tk.v}
           return null;
         }
         if (e.code === "conflict") return resolveConflict(params, tabU, sig, e);
-        await confirmDialog("Kh\xF4ng l\u01B0u \u0111\u01B0\u1EE3c v\xE0o kho", esc5(e.message), "OK");
+        await confirmDialog("Kh\xF4ng l\u01B0u \u0111\u01B0\u1EE3c v\xE0o kho", esc6(e.message), "OK");
         return null;
       }
     }
@@ -22676,7 +24328,7 @@ ${tk.v}
       const ten = e.current && e.current.meta && e.current.meta.ten || params.ma;
       const v = await choiceDialog(
         "B\xE0i \u0111\xE3 \u0111\u01B0\u1EE3c s\u1EEDa \u1EDF n\u01A1i kh\xE1c",
-        `B\xE0i <b>${esc5(ten)}</b> trong kho \u0111\xE3 \u0111\u01B0\u1EE3c l\u01B0u t\u1EEB n\u01A1i kh\xE1c (m\xE1y kh\xE1c ho\u1EB7c tab kh\xE1c) sau khi th\u1EA7y/c\xF4 m\u1EDF n\xF3. L\u01B0u th\u1EBF n\xE0o?`,
+        `B\xE0i <b>${esc6(ten)}</b> trong kho \u0111\xE3 \u0111\u01B0\u1EE3c l\u01B0u t\u1EEB n\u01A1i kh\xE1c (m\xE1y kh\xE1c ho\u1EB7c tab kh\xE1c) sau khi th\u1EA7y/c\xF4 m\u1EDF n\xF3. L\u01B0u th\u1EBF n\xE0o?`,
         [{ label: "M\u1EDF b\u1EA3n tr\xEAn kho (tab m\u1EDBi) \u0111\u1EC3 so", value: "open" }, { label: "L\u01B0u th\xE0nh b\xE0i m\u1EDBi", value: "new" }, { label: "Hu\u1EF7", value: null }, { label: "Ghi \u0111\xE8 b\u1EB1ng h\xECnh n\xE0y", value: "force", primary: true }]
       );
       if (v === "force") return doSave({ ...params, force: true }, tabByUid(tabU));
@@ -22713,26 +24365,26 @@ ${tk.v}
       let doKho = meta2.doKho || 0;
       return modal((box, close2) => {
         box.classList.add("wide", "kmeta");
-        box.innerHTML = `<h3>${esc5(title)}</h3>
+        box.innerHTML = `<h3>${esc6(title)}</h3>
         ${allowAttach ? `<div class="seg k-mode"><button data-m="new" class="on">B\xE0i m\u1EDBi</button><button data-m="attach">Th\xEAm l\xE0m h\xECnh ph\u1EE5 c\u1EE7a b\xE0i c\xF3 s\u1EB5n</button></div>
-          <div class="k-attach" hidden><input type="text" class="k-attach-q" list="k-bai-list" placeholder="G\xF5 \u0111\u1EC3 t\xECm b\xE0i\u2026"><datalist id="k-bai-list">${Object.entries(ix.bai).map(([ma, e]) => `<option value="${esc5(e.ten)} [${esc5(ma)}]">`).join("")}</datalist>
+          <div class="k-attach" hidden><input type="text" class="k-attach-q" list="k-bai-list" placeholder="G\xF5 \u0111\u1EC3 t\xECm b\xE0i\u2026"><datalist id="k-bai-list">${Object.entries(ix.bai).map(([ma, e]) => `<option value="${esc6(e.ten)} [${esc6(ma)}]">`).join("")}</datalist>
           <div class="note">D\xF9ng khi m\u1ED9t b\xE0i c\xF3 nhi\u1EC1u h\xECnh (m\u1ED7i \xFD m\u1ED9t h\xECnh). M\u1EDF b\xE0i l\xE0 m\u1EDF \u0111\u1EE7 c\xE1c h\xECnh th\xE0nh tab.</div></div>` : ""}
         <div class="k-fields">
-          <label class="row">T\xEAn b\xE0i <input type="text" class="k-ten" value="${esc5(meta2.ten || "")}" placeholder="vd VMO 2016 \u2013 B\xE0i 4"></label>
+          <label class="row">T\xEAn b\xE0i <input type="text" class="k-ten" value="${esc6(meta2.ten || "")}" placeholder="vd VMO 2016 \u2013 B\xE0i 4"></label>
           <div class="row k-src">Ngu\u1ED3n
-            <input type="text" class="k-ky" list="k-ky-list" value="${esc5(n.ky || "")}" placeholder="K\u1EF3 thi (VMO, IMO\u2026)"><datalist id="k-ky-list">${kys.map((k) => `<option value="${esc5(k)}">`).join("")}</datalist>
-            <input type="number" class="k-nam" value="${esc5(n.nam || "")}" placeholder="N\u0103m" min="1950" max="2100">
-            <input type="text" class="k-so" value="${esc5(n.so || "")}" placeholder="B\xE0i s\u1ED1">
+            <input type="text" class="k-ky" list="k-ky-list" value="${esc6(n.ky || "")}" placeholder="K\u1EF3 thi (VMO, IMO\u2026)"><datalist id="k-ky-list">${kys.map((k) => `<option value="${esc6(k)}">`).join("")}</datalist>
+            <input type="number" class="k-nam" value="${esc6(n.nam || "")}" placeholder="N\u0103m" min="1950" max="2100">
+            <input type="text" class="k-so" value="${esc6(n.so || "")}" placeholder="B\xE0i s\u1ED1">
             <label class="k-tura"><input type="checkbox" class="k-tuRa" ${n.tuRa ? "checked" : ""}> T\u1EF1 ra</label></div>
           <div class="k-label">Ch\u1EE7 \u0111\u1EC1</div>
-          <div class="chips k-topics">${kho.topics.map((t2) => `<button type="button" class="chip ${chosen.has(t2) ? "on" : ""}" data-t="${esc5(t2)}">${esc5(t2)}</button>`).join("")}</div>
-          <label class="row">K\u1EF9 thu\u1EADt, th\u1EBB <input type="text" class="k-the" value="${esc5((meta2.the || []).join(", "))}" placeholder="ph\xE2n c\xE1ch b\u1EB1ng d\u1EA5u ph\u1EA9y: v\u1ECB t\u1EF1 quay, \u0111\u01B0\u1EDDng tr\xF2n Euler\u2026"></label>
-          ${tags2.length ? `<div class="chips small k-tagsugg">${tags2.slice(0, 40).map((t2) => `<button type="button" class="chip" data-g="${esc5(t2)}">+ ${esc5(t2)}</button>`).join("")}</div>` : ""}
+          <div class="chips k-topics">${kho.topics.map((t2) => `<button type="button" class="chip ${chosen.has(t2) ? "on" : ""}" data-t="${esc6(t2)}">${esc6(t2)}</button>`).join("")}</div>
+          <label class="row">K\u1EF9 thu\u1EADt, th\u1EBB <input type="text" class="k-the" value="${esc6((meta2.the || []).join(", "))}" placeholder="ph\xE2n c\xE1ch b\u1EB1ng d\u1EA5u ph\u1EA9y: v\u1ECB t\u1EF1 quay, \u0111\u01B0\u1EDDng tr\xF2n Euler\u2026"></label>
+          ${tags2.length ? `<div class="chips small k-tagsugg">${tags2.slice(0, 40).map((t2) => `<button type="button" class="chip" data-g="${esc6(t2)}">+ ${esc6(t2)}</button>`).join("")}</div>` : ""}
           <div class="row">\u0110\u1ED9 kh\xF3 <span class="k-dk">${[1, 2, 3, 4, 5].map((i) => `<button type="button" data-d="${i}" class="${i <= doKho ? "on" : ""}" title="${i}/5">\u25CF</button>`).join("")}</span><span class="note k-dk-l"></span></div>
-          <label class="row k-gc">Ghi ch\xFA ri\xEAng <textarea class="k-ghiChu" rows="2" placeholder="Ch\u1EC9 th\u1EA7y/c\xF4 th\u1EA5y: g\u1EE3i \xFD d\u1EA1y, l\u1ED7i h\u1ECDc sinh hay m\u1EAFc\u2026">${esc5(meta2.ghiChu || "")}</textarea></label>
+          <label class="row k-gc">Ghi ch\xFA ri\xEAng <textarea class="k-ghiChu" rows="2" placeholder="Ch\u1EC9 th\u1EA7y/c\xF4 th\u1EA5y: g\u1EE3i \xFD d\u1EA1y, l\u1ED7i h\u1ECDc sinh hay m\u1EAFc\u2026">${esc6(meta2.ghiChu || "")}</textarea></label>
         </div>
         <div class="k-msg note"></div>
-        <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary">${esc5(okLabel)}</button></div>`;
+        <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary">${esc6(okLabel)}</button></div>`;
         const q = (s) => box.querySelector(s);
         let mode = "new";
         if (allowAttach) {
@@ -22835,7 +24487,7 @@ ${tk.v}
         app.emit("saved");
         return true;
       } catch (e) {
-        await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c b\xE0i", esc5(e.message), "OK");
+        await confirmDialog("Kh\xF4ng m\u1EDF \u0111\u01B0\u1EE3c b\xE0i", esc6(e.message), "OK");
         return false;
       }
     }
@@ -22917,7 +24569,7 @@ ${tk.v}
           const topics = count("chuDe", (e) => e.chuDe || []);
           const kys = count("ky", (e) => [kyOf(e)]);
           const st = count("st", (e) => [e.trangThai]);
-          const group = (title, key, items) => items.length ? `<div class="kf-g"><div class="kf-t">${title}</div>${items.map(([v, label, n]) => `<label class="kf-i"><input type="checkbox" data-k="${key}" data-v="${esc5(v)}" ${F[key].has(key === "doKho" ? +v : v) ? "checked" : ""}><span>${esc5(label)}</span><i>${n}</i></label>`).join("")}</div>` : "";
+          const group = (title, key, items) => items.length ? `<div class="kf-g"><div class="kf-t">${title}</div>${items.map(([v, label, n]) => `<label class="kf-i"><input type="checkbox" data-k="${key}" data-v="${esc6(v)}" ${F[key].has(key === "doKho" ? +v : v) ? "checked" : ""}><span>${esc6(label)}</span><i>${n}</i></label>`).join("")}</div>` : "";
           const allTopics = [.../* @__PURE__ */ new Set([...kho.topics, ...topics.keys()])].filter((t2) => topics.get(t2));
           filt.innerHTML = `<button class="kf-clear" ${[...Object.values(F)].some((x) => x && x.size) || F.daDay != null ? "" : "hidden"}>B\u1ECF m\u1ECDi b\u1ED9 l\u1ECDc</button>` + group("Ch\u1EE7 \u0111\u1EC1", "chuDe", allTopics.map((t2) => [t2, t2, topics.get(t2)])) + group("Ngu\u1ED3n", "ky", [...kys].sort((a, b) => b[1] - a[1]).map(([k, n]) => [k, k, n])) + group("\u0110\u1ED9 kh\xF3", "doKho", [1, 2, 3, 4, 5, 0].map((d) => [d, d ? "\u25CF".repeat(d) : "Ch\u01B0a \u0111\xE1nh gi\xE1", Object.values(kho.index.bai).filter((e) => (e.doKho || 0) === d).length]).filter((x) => x[2])) + group("Tr\u1EA1ng th\xE1i", "trangThai", Object.entries(STATUS).map(([k, l]) => [k, l, st.get(k) || 0]).filter((x) => x[2])) + `<div class="kf-g"><div class="kf-t">\u0110\xE3 d\u1EA1y</div><label class="kf-i"><input type="radio" name="kf-day" data-day="" ${F.daDay == null ? "checked" : ""}><span>T\u1EA5t c\u1EA3</span></label><label class="kf-i"><input type="radio" name="kf-day" data-day="1" ${F.daDay === true ? "checked" : ""}><span>\u0110\xE3 d\u1EA1y</span></label><label class="kf-i"><input type="radio" name="kf-day" data-day="0" ${F.daDay === false ? "checked" : ""}><span>Ch\u01B0a d\u1EA1y</span></label></div>`;
           filt.querySelectorAll("input[data-k]").forEach((c) => {
@@ -22960,13 +24612,13 @@ ${tk.v}
           main2.innerHTML = `<div class="kgrid">${rows.map(([ma, e]) => {
             const taught = kho.taughtIn(ma);
             const openNow = app.tabs.some((t2) => t2.kho && t2.kho.ma === ma);
-            return `<div class="kcard ${sel.has(ma) ? "sel" : ""}" data-ma="${esc5(ma)}" tabindex="0">
-            <div class="kc-thumb" data-ma="${esc5(ma)}"><span>${esc5((e.ten || "?").trim()[0] || "?")}</span></div>
+            return `<div class="kcard ${sel.has(ma) ? "sel" : ""}" data-ma="${esc6(ma)}" tabindex="0">
+            <div class="kc-thumb" data-ma="${esc6(ma)}"><span>${esc6((e.ten || "?").trim()[0] || "?")}</span></div>
             <label class="kc-sel" title="Ch\u1ECDn (\u0111\u1EC3 m\u1EDF nhi\u1EC1u b\xE0i / t\u1EA1o bu\u1ED5i d\u1EA1y)"><input type="checkbox" ${sel.has(ma) ? "checked" : ""}></label>
             <button class="kc-more" title="Th\xEAm thao t\xE1c">\u22EF</button>
-            <div class="kc-info"><div class="kc-ten">${esc5(e.ten)}${e.soHinh > 1 ? ` <span class="kc-n">${e.soHinh} h\xECnh</span>` : ""}</div>
-              <div class="kc-src">${esc5(sourceLabel(e.nguon) || "Ch\u01B0a ghi ngu\u1ED3n")}${e.doKho ? ` \xB7 <span class="kc-dk" title="\u0110\u1ED9 kh\xF3 ${e.doKho}/5">${"\u25CF".repeat(e.doKho)}<i>${"\u25CF".repeat(5 - e.doKho)}</i></span>` : ""}</div>
-              ${(e.chuDe || []).length || (e.the || []).length ? `<div class="kc-tags">${(e.chuDe || []).map((t2) => `<span class="tag">${esc5(t2)}</span>`).join("")}${(e.the || []).map((t2) => `<span class="tag soft">${esc5(t2)}</span>`).join("")}</div>` : ""}
+            <div class="kc-info"><div class="kc-ten">${esc6(e.ten)}${e.soHinh > 1 ? ` <span class="kc-n">${e.soHinh} h\xECnh</span>` : ""}</div>
+              <div class="kc-src">${esc6(sourceLabel(e.nguon) || "Ch\u01B0a ghi ngu\u1ED3n")}${e.doKho ? ` \xB7 <span class="kc-dk" title="\u0110\u1ED9 kh\xF3 ${e.doKho}/5">${"\u25CF".repeat(e.doKho)}<i>${"\u25CF".repeat(5 - e.doKho)}</i></span>` : ""}</div>
+              ${(e.chuDe || []).length || (e.the || []).length ? `<div class="kc-tags">${(e.chuDe || []).map((t2) => `<span class="tag">${esc6(t2)}</span>`).join("")}${(e.the || []).map((t2) => `<span class="tag soft">${esc6(t2)}</span>`).join("")}</div>` : ""}
               <div class="kc-st"><span class="st st-${e.trangThai}">${STATUS[e.trangThai] || ""}</span>${taught.length ? ` \xB7 \u0111\xE3 d\u1EA1y ${taught.length} l\u1EA7n (g\u1EA7n nh\u1EA5t ${fmtDate(taught[0].ngay) || taught[0].ten})` : ""}${openNow ? " \xB7 <b>\u0111ang m\u1EDF</b>" : ""}</div></div></div>`;
           }).join("")}</div>`;
           main2.querySelectorAll(".kc-thumb").forEach((el) => thumbs.observe(el));
@@ -23026,7 +24678,7 @@ ${tk.v}
             } else if (act === "buoi") await addToBuoiDialog(ma).then(paint);
             else if (act === "del") {
               const e = kho.index.bai[ma];
-              if (!await confirmDialog("Xo\xE1 b\xE0i kh\u1ECFi kho", `Xo\xE1 <b>${esc5(e.ten)}</b> kh\u1ECFi kho? B\xE0i c\u0169ng b\u1ECB g\u1EE1 kh\u1ECFi c\xE1c bu\u1ED5i d\u1EA1y. (V\u1EABn l\u1EA5y l\u1EA1i \u0111\u01B0\u1EE3c t\u1EEB l\u1ECBch s\u1EED repo tr\xEAn GitHub.)`, "Xo\xE1")) return;
+              if (!await confirmDialog("Xo\xE1 b\xE0i kh\u1ECFi kho", `Xo\xE1 <b>${esc6(e.ten)}</b> kh\u1ECFi kho? B\xE0i c\u0169ng b\u1ECB g\u1EE1 kh\u1ECFi c\xE1c bu\u1ED5i d\u1EA1y. (V\u1EABn l\u1EA5y l\u1EA1i \u0111\u01B0\u1EE3c t\u1EEB l\u1ECBch s\u1EED repo tr\xEAn GitHub.)`, "Xo\xE1")) return;
               await busy(() => kho.deleteBai(ma)).catch((er) => toast(er.message, 5e3));
               app.tabs.forEach((t2) => {
                 if (t2.kho && t2.kho.ma === ma) {
@@ -23045,9 +24697,9 @@ ${tk.v}
           $(".kw-count").textContent = `${list.length} bu\u1ED5i d\u1EA1y`;
           const words = q.trim().toLowerCase();
           const shown = list.filter(([, b]) => !words || [b.ten, b.lop, b.ghiChu, ...b.bai.map((m) => kho.index.bai[m]?.ten)].join(" ").toLowerCase().includes(words));
-          main2.innerHTML = shown.length ? `<div class="kbuoi">${shown.map(([bm, b]) => `<div class="kb-row" data-b="${esc5(bm)}">
-            <div class="kb-info"><div class="kb-ten">${esc5(b.ten)}</div><div class="kb-sub">${[b.ngay && fmtDate(b.ngay), b.lop, `${b.bai.length} b\xE0i`].filter(Boolean).map(esc5).join(" \xB7 ")}</div>
-              <div class="kb-bai">${b.bai.map((m, i) => `<span>${i + 1}. ${esc5(kho.index.bai[m] ? kho.index.bai[m].ten : "(\u0111\xE3 xo\xE1)")}</span>`).join("")}</div>${b.ghiChu ? `<div class="note">${esc5(b.ghiChu)}</div>` : ""}</div>
+          main2.innerHTML = shown.length ? `<div class="kbuoi">${shown.map(([bm, b]) => `<div class="kb-row" data-b="${esc6(bm)}">
+            <div class="kb-info"><div class="kb-ten">${esc6(b.ten)}</div><div class="kb-sub">${[b.ngay && fmtDate(b.ngay), b.lop, `${b.bai.length} b\xE0i`].filter(Boolean).map(esc6).join(" \xB7 ")}</div>
+              <div class="kb-bai">${b.bai.map((m, i) => `<span>${i + 1}. ${esc6(kho.index.bai[m] ? kho.index.bai[m].ten : "(\u0111\xE3 xo\xE1)")}</span>`).join("")}</div>${b.ghiChu ? `<div class="note">${esc6(b.ghiChu)}</div>` : ""}</div>
             <div class="kb-act"><button data-a="open" class="primary">M\u1EDF bu\u1ED5i</button><button data-a="edit">S\u1EEDa\u2026</button><button data-a="de">Phi\u1EBFu \u0111\u1EC1 (.tex)</button><button data-a="full">Phi\u1EBFu k\xE8m l\u1EDDi gi\u1EA3i</button><button data-a="del" class="danger-t">Xo\xE1</button></div></div>`).join("")}</div>` : `<div class="kw-empty">${list.length ? "Kh\xF4ng c\xF3 bu\u1ED5i n\xE0o kh\u1EDBp t\xECm ki\u1EBFm." : "Ch\u01B0a c\xF3 bu\u1ED5i d\u1EA1y n\xE0o. M\u1EDF c\xE1c b\xE0i \u0111\u1ECBnh d\u1EA1y r\u1ED3i ch\u1ECDn <i>Kho \u203A L\u01B0u c\xE1c tab \u0111ang m\u1EDF th\xE0nh bu\u1ED5i d\u1EA1y\u2026</i>, ho\u1EB7c ch\u1ECDn nhi\u1EC1u b\xE0i \u1EDF m\u1EE5c B\xE0i t\u1EADp r\u1ED3i b\u1EA5m <i>T\u1EA1o bu\u1ED5i d\u1EA1y</i>."}</div>`;
           main2.querySelectorAll(".kb-row").forEach((row) => {
             const bm = row.dataset.b;
@@ -23064,7 +24716,7 @@ ${tk.v}
                 paint();
               } else if (act === "de" || act === "full") await exportBuoi(bm, act === "full");
               else if (act === "del") {
-                if (!await confirmDialog("Xo\xE1 bu\u1ED5i d\u1EA1y", `Xo\xE1 bu\u1ED5i <b>${esc5(b.ten)}</b>? C\xE1c b\xE0i v\u1EABn c\xF2n trong kho.`, "Xo\xE1")) return;
+                if (!await confirmDialog("Xo\xE1 bu\u1ED5i d\u1EA1y", `Xo\xE1 bu\u1ED5i <b>${esc6(b.ten)}</b>? C\xE1c b\xE0i v\u1EABn c\xF2n trong kho.`, "Xo\xE1")) return;
                 await busy(() => kho.deleteBuoi(bm)).catch((er) => toast(er.message, 5e3));
                 paint();
               }
@@ -23120,8 +24772,8 @@ ${tk.v}
       }
       const pick = await modal((box, close2) => {
         box.classList.add("wide");
-        box.innerHTML = `<h3>C\xE1c phi\xEAn b\u1EA3n: ${esc5(kho.index.bai[ma].ten)}</h3><div class="modal-body">M\u1ED7i l\u1EA7n l\u01B0u l\xE0 m\u1ED9t phi\xEAn b\u1EA3n. M\u1EDF m\u1ED9t b\u1EA3n c\u0169 th\xE0nh <b>tab m\u1EDBi</b> (b\u1EA3n sao, kh\xF4ng g\u1EAFn v\u1EDBi kho) \u0111\u1EC3 xem ho\u1EB7c ch\xE9p l\u1EA1i ph\u1EA7n c\u1EA7n.</div>
-        <div class="pick-list">${list.map((c2, i) => `<button class="pick" data-i="${i}"><b>${fmtTime(c2.date)}${i === 0 ? " \u2013 b\u1EA3n hi\u1EC7n t\u1EA1i" : ""}</b><span>${esc5(c2.message || "")}</span></button>`).join("")}</div>
+        box.innerHTML = `<h3>C\xE1c phi\xEAn b\u1EA3n: ${esc6(kho.index.bai[ma].ten)}</h3><div class="modal-body">M\u1ED7i l\u1EA7n l\u01B0u l\xE0 m\u1ED9t phi\xEAn b\u1EA3n. M\u1EDF m\u1ED9t b\u1EA3n c\u0169 th\xE0nh <b>tab m\u1EDBi</b> (b\u1EA3n sao, kh\xF4ng g\u1EAFn v\u1EDBi kho) \u0111\u1EC3 xem ho\u1EB7c ch\xE9p l\u1EA1i ph\u1EA7n c\u1EA7n.</div>
+        <div class="pick-list">${list.map((c2, i) => `<button class="pick" data-i="${i}"><b>${fmtTime(c2.date)}${i === 0 ? " \u2013 b\u1EA3n hi\u1EC7n t\u1EA1i" : ""}</b><span>${esc6(c2.message || "")}</span></button>`).join("")}</div>
         <div class="modal-actions"><button class="cancel">\u0110\xF3ng</button></div>`;
         box.querySelector(".cancel").onclick = () => close2(null);
         box.querySelectorAll(".pick").forEach((b) => {
@@ -23156,16 +24808,16 @@ ${tk.v}
       const res = await modal((box, close2) => {
         box.classList.add("wide");
         box.innerHTML = `<h3>${buoi.ma ? "S\u1EEDa bu\u1ED5i d\u1EA1y" : "Bu\u1ED5i d\u1EA1y m\u1EDBi"}</h3>
-        <label class="row">T\xEAn bu\u1ED5i <input type="text" class="b-ten" value="${esc5(buoi.ten || "")}" placeholder="vd Bu\u1ED5i 5 \u2013 T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp"></label>
-        <div class="row">Ng\xE0y <input type="date" class="b-ngay" value="${esc5(buoi.ngay || today())}"> L\u1EDBp <input type="text" class="b-lop" list="b-lop-list" value="${esc5(buoi.lop || "")}" placeholder="vd 11 To\xE1n"><datalist id="b-lop-list">${lops.map((l) => `<option value="${esc5(l)}">`).join("")}</datalist></div>
-        <label class="row">Ghi ch\xFA <input type="text" class="b-gc" value="${esc5(buoi.ghiChu || "")}" placeholder="tu\u1EF3 \xFD"></label>
+        <label class="row">T\xEAn bu\u1ED5i <input type="text" class="b-ten" value="${esc6(buoi.ten || "")}" placeholder="vd Bu\u1ED5i 5 \u2013 T\u1EE9 gi\xE1c n\u1ED9i ti\u1EBFp"></label>
+        <div class="row">Ng\xE0y <input type="date" class="b-ngay" value="${esc6(buoi.ngay || today())}"> L\u1EDBp <input type="text" class="b-lop" list="b-lop-list" value="${esc6(buoi.lop || "")}" placeholder="vd 11 To\xE1n"><datalist id="b-lop-list">${lops.map((l) => `<option value="${esc6(l)}">`).join("")}</datalist></div>
+        <label class="row">Ghi ch\xFA <input type="text" class="b-gc" value="${esc6(buoi.ghiChu || "")}" placeholder="tu\u1EF3 \xFD"></label>
         <div class="k-label">C\xE1c b\xE0i (theo th\u1EE9 t\u1EF1 d\u1EA1y)</div><div class="b-list"></div>
-        <div class="row"><input type="text" class="b-add" list="b-bai-list" placeholder="Th\xEAm b\xE0i: g\xF5 \u0111\u1EC3 t\xECm\u2026"><datalist id="b-bai-list">${Object.entries(kho.index.bai).map(([ma, e]) => `<option value="${esc5(e.ten)} [${esc5(ma)}]">`).join("")}</datalist></div>
+        <div class="row"><input type="text" class="b-add" list="b-bai-list" placeholder="Th\xEAm b\xE0i: g\xF5 \u0111\u1EC3 t\xECm\u2026"><datalist id="b-bai-list">${Object.entries(kho.index.bai).map(([ma, e]) => `<option value="${esc6(e.ten)} [${esc6(ma)}]">`).join("")}</datalist></div>
         <div class="k-msg note"></div>
         <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary">L\u01B0u bu\u1ED5i d\u1EA1y</button></div>`;
         const q = (s) => box.querySelector(s);
         const paintList = () => {
-          q(".b-list").innerHTML = bai.length ? bai.map((m, i) => `<div class="b-item"><span>${i + 1}. ${esc5(kho.index.bai[m] ? kho.index.bai[m].ten : m)}</span><button data-u="${i}" ${i ? "" : "disabled"} title="L\xEAn">\u2191</button><button data-d="${i}" ${i < bai.length - 1 ? "" : "disabled"} title="Xu\u1ED1ng">\u2193</button><button data-x="${i}" title="B\u1ECF kh\u1ECFi bu\u1ED5i">\u2715</button></div>`).join("") : '<div class="note">Ch\u01B0a c\xF3 b\xE0i n\xE0o.</div>';
+          q(".b-list").innerHTML = bai.length ? bai.map((m, i) => `<div class="b-item"><span>${i + 1}. ${esc6(kho.index.bai[m] ? kho.index.bai[m].ten : m)}</span><button data-u="${i}" ${i ? "" : "disabled"} title="L\xEAn">\u2191</button><button data-d="${i}" ${i < bai.length - 1 ? "" : "disabled"} title="Xu\u1ED1ng">\u2193</button><button data-x="${i}" title="B\u1ECF kh\u1ECFi bu\u1ED5i">\u2715</button></div>`).join("") : '<div class="note">Ch\u01B0a c\xF3 b\xE0i n\xE0o.</div>';
         };
         paintList();
         q(".b-list").onclick = (e) => {
@@ -23221,7 +24873,7 @@ ${tk.v}
         box.innerHTML = `<h3>L\u01B0u c\xE1c tab \u0111ang m\u1EDF th\xE0nh bu\u1ED5i d\u1EA1y</h3><div class="modal-body">M\u1ED7i tab \u0111\u01B0\u1EE3c l\u01B0u v\xE0o kho (tab ch\u01B0a c\xF3 trong kho th\xE0nh <b>b\xE0i m\u1EDBi</b> mang t\xEAn tab \u2013 s\u1EEDa th\xF4ng tin sau), r\u1ED3i gom th\xE0nh m\u1ED9t bu\u1ED5i theo th\u1EE9 t\u1EF1 tab.</div>
         <div class="pick-list">${idx.map((i) => {
           const t2 = app.tabs[i];
-          return `<label class="b-tab"><input type="checkbox" data-i="${i}" checked> ${esc5(name2(i))} <span class="note">${t2.kho ? t2.kho.ma && kho.index.bai[t2.kho.ma] ? "\xB7 \u0111\xE3 c\xF3 trong kho" : "" : "\xB7 b\xE0i m\u1EDBi"}</span></label>`;
+          return `<label class="b-tab"><input type="checkbox" data-i="${i}" checked> ${esc6(name2(i))} <span class="note">${t2.kho ? t2.kho.ma && kho.index.bai[t2.kho.ma] ? "\xB7 \u0111\xE3 c\xF3 trong kho" : "" : "\xB7 b\xE0i m\u1EDBi"}</span></label>`;
         }).join("")}</div>
         <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary">Ti\u1EBFp t\u1EE5c</button></div>`;
         box.querySelector(".cancel").onclick = () => close2(null);
@@ -23273,7 +24925,7 @@ ${tk.v}
         <div class="modal-actions"><button class="cancel">Hu\u1EF7</button><button class="primary" disabled>Nh\u1EADp</button></div>`;
         const q = (s) => box.querySelector(s);
         const paintRows = () => {
-          q(".i-list").innerHTML = rows.map((r, i) => `<label class="i-row"><input type="checkbox" data-i="${i}" ${r.on ? "checked" : ""}><input type="text" data-t="${i}" value="${esc5(r.ten)}"><span class="note">${esc5(sourceLabel(r.nguon) || "")}${r.doc.boxes && r.doc.boxes.length ? " \xB7 c\xF3 khung ch\u1EEF" : ""}</span></label>`).join("");
+          q(".i-list").innerHTML = rows.map((r, i) => `<label class="i-row"><input type="checkbox" data-i="${i}" ${r.on ? "checked" : ""}><input type="text" data-t="${i}" value="${esc6(r.ten)}"><span class="note">${esc6(sourceLabel(r.nguon) || "")}${r.doc.boxes && r.doc.boxes.length ? " \xB7 c\xF3 khung ch\u1EEF" : ""}</span></label>`).join("");
           const n = rows.filter((r) => r.on).length;
           q(".primary").disabled = !n;
           q(".primary").textContent = n ? `Nh\u1EADp ${n} b\xE0i` : "Nh\u1EADp";
@@ -23332,7 +24984,7 @@ ${tk.v}
         const codes = await busy(() => kho.importMany(items));
         toast(`\u0110\xE3 nh\u1EADp ${codes.length} b\xE0i v\xE0o kho`, 4e3);
       } catch (e) {
-        await confirmDialog("Kh\xF4ng nh\u1EADp \u0111\u01B0\u1EE3c", esc5(e.message), "OK");
+        await confirmDialog("Kh\xF4ng nh\u1EADp \u0111\u01B0\u1EE3c", esc6(e.message), "OK");
       }
     }
     const on = (id, fn) => {
@@ -23367,769 +25019,6 @@ ${tk.v}
     return { saveCurrent, openBrowser, openBai, connectDialog, ensureKho, flushQueue, saveTabsAsBuoi, importDialog, isConnected: () => !!S2.conf, state: S2 };
   }
 
-  // src/explore/knowledge.js
-  var UF = class {
-    constructor() {
-      this.p = /* @__PURE__ */ new Map();
-    }
-    find(x) {
-      if (!this.p.has(x)) this.p.set(x, x);
-      let r = x;
-      while (this.p.get(r) !== r) r = this.p.get(r);
-      while (this.p.get(x) !== r) {
-        const n = this.p.get(x);
-        this.p.set(x, r);
-        x = n;
-      }
-      return r;
-    }
-    union(a, b) {
-      const ra = this.find(a), rb = this.find(b);
-      if (ra !== rb) this.p.set(ra, rb);
-      return ra !== rb;
-    }
-  };
-  var Knowledge = class {
-    /**
-     * @param doc  tài liệu
-     * @param rep  hàm id điểm → id đại diện (các điểm luôn trùng nhau gộp làm một)
-     */
-    constructor(doc2, rep = (x) => x) {
-      this.rep = rep;
-      this.lines = [];
-      this.circles = [];
-      this.dir = new UF();
-      this.perps = [];
-      this.tans = [];
-      const k = kinds(doc2);
-      this.kind = k;
-      for (const s of doc2.steps) {
-        const def = STEP_TYPES[s.type];
-        if (!def) continue;
-        const kind = k.get(s.id);
-        if (kind === "line") {
-          const i = this.newLine();
-          this.lines[i].objs.add(s.id);
-          if (s.type === "perp_bisector") this.addTag(i, "PB:" + sortKey(s.args.map(rep)));
-          if (s.type === "angle_bisector" && !(s.params && s.params.external)) this.addTag(i, abTag(s.args.map(rep)));
-        } else if (kind === "circle") {
-          const i = this.newCircle();
-          this.circles[i].objs.add(s.id);
-          if (s.type === "incircle") this.circles[i].tags.add("IC:" + sortKey(s.args.map(rep)));
-          if (s.type === "circumcircle" || s.type === "circle_3pts") for (const a of s.args) this.circles[i].pts.add(rep(a));
-        }
-      }
-      for (const s of doc2.steps) {
-        const def = STEP_TYPES[s.type];
-        if (!def || !def.facts) continue;
-        let facts = [];
-        try {
-          facts = def.facts(s, s.args.map((a) => k.get(a)), doc2) || [];
-        } catch {
-          facts = [];
-        }
-        for (const f of facts) this.addFact(f);
-      }
-      this.saturate();
-    }
-    newLine() {
-      this.lines.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
-      return this.lines.length - 1;
-    }
-    newCircle() {
-      this.circles.push({ pts: /* @__PURE__ */ new Set(), objs: /* @__PURE__ */ new Set(), tags: /* @__PURE__ */ new Set(), alive: true });
-      return this.circles.length - 1;
-    }
-    addTag(i, tag) {
-      this.lines[i].tags.add(tag);
-    }
-    /** Chỉ số thực thể đường thẳng ứng với tham chiếu (id đối tượng hoặc tham chiếu ảo). */
-    lineOf(ref) {
-      const L = this.lines;
-      if (typeof ref === "string") return L.findIndex((e) => e.alive && e.objs.has(ref));
-      if (ref.L) {
-        const [a, b] = ref.L.map(this.rep);
-        if (a === b) return -1;
-        let i = L.findIndex((e) => e.alive && e.pts.has(a) && e.pts.has(b));
-        if (i < 0) {
-          i = this.newLine();
-          L[i].pts.add(a);
-          L[i].pts.add(b);
-        }
-        return i;
-      }
-      if (ref.PB) return this.tagged("PB:" + sortKey(ref.PB.map(this.rep)), () => {
-        const j = this.lineOf({ L: ref.PB });
-        return j;
-      });
-      if (ref.AB) return this.tagged(abTag(ref.AB.map(this.rep)), null, this.rep(ref.AB[1]));
-      return -1;
-    }
-    tagged(tag, perpTo, through) {
-      let i = this.lines.findIndex((e) => e.alive && e.tags.has(tag));
-      if (i < 0) {
-        i = this.newLine();
-        this.lines[i].tags.add(tag);
-        if (through) this.lines[i].pts.add(through);
-      }
-      if (perpTo) {
-        const j = perpTo();
-        if (j >= 0) this.perps.push([i, j]);
-      }
-      return i;
-    }
-    circleOf(ref) {
-      const C2 = this.circles;
-      if (typeof ref === "string") return C2.findIndex((e) => e.alive && e.objs.has(ref));
-      if (ref.C) {
-        const ps = ref.C.map(this.rep);
-        if (new Set(ps).size < 3) return -1;
-        let i = C2.findIndex((e) => e.alive && ps.every((p) => e.pts.has(p)));
-        if (i < 0) {
-          i = this.newCircle();
-          ps.forEach((p) => C2[i].pts.add(p));
-        }
-        return i;
-      }
-      if (ref.IC) {
-        const tag = "IC:" + sortKey(ref.IC.map(this.rep));
-        let i = C2.findIndex((e) => e.alive && e.tags.has(tag));
-        if (i < 0) {
-          i = this.newCircle();
-          C2[i].tags.add(tag);
-        }
-        return i;
-      }
-      return -1;
-    }
-    curveOf(ref) {
-      if (typeof ref === "string") {
-        const kd = this.kind.get(ref);
-        if (kd === "line") return { t: "L", i: this.lineOf(ref) };
-        if (kd === "circle") return { t: "C", i: this.circleOf(ref) };
-        return null;
-      }
-      if (ref.C || ref.IC) return { t: "C", i: this.circleOf(ref) };
-      return { t: "L", i: this.lineOf(ref) };
-    }
-    addFact(f) {
-      if (f.on) {
-        const P2 = this.rep(f.on[0]);
-        const c = this.curveOf(f.on[1]);
-        if (!c || c.i < 0) return;
-        (c.t === "L" ? this.lines : this.circles)[c.i].pts.add(P2);
-      } else if (f.col) {
-        const ps = [...new Set(f.col.map(this.rep))];
-        if (ps.length < 2) return;
-        const i = this.lineOf({ L: [ps[0], ps[1]] });
-        ps.forEach((p) => this.lines[i].pts.add(p));
-      } else if (f.cyc) {
-        const ps = [...new Set(f.cyc.map(this.rep))];
-        if (ps.length < 3) return;
-        const i = this.circleOf({ C: ps.slice(0, 3) });
-        ps.forEach((p) => this.circles[i].pts.add(p));
-      } else if (f.par || f.perp) {
-        const [a, b] = (f.par || f.perp).map((r) => this.lineOf(r));
-        if (a < 0 || b < 0) return;
-        if (f.par) this.dir.union(a, b);
-        else this.perps.push([a, b]);
-      } else if (f.tan) {
-        const [a, b] = f.tan.map((r) => this.curveOf(r));
-        if (a && b && a.i >= 0 && b.i >= 0) this.tans.push([a, b]);
-      }
-    }
-    mergeLine(i, j) {
-      const a = this.lines[i], b = this.lines[j];
-      for (const p of b.pts) a.pts.add(p);
-      for (const o of b.objs) a.objs.add(o);
-      for (const t2 of b.tags) a.tags.add(t2);
-      b.alive = false;
-      this.dir.union(i, j);
-      this.perps = this.perps.map(([x, y]) => [x === j ? i : x, y === j ? i : y]);
-      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "L" && c.i === j ? { t: "L", i } : c));
-      this.redirect = this.redirect || /* @__PURE__ */ new Map();
-      this.redirect.set(j, i);
-    }
-    mergeCircle(i, j) {
-      const a = this.circles[i], b = this.circles[j];
-      for (const p of b.pts) a.pts.add(p);
-      for (const o of b.objs) a.objs.add(o);
-      for (const t2 of b.tags) a.tags.add(t2);
-      b.alive = false;
-      this.tans = this.tans.map((pr) => pr.map((c) => c.t === "C" && c.i === j ? { t: "C", i } : c));
-    }
-    saturate() {
-      for (let round3 = 0; round3 < 20; round3++) {
-        let changed = false;
-        const perpOf = /* @__PURE__ */ new Map();
-        for (const [x, y] of this.perps) {
-          const rx = this.dir.find(x), ry = this.dir.find(y);
-          if (perpOf.has(ry)) changed = this.dir.union(perpOf.get(ry), rx) || changed;
-          else perpOf.set(ry, rx);
-          if (perpOf.has(rx)) changed = this.dir.union(perpOf.get(rx), ry) || changed;
-          else perpOf.set(rx, ry);
-        }
-        const L = this.lines;
-        for (let i = 0; i < L.length; i++) {
-          if (!L[i].alive) continue;
-          for (let j = i + 1; j < L.length; j++) {
-            if (!L[j].alive) continue;
-            let common = 0;
-            for (const p of L[j].pts) if (L[i].pts.has(p)) common++;
-            const sameTag = [...L[j].tags].some((t2) => L[i].tags.has(t2));
-            if (common >= 2 || sameTag || common >= 1 && this.dir.find(i) === this.dir.find(j)) {
-              this.mergeLine(i, j);
-              changed = true;
-            }
-          }
-        }
-        const C2 = this.circles;
-        for (let i = 0; i < C2.length; i++) {
-          if (!C2[i].alive) continue;
-          for (let j = i + 1; j < C2.length; j++) {
-            if (!C2[j].alive) continue;
-            let common = 0;
-            for (const p of C2[j].pts) if (C2[i].pts.has(p)) common++;
-            const sameTag = [...C2[j].tags].some((t2) => C2[i].tags.has(t2));
-            if (common >= 3 || sameTag) {
-              this.mergeCircle(i, j);
-              changed = true;
-            }
-          }
-        }
-        if (!changed) break;
-      }
-    }
-    // ---------- truy vấn ----------
-    pointOnLineObj(P2, lineId) {
-      const i = this.lineOf(lineId);
-      return i >= 0 && this.lines[i].pts.has(this.rep(P2));
-    }
-    pointOnCircleObj(P2, cId) {
-      const i = this.circleOf(cId);
-      return i >= 0 && this.circles[i].pts.has(this.rep(P2));
-    }
-    collinear(ps) {
-      const r = ps.map(this.rep);
-      return this.lines.some((e) => e.alive && r.every((p) => e.pts.has(p)));
-    }
-    concyclic(ps) {
-      const r = ps.map(this.rep);
-      return this.circles.some((e) => e.alive && r.every((p) => e.pts.has(p)));
-    }
-    sameLine(a, b) {
-      const i = this.lineOf(a), j = this.lineOf(b);
-      return i >= 0 && i === j;
-    }
-    sameCircle(a, b) {
-      const i = this.circleOf(a), j = this.circleOf(b);
-      return i >= 0 && i === j;
-    }
-    parallel(a, b) {
-      const i = this.lineOf(a), j = this.lineOf(b);
-      return i >= 0 && j >= 0 && this.dir.find(i) === this.dir.find(j);
-    }
-    perpendicular(a, b) {
-      const i = this.lineOf(a), j = this.lineOf(b);
-      if (i < 0 || j < 0) return false;
-      const ri = this.dir.find(i), rj = this.dir.find(j);
-      return this.perps.some(([x, y]) => {
-        const rx = this.dir.find(x), ry = this.dir.find(y);
-        return rx === ri && ry === rj || rx === rj && ry === ri;
-      });
-    }
-    tangent(a, b) {
-      const ca = this.curveOf(a), cb = this.curveOf(b);
-      if (!ca || !cb) return false;
-      const eq = (u, v) => u.t === v.t && u.i === v.i;
-      return this.tans.some(([x, y]) => eq(x, ca) && eq(y, cb) || eq(x, cb) && eq(y, ca));
-    }
-  };
-  var sortKey = (arr) => [...arr].sort().join(",");
-  var abTag = ([A, V, C2]) => `AB:${V}:${sortKey([A, C2])}`;
-
-  // src/explore/explorer.js
-  var DEFAULTS = {
-    samples: 12,
-    // số cấu hình ngẫu nhiên hợp lệ cần có (ngoài cấu hình gốc)
-    maxAttempts: 150,
-    // số lần thử tối đa (cấu hình suy biến bị loại)
-    perturb: 0.3,
-    // biên độ xê dịch điểm tự do, tính theo kích thước hình
-    tol: 1e-6,
-    // dung sai TƯƠNG ĐỐI theo kích thước hình
-    minSep: 0.012,
-    // hai điểm (vốn khác nhau) gần hơn minSep·kích thước → cấu hình suy biến
-    minAngle: 4,
-    // tam giác có góc < minAngle độ → suy biến
-    maxRadius: 25,
-    // đường tròn bán kính > maxRadius·kích thước → gần suy biến (3 điểm gần thẳng hàng)
-    seed: 12345,
-    maxPoints: 90
-    // giới hạn để tránh bùng nổ tổ hợp
-  };
-  function rng(seed) {
-    let a = seed >>> 0;
-    return () => {
-      a = a + 1831565813 >>> 0;
-      let t2 = a;
-      t2 = Math.imul(t2 ^ t2 >>> 15, t2 | 1);
-      t2 ^= t2 + Math.imul(t2 ^ t2 >>> 7, t2 | 61);
-      return ((t2 ^ t2 >>> 14) >>> 0) / 4294967296;
-    };
-  }
-  function figureScale(vals, pointIds) {
-    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-    for (const id of pointIds) {
-      const v = vals.get(id);
-      if (!v) continue;
-      x1 = Math.min(x1, v.x);
-      x2 = Math.max(x2, v.x);
-      y1 = Math.min(y1, v.y);
-      y2 = Math.max(y2, v.y);
-    }
-    const s = Math.hypot(x2 - x1, y2 - y1);
-    return Number.isFinite(s) && s > 1e-12 ? s : 1;
-  }
-  var TRIANGLE_TYPES = /* @__PURE__ */ new Set([
-    "circumcenter",
-    "orthocenter",
-    "incenter",
-    "centroid",
-    "nine_point_center",
-    "altitude_foot",
-    "incircle_touch",
-    "arc_midpoint",
-    "circle_3pts",
-    "circumcircle",
-    "incircle",
-    "nine_point_circle",
-    "angle_bisector",
-    "excenter",
-    "excircle",
-    "lemoine",
-    "kosnita",
-    "symmedian_foot",
-    "mixtilinear"
-  ]);
-  function findTriangles(doc2, kindOf, { strict = false, drawn = false } = {}) {
-    const tri2 = /* @__PURE__ */ new Map();
-    const addTri = (ids) => {
-      if (new Set(ids).size !== 3 || !ids.every((a) => kindOf.get(a) === "point")) return;
-      const key = [...ids].sort().join(",");
-      if (!tri2.has(key)) tri2.set(key, ids);
-    };
-    for (const s of doc2.steps)
-      if (!drawn && TRIANGLE_TYPES.has(s.type) && s.args.length === 3 && !(strict && (s.type === "circle_3pts" || s.type === "angle_bisector"))) addTri(s.args);
-    const adj = /* @__PURE__ */ new Map();
-    const link = (a, b) => {
-      if (!adj.has(a)) adj.set(a, /* @__PURE__ */ new Set());
-      if (!adj.has(b)) adj.set(b, /* @__PURE__ */ new Set());
-      adj.get(a).add(b);
-      adj.get(b).add(a);
-    };
-    for (const s of doc2.steps) if (["line", "segment", "ray"].includes(s.type)) link(s.args[0], s.args[1]);
-    for (const [a, nb] of adj) for (const b of nb) for (const c of nb) if (a < b && b < c && adj.get(b).has(c)) addTri([a, b, c]);
-    return [...tri2.values()];
-  }
-  function randomOverrides(doc2, base2, scale, rand, perturb) {
-    const ov = /* @__PURE__ */ new Map();
-    for (const s of doc2.steps) {
-      const p = paramsOf(s);
-      if (s.type === "free_point") {
-        const r = perturb * scale * Math.sqrt(rand()), a = 2 * Math.PI * rand();
-        ov.set(s.id, { x: p.x + r * Math.cos(a), y: p.y + r * Math.sin(a) });
-      } else if (s.type === "point_on") {
-        const host = base2.get(s.args[0]);
-        if (!host) continue;
-        let t2 = p.t;
-        if (host.kind === "circle") t2 += (rand() * 2 - 1) * 0.9;
-        else if (host.sub === "segment") t2 = Math.min(0.92, Math.max(0.08, t2 + (rand() * 2 - 1) * 0.3));
-        else if (host.sub === "ray") t2 = Math.max(0.05, t2 * Math.exp((rand() * 2 - 1) * 0.5));
-        else t2 += (rand() * 2 - 1) * 0.4;
-        ov.set(s.id, { t: t2 });
-      } else if (s.type === "point_in") {
-        let u = rand(), v = rand();
-        if (u + v > 1) {
-          u = 1 - u;
-          v = 1 - v;
-        }
-        ov.set(s.id, { u: 0.08 + 0.84 * u, v: 0.08 + 0.84 * v });
-      }
-    }
-    return ov;
-  }
-  function degenerate(doc2, vals, ctx) {
-    const { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments, tangentAtBase } = ctx;
-    const scale = figureScale(vals, pointIds);
-    for (const id of [...pointIds, ...curveIds]) if (!vals.get(id)) return "kh\xF4ng x\xE1c \u0111\u1ECBnh";
-    const sep = opts.minSep * scale;
-    for (let i = 0; i < pointIds.length; i++) {
-      const a = vals.get(pointIds[i]);
-      for (let j = i + 1; j < pointIds.length; j++) {
-        if (sameClassPairs.has(pointIds[i] + "|" + pointIds[j])) continue;
-        const d = dist(a, vals.get(pointIds[j]));
-        if (d < sep && (!baseDist || d < 0.3 * baseDist[i][j])) return "\u0111i\u1EC3m g\u1EA7n tr\xF9ng";
-      }
-    }
-    const sinMin = Math.sin(opts.minAngle * Math.PI / 180);
-    const ang = (P2, Q, R) => Math.abs(cross(sub(Q, P2), sub(R, P2))) / (dist(P2, Q) * dist(P2, R) + 1e-300);
-    for (const t2 of triangles) {
-      const [A, B, C2] = t2.map((a) => vals.get(a));
-      if (Math.min(ang(A, B, C2), ang(B, C2, A), ang(C2, A, B)) < sinMin) return "tam gi\xE1c d\u1EB9t";
-    }
-    if (onSegments) {
-      for (const [pid, sid] of onSegments) if (!insideSegment(vals.get(pid), vals.get(sid))) return "ra ngo\xE0i \u0111o\u1EA1n th\u1EB3ng";
-    }
-    if (baseShape) for (let i = 0; i < shapeTriangles.length; i++) {
-      const sh = triShape(shapeTriangles[i].map((a) => vals.get(a)));
-      if (baseShape[i].some((x, j) => x !== 0 && x !== sh[j])) return "\u0111\u1ED5i d\u1EA1ng tam gi\xE1c";
-    }
-    for (const s of doc2.steps) {
-      const v = vals.get(s.id);
-      if (v && v.kind === "circle" && v.r > opts.maxRadius * scale) return "\u0111\u01B0\u1EDDng tr\xF2n qu\xE1 l\u1EDBn";
-      if (s.type === "intersection" || s.type === "intersection_other") {
-        const r = intersect(vals.get(s.args[0]), vals.get(s.args[1]));
-        if (r.length === 2 && dist(r[0], r[1]) < sep * 2 && !(tangentAtBase && tangentAtBase.has(s.id))) return "g\u1EA7n ti\u1EBFp x\xFAc";
-        if (r.length === 1 && kindOf.get(s.args[0]) === "line" && kindOf.get(s.args[1]) === "line") {
-          const l1 = vals.get(s.args[0]), l2 = vals.get(s.args[1]);
-          if (Math.abs(cross(unit(l1.d), unit(l2.d))) < sinMin) return "hai \u0111\u01B0\u1EDDng g\u1EA7n song song";
-        }
-      }
-    }
-    return null;
-  }
-  var insideSegment = (P2, l) => {
-    const t2 = lineParam(P2, l);
-    return t2 > -1e-9 && t2 < 1 + 1e-9;
-  };
-  function pointsOnSegments(doc2, base2) {
-    const out = [];
-    const typeOf = new Map(doc2.steps.map((s) => [s.id, s.type]));
-    for (const s of doc2.steps) {
-      if (s.type !== "intersection" && s.type !== "intersection_other") continue;
-      const P2 = base2.get(s.id);
-      if (!P2) continue;
-      for (const a of s.args.slice(0, 2)) if (typeOf.get(a) === "segment" && base2.get(a) && insideSegment(P2, base2.get(a))) out.push([s.id, a]);
-    }
-    return out;
-  }
-  function triShape([A, B, C2]) {
-    const area = cross(sub(B, A), sub(C2, A));
-    const cosAt = (P2, Q, R) => dot(sub(Q, P2), sub(R, P2)) / (dist(P2, Q) * dist(P2, R) + 1e-300);
-    const sg = (c) => Math.abs(c) < 0.05 ? 0 : Math.sign(c);
-    return [Math.sign(area), sg(cosAt(A, B, C2)), sg(cosAt(B, C2, A)), sg(cosAt(C2, A, B))];
-  }
-  var T4 = {
-    coincide: (P2, Q, e) => dist(P2, Q) < e,
-    onLine: (P2, l, e) => distPointLine(P2, l) < e,
-    onCircle: (P2, c, e) => Math.abs(dist(P2, c.c) - c.r) < e,
-    collinear: (P2, Q, R, e) => distPointLine(R, lineThrough(P2, Q)) < e,
-    parallel: (l1, l2, e, s) => Math.abs(cross(unit(l1.d), unit(l2.d))) < e / s,
-    perpendicular: (l1, l2, e, s) => Math.abs(dot(unit(l1.d), unit(l2.d))) < e / s,
-    sameLine: (l1, l2, e, s) => T4.parallel(l1, l2, e, s) && distPointLine(l2.p, l1) < e,
-    sameCircle: (c1, c2, e) => dist(c1.c, c2.c) < e && Math.abs(c1.r - c2.r) < e,
-    tangentLC: (l, c, e) => Math.abs(distPointLine(c.c, l) - c.r) < e,
-    tangentCC: (c1, c2, e) => {
-      const d = dist(c1.c, c2.c);
-      if (d < e) return false;
-      return Math.abs(d - (c1.r + c2.r)) < e || Math.abs(d - Math.abs(c1.r - c2.r)) < e;
-    }
-  };
-  function explore(doc2, options = {}) {
-    const opts = { ...DEFAULTS, ...options };
-    const t0 = Date.now();
-    const kindOf = kinds(doc2);
-    const base2 = evaluate(doc2);
-    const pointIds = [], lineIds = [], circleIds = [];
-    for (const s of doc2.steps) {
-      if (!base2.get(s.id)) continue;
-      const kd = kindOf.get(s.id);
-      if (kd === "point") pointIds.push(s.id);
-      else if (kd === "line") lineIds.push(s.id);
-      else if (kd === "circle") circleIds.push(s.id);
-    }
-    if (pointIds.length > opts.maxPoints) pointIds.length = opts.maxPoints;
-    const curveIds = [...lineIds, ...circleIds];
-    const scale0 = figureScale(base2, pointIds);
-    const sameClassPairs = /* @__PURE__ */ new Set();
-    for (let i = 0; i < pointIds.length; i++)
-      for (let j = i + 1; j < pointIds.length; j++)
-        if (dist(base2.get(pointIds[i]), base2.get(pointIds[j])) < opts.tol * scale0) sameClassPairs.add(pointIds[i] + "|" + pointIds[j]);
-    const rand = rng(opts.seed);
-    const triangles = findTriangles(doc2, kindOf);
-    const baseDist = pointIds.map((a) => pointIds.map((b) => dist(base2.get(a), base2.get(b))));
-    const shapeTriangles = findTriangles(doc2, kindOf, { drawn: true });
-    const baseShape = shapeTriangles.map((t2) => t2.every((a) => base2.get(a)) ? triShape(t2.map((a) => base2.get(a))) : [0, 0, 0, 0]);
-    const tangentAtBase = new Set(doc2.steps.filter((s) => (s.type === "intersection" || s.type === "intersection_other") && (() => {
-      const r = intersect(base2.get(s.args[0]), base2.get(s.args[1]));
-      return r.length === 2 && dist(r[0], r[1]) < 1e-6 * scale0;
-    })()).map((s) => s.id));
-    const ctx = { pointIds, curveIds, sameClassPairs, opts, kindOf, triangles, baseDist, baseShape, shapeTriangles, onSegments: pointsOnSegments(doc2, base2), tangentAtBase };
-    const samples = [{ vals: base2, scale: scale0 }];
-    let attempts = 0;
-    const rejected = {};
-    const baseDegenerate = degenerate(doc2, base2, { ...ctx, baseDist: null, baseShape: null, onSegments: null });
-    while (samples.length < opts.samples + 1 && attempts < opts.maxAttempts) {
-      attempts++;
-      const ov = randomOverrides(doc2, base2, scale0, rand, opts.perturb);
-      const vals = evaluate(doc2, ov);
-      const why = degenerate(doc2, vals, ctx);
-      if (why) {
-        rejected[why] = (rejected[why] || 0) + 1;
-        continue;
-      }
-      samples.push({ vals, scale: figureScale(vals, pointIds) });
-    }
-    const all = (fn) => samples.every(({ vals, scale }) => fn(vals, opts.tol * scale, scale));
-    const repOf = new Map(pointIds.map((id) => [id, id]));
-    const classes = [];
-    for (const id of pointIds) {
-      if (repOf.get(id) !== id) continue;
-      const cls = [id];
-      for (const j of pointIds) {
-        if (j === id || repOf.get(j) !== j || !sameClassPairs.has(id + "|" + j)) continue;
-        if (all((v, e) => T4.coincide(v.get(id), v.get(j), e))) {
-          cls.push(j);
-          repOf.set(j, id);
-        }
-      }
-      if (cls.length > 1) classes.push(cls);
-    }
-    const rep = (id) => repOf.get(id) || id;
-    const reps = pointIds.filter((id) => rep(id) === id);
-    const know = new Knowledge(doc2, rep);
-    const special = recognizeSpecial(doc2, samples, reps, circleIds, kindOf, opts, findTriangles(doc2, kindOf, { strict: true }));
-    const rel2 = [];
-    const name2 = (id) => stepById(doc2, id)?.name || id;
-    const desc = (id) => describe(doc2, id);
-    const list = (ids) => ids.map(name2).join(", ");
-    for (const cls of classes) rel2.push({ type: "coincide", ids: cls, text: `${cls.map(name2).join(" \u2261 ")} (tr\xF9ng nhau)` });
-    const lineRep = new Map(lineIds.map((id) => [id, id]));
-    for (let i = 0; i < lineIds.length; i++) {
-      const a = lineIds[i];
-      if (lineRep.get(a) !== a) continue;
-      for (let j = i + 1; j < lineIds.length; j++) {
-        const b = lineIds[j];
-        if (lineRep.get(b) !== b) continue;
-        if (all((v, e, s) => T4.sameLine(v.get(a), v.get(b), e, s))) {
-          lineRep.set(b, a);
-          if (!know.sameLine(a, b)) rel2.push({ type: "same_line", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
-        }
-      }
-    }
-    const circRep = new Map(circleIds.map((id) => [id, id]));
-    for (let i = 0; i < circleIds.length; i++) {
-      const a = circleIds[i];
-      if (circRep.get(a) !== a) continue;
-      for (let j = i + 1; j < circleIds.length; j++) {
-        const b = circleIds[j];
-        if (circRep.get(b) !== b) continue;
-        if (all((v, e) => T4.sameCircle(v.get(a), v.get(b), e))) {
-          circRep.set(b, a);
-          if (!know.sameCircle(a, b)) rel2.push({ type: "same_circle", ids: [a, b], text: `${desc(a)} tr\xF9ng ${desc(b)}` });
-        }
-      }
-    }
-    const lines = lineIds.filter((id) => lineRep.get(id) === id);
-    const circles = circleIds.filter((id) => circRep.get(id) === id);
-    const v0 = base2, e0 = opts.tol * scale0;
-    const onLineSets = /* @__PURE__ */ new Map();
-    for (const l of lines) {
-      const on = reps.filter((P2) => T4.onLine(v0.get(P2), v0.get(l), e0) && all((v, e) => T4.onLine(v.get(P2), v.get(l), e)));
-      onLineSets.set(l, on);
-      const fresh = on.filter((P2) => !lineIdsSameAs(l, lineIds, lineRep).some((ll) => know.pointOnLineObj(P2, ll)));
-      if (fresh.length) rel2.push({ type: "on_line", ids: [l, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(l)}` });
-    }
-    const onCircleSets = /* @__PURE__ */ new Map();
-    for (const c of circles) {
-      const on = reps.filter((P2) => T4.onCircle(v0.get(P2), v0.get(c), e0) && all((v, e) => T4.onCircle(v.get(P2), v.get(c), e)));
-      onCircleSets.set(c, on);
-      const fresh = on.filter((P2) => !lineIdsSameAs(c, circleIds, circRep).some((cc) => know.pointOnCircleObj(P2, cc)));
-      if (fresh.length) rel2.push({ type: "on_circle", ids: [c, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(c)}` });
-    }
-    const seenCol = /* @__PURE__ */ new Set();
-    for (let i = 0; i < reps.length; i++)
-      for (let j = i + 1; j < reps.length; j++) {
-        const A = reps[i], B = reps[j];
-        const pa = v0.get(A), pb = v0.get(B);
-        const set = [A, B];
-        for (let k = 0; k < reps.length; k++) {
-          if (k === i || k === j) continue;
-          if (T4.collinear(pa, pb, v0.get(reps[k]), e0)) set.push(reps[k]);
-        }
-        if (set.length < 3) continue;
-        const verified = [A, B, ...set.slice(2).filter((C2) => all((v, e) => T4.collinear(v.get(A), v.get(B), v.get(C2), e)))];
-        if (verified.length < 3) continue;
-        const key = [...verified].sort().join(",");
-        if (seenCol.has(key)) continue;
-        seenCol.add(key);
-        if ([...onLineSets.values()].some((on) => verified.every((P2) => on.includes(P2)))) continue;
-        if (know.collinear(verified)) continue;
-        rel2.push({ type: "collinear", ids: sortByDoc(doc2, verified), text: `${list(sortByDoc(doc2, verified))} th\u1EB3ng h\xE0ng` });
-      }
-    const seenCyc = /* @__PURE__ */ new Set();
-    const nR = reps.length;
-    for (let i = 0; i < nR; i++)
-      for (let j = i + 1; j < nR; j++)
-        for (let k = j + 1; k < nR; k++) {
-          const A = reps[i], B = reps[j], C2 = reps[k];
-          const circ = circleThrough(v0.get(A), v0.get(B), v0.get(C2));
-          if (!circ || circ.r > opts.maxRadius * scale0) continue;
-          const set = [A, B, C2];
-          for (let m = k + 1; m < nR; m++) if (T4.onCircle(v0.get(reps[m]), circ, e0)) set.push(reps[m]);
-          if (set.length < 4) continue;
-          const key0 = set.join(",");
-          if (seenCyc.has("raw:" + key0)) continue;
-          const full = reps.filter((P2) => T4.onCircle(v0.get(P2), circ, e0));
-          const ok = full.filter((P2, idx) => idx < 3 || all((v, e) => {
-            const c = circleThrough(v.get(full[0]), v.get(full[1]), v.get(full[2]));
-            return c && T4.onCircle(v.get(P2), c, e);
-          }));
-          const key = [...ok].sort().join(",");
-          seenCyc.add("raw:" + key0);
-          if (ok.length < 4 || seenCyc.has(key)) continue;
-          seenCyc.add(key);
-          if ([...onCircleSets.values()].some((on) => ok.every((P2) => on.includes(P2)))) continue;
-          if (know.concyclic(ok)) continue;
-          const ids = sortByDoc(doc2, ok);
-          rel2.push({ type: "concyclic", ids, text: `${list(ids)} \u0111\u1ED3ng vi\xEAn` });
-        }
-    for (let i = 0; i < lines.length; i++)
-      for (let j = i + 1; j < lines.length; j++) {
-        const a = lines[i], b = lines[j];
-        if (T4.parallel(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T4.parallel(v.get(a), v.get(b), e, s)) && !know.parallel(a, b))
-          rel2.push({ type: "parallel", ids: [a, b], text: `${desc(a)} \u2225 ${desc(b)}` });
-        if (T4.perpendicular(v0.get(a), v0.get(b), e0, scale0) && all((v, e, s) => T4.perpendicular(v.get(a), v.get(b), e, s)) && !know.perpendicular(a, b))
-          rel2.push({ type: "perpendicular", ids: [a, b], text: `${desc(a)} \u22A5 ${desc(b)}` });
-      }
-    for (const l of lines)
-      for (const c of circles)
-        if (T4.tangentLC(v0.get(l), v0.get(c), e0) && all((v, e) => T4.tangentLC(v.get(l), v.get(c), e)) && !know.tangent(l, c))
-          rel2.push({ type: "tangent", ids: [l, c], text: `${desc(l)} ti\u1EBFp x\xFAc ${desc(c)}` });
-    for (let i = 0; i < circles.length; i++)
-      for (let j = i + 1; j < circles.length; j++) {
-        const a = circles[i], b = circles[j];
-        if (T4.tangentCC(v0.get(a), v0.get(b), e0) && all((v, e) => T4.tangentCC(v.get(a), v.get(b), e)) && !know.tangent(a, b))
-          rel2.push({ type: "tangent", ids: [a, b], text: `${desc(a)} ti\u1EBFp x\xFAc ${desc(b)}` });
-      }
-    const curves = [...lines, ...circles];
-    const seenConc = /* @__PURE__ */ new Set();
-    for (let i = 0; i < curves.length; i++)
-      for (let j = i + 1; j < curves.length; j++) {
-        const a = curves[i], b = curves[j];
-        for (const X of intersect(v0.get(a), v0.get(b))) {
-          if (dist(X, { x: 0, y: 0 }) > 1e6 || reps.some((P2) => dist(v0.get(P2), X) < 1e3 * e0)) continue;
-          if (pointIds.length && minDistToPoints(X, v0, pointIds) > 20 * scale0) continue;
-          const through = curves.filter((c) => c !== a && c !== b && onCurve(X, v0.get(c), e0));
-          if (!through.length) continue;
-          const set = [a, b, ...through];
-          const key = [...set].sort().join(",");
-          if (seenConc.has(key)) continue;
-          seenConc.add(key);
-          const ok = all((v, e) => intersect(v.get(a), v.get(b)).some((Y) => through.every((c) => onCurve(Y, v.get(c), e))));
-          if (!ok) continue;
-          const allLines = set.every((c) => kindOf.get(c) === "line");
-          rel2.push({ type: "concurrent", ids: set, text: allLines ? `${set.map(desc).join(", ")} \u0111\u1ED3ng quy` : `${set.map(desc).join(", ")} c\xF9ng \u0111i qua m\u1ED9t \u0111i\u1EC3m` });
-        }
-      }
-    const final = rel2.filter((r) => !((r.type === "collinear" || r.type === "concyclic") && rel2.some((o) => o !== r && o.type === r.type && o.ids.length > r.ids.length && r.ids.every((x) => o.ids.includes(x)))));
-    for (const r of final) {
-      r.score = scoreOf(r, doc2, kindOf, special);
-      const notes = [...new Set(r.ids.filter((id) => special.has(id) && !STEP_TYPES[stepById(doc2, id)?.type]?.tag).map((id) => `${describe(doc2, id)} l\xE0 ${special.get(id).label}`))];
-      if (notes.length) r.note = notes.join("; ");
-    }
-    final.sort((a, b) => b.score - a.score || a.ids.length - b.ids.length);
-    return {
-      relations: final,
-      stats: {
-        samples: samples.length - 1,
-        attempts,
-        rejected,
-        baseDegenerate,
-        points: reps.length,
-        lines: lines.length,
-        circles: circles.length,
-        ms: Date.now() - t0
-      }
-    };
-  }
-  function lineIdsSameAs(id, ids, repMap) {
-    return ids.filter((x) => repMap.get(x) === id);
-  }
-  function onCurve(P2, c, e) {
-    return c.kind === "line" ? T4.onLine(P2, c, e) : T4.onCircle(P2, c, e);
-  }
-  function minDistToPoints(X, vals, ids) {
-    let m = Infinity;
-    for (const id of ids) m = Math.min(m, dist(vals.get(id), X));
-    return m;
-  }
-  function sortByDoc(doc2, ids) {
-    const idx = new Map(doc2.steps.map((s, i) => [s.id, i]));
-    return [...ids].sort((a, b) => idx.get(a) - idx.get(b));
-  }
-  var BASE_SCORE = { tangent: 6, concurrent: 5, concyclic: 5, on_circle: 5, collinear: 5, on_line: 3.5, perpendicular: 3, parallel: 3, coincide: 3, same_line: 3, same_circle: 3 };
-  var SPECIAL_NAMES = /* @__PURE__ */ new Set(["O", "I", "H"]);
-  function specialWeight(step) {
-    const tag = STEP_TYPES[step.type]?.tag;
-    if (tag === "circumcircle" || tag === "incircle" || tag === "ninepoint") return 3;
-    if (tag === "O" || tag === "I" || tag === "H") return 3;
-    if (SPECIAL_NAMES.has(step.name)) return 2.5;
-    if (tag === "G" || tag === "N") return 2;
-    return 0;
-  }
-  function scoreOf(r, doc2, kindOf, recognized) {
-    let s = BASE_SCORE[r.type] || 2;
-    let special = 0;
-    for (const id of r.ids) special += Math.max(specialWeight(stepById(doc2, id) || {}), recognized.get(id)?.weight || 0);
-    s += Math.min(special, 7);
-    if (r.ids.some((id) => kindOf.get(id) === "circle")) s += 0.5;
-    return Math.round(s * 10) / 10;
-  }
-  function recognizeSpecial(doc2, samples, reps, circleIds, kindOf, opts, tri2) {
-    const out = /* @__PURE__ */ new Map();
-    const name2 = (id) => stepById(doc2, id)?.name || id;
-    let count = 0;
-    for (const [A, B, C2] of tri2) {
-      if (++count > 12) break;
-      const triName = name2(A) + name2(B) + name2(C2);
-      const at = (v) => [v.get(A), v.get(B), v.get(C2)];
-      const PTS = [
-        ["O", 3, "t\xE2m ngo\u1EA1i ti\u1EBFp", circumcenter],
-        ["H", 3, "tr\u1EF1c t\xE2m", orthocenter],
-        ["I", 3, "t\xE2m n\u1ED9i ti\u1EBFp", incenter],
-        ["G", 2, "tr\u1ECDng t\xE2m", centroid],
-        ["N", 2, "t\xE2m \u0111\u01B0\u1EDDng tr\xF2n Euler", ninePointCenter]
-      ];
-      for (const [, w, label, f] of PTS)
-        for (const P2 of reps) {
-          if (out.has(P2) && out.get(P2).weight >= w) continue;
-          if (samples.every(({ vals, scale }) => {
-            const X = f(...at(vals));
-            return X && dist(X, vals.get(P2)) < opts.tol * scale;
-          }))
-            out.set(P2, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
-        }
-      const CIRC = [
-        [3, "\u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", (a, b, c) => circleThrough(a, b, c)],
-        [3, "\u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp", (a, b, c) => circle(incenter(a, b, c), inradius(a, b, c))],
-        [3, "\u0111\u01B0\u1EDDng tr\xF2n Euler", (a, b, c) => circleThrough(mid(a, b), mid(b, c), mid(c, a))]
-      ];
-      for (const [w, label, f] of CIRC)
-        for (const c of circleIds) {
-          if (out.has(c)) continue;
-          if (samples.every(({ vals, scale }) => {
-            const X = f(...at(vals));
-            const Y = vals.get(c);
-            return X && Y && T4.sameCircle(X, Y, opts.tol * scale);
-          }))
-            out.set(c, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
-        }
-    }
-    return out;
-  }
-
   // src/ui/explorePanel.js
   init_dialog();
   var TYPE_LABEL = {
@@ -24145,7 +25034,7 @@ ${tk.v}
     same_line: "Tr\xF9ng nhau",
     same_circle: "Tr\xF9ng nhau"
   };
-  var esc6 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  var esc7 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   function setupExplore(app) {
     const pane = document.getElementById("tab-explore");
     let result = null;
@@ -24163,7 +25052,7 @@ ${tk.v}
         if (!result.relations.length) html += '<div class="empty">Kh\xF4ng t\xECm th\u1EA5y quan h\u1EC7 n\xE0o ngo\xE0i c\xE1c quan h\u1EC7 hi\u1EC3n nhi\xEAn.</div>';
         html += '<div class="rel-list">' + result.relations.map((r, i) => `<div class="rel ${i === active ? "active" : ""}" data-i="${i}">
           <span class="rel-score" title="\u0110i\u1EC3m x\u1EBFp h\u1EA1ng">${r.score}</span>
-          <div class="rel-body"><div class="rel-type">${TYPE_LABEL[r.type] || r.type}</div><div class="rel-text">${esc6(r.text)}</div>${r.note ? `<div class="rel-note">${esc6(r.note)}</div>` : ""}</div>
+          <div class="rel-body"><div class="rel-type">${TYPE_LABEL[r.type] || r.type}</div><div class="rel-text">${esc7(r.text)}</div>${r.note ? `<div class="rel-note">${esc7(r.note)}</div>` : ""}</div>
         </div>`).join("") + "</div>";
       }
       pane.innerHTML = html;
@@ -24247,6 +25136,178 @@ ${tk.v}
       };
       R.addExtra({ type: "point", pts: [common], style: { color: "#f59e0b", fill: "#fde68a", size: 7 } });
     }
+  }
+
+  // src/export/asy.js
+  var f32 = (v) => {
+    const s = (Math.round(v * 1e3) / 1e3).toFixed(3).replace(/\.?0+$/, "");
+    return s === "-0" ? "0" : s;
+  };
+  var xy2 = (P2) => `(${f32(P2.x)},${f32(P2.y)})`;
+  var PT_PER_PX2 = 0.4;
+  function varName(name2, used) {
+    let base2 = (name2 || "P").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[đĐ]/g, "d").replace(/'/g, "p").replace(/[^A-Za-z0-9]/g, "");
+    if (!base2 || /^\d/.test(base2)) base2 = "P" + base2;
+    if (/^(dot|draw|fill|label|circle|arc|pair|real|path|pen|dir|unitsize|size|cycle|black|white|red|blue|green|gray|E|N|S|W|NE|NW|SE|SW|I)$/.test(base2)) base2 += "_";
+    let n = base2, i = 2;
+    while (used.has(n)) n = base2 + i++;
+    used.add(n);
+    return n;
+  }
+  function clipLine2(l, box, tMin = -Infinity) {
+    let t0 = tMin, t1 = Infinity;
+    const { p, d } = l;
+    for (const [pp, dd, lo, hi] of [[p.x, d.x, box.x1, box.x2], [p.y, d.y, box.y1, box.y2]]) {
+      if (Math.abs(dd) < 1e-14) {
+        if (pp < lo || pp > hi) return null;
+        continue;
+      }
+      let a = (lo - pp) / dd, b = (hi - pp) / dd;
+      if (a > b) [a, b] = [b, a];
+      t0 = Math.max(t0, a);
+      t1 = Math.min(t1, b);
+    }
+    if (t0 >= t1) return null;
+    return [add(p, mul(d, t0)), add(p, mul(d, t1))];
+  }
+  var rgb = (hex) => {
+    const h = hex.replace("#", "");
+    const c = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    return c.every((x) => x < 0.15) ? null : `rgb(${c.map(f32).join(",")})`;
+  };
+  function toAsymptote(doc2, opts = {}) {
+    const width = opts.width || 12;
+    const theme2 = opts.theme || "mono";
+    const vals = opts.values || evaluate(doc2);
+    const k = kinds(doc2);
+    const visible = doc2.steps.filter((s) => isShown(doc2, s) && vals.get(s.id));
+    const pts = [];
+    for (const s of visible) {
+      const v = vals.get(s.id);
+      if (v.kind === "point") pts.push(v);
+      if (v.kind === "circle") pts.push({ x: v.c.x - v.r, y: v.c.y - v.r }, { x: v.c.x + v.r, y: v.c.y + v.r });
+    }
+    if (!pts.length) return "// H\xECnh tr\u1ED1ng\n";
+    const x1 = Math.min(...pts.map((p) => p.x)), x2 = Math.max(...pts.map((p) => p.x));
+    const y1 = Math.min(...pts.map((p) => p.y)), y2 = Math.max(...pts.map((p) => p.y));
+    const m = Math.max(x2 - x1, y2 - y1, 1e-6) * 0.08;
+    const box = { x1: x1 - m, x2: x2 + m, y1: y1 - m, y2: y2 + m };
+    const unit2 = width / (box.x2 - box.x1);
+    const cm = (c) => c / unit2;
+    const full = (s) => styleOf(s, k.get(s.id), theme2);
+    const baseWidth = styleOf({ type: "line" }, "line", theme2).width;
+    const pen = (s, extra = []) => {
+      const st = full(s);
+      const p = [];
+      const c = rgb(st.color || "#000000");
+      if (c) p.push(c);
+      if (st.dash) p.push("dashed");
+      if (st.width && Math.abs(st.width - baseWidth) > 1e-9) p.push(`linewidth(${f32(st.width * PT_PER_PX2)})`);
+      p.push(...extra);
+      return p.length ? ", " + p.join("+") : "";
+    };
+    const used = /* @__PURE__ */ new Set();
+    const vname = /* @__PURE__ */ new Map();
+    for (const s of visible) if (k.get(s.id) === "point") vname.set(s.id, varName(s.name, used));
+    for (const s of visible) if (k.get(s.id) === "mark" || ["segment", "circle"].includes(s.type)) for (const a of s.args) {
+      if (!vname.has(a) && vals.get(a) && k.get(a) === "point") vname.set(a, varName(stepById(doc2, a)?.name || a, used));
+    }
+    const ref = (id) => vname.get(id);
+    const centerOf = /* @__PURE__ */ new Map();
+    for (const s of doc2.steps) if (s.type === "center" && !centerOf.has(s.args[0])) centerOf.set(s.args[0], s.id);
+    const autoDirs = autoLabelDirs(doc2, vals);
+    const out = { pairs: [], fills: [], circles: [], lines: [], marks: [], dots: [] };
+    for (const [id, n] of vname) out.pairs.push(`pair ${n} = ${xy2(vals.get(id))};${stepById(doc2, id)?.hidden ? " // \u0111i\u1EC3m \u1EA9n" : ""}`);
+    for (const s of visible) {
+      const v = vals.get(s.id);
+      const st = full(s);
+      const kind = k.get(s.id);
+      if (kind === "circle") {
+        const cId = s.type === "circle" || s.type === "circle_radius" ? s.args[0] : centerOf.get(s.id);
+        const cAt = cId && vname.has(cId) ? cId : [...vname.keys()].find((id) => dist(vals.get(id), v.c) < 1e-9 * (1 + v.r));
+        const center = cAt ? ref(cAt) : xy2(v.c);
+        if ((st.fill || 0) > 0) out.fills.push(`fill(circle(${center}, ${f32(v.r)}), ${rgb(st.fillColor || st.color || "#000000") || "black"}+opacity(${f32(st.fill)}));`);
+        out.circles.push(`draw(circle(${center}, ${f32(v.r)})${pen(s)}); // ${s.name || ""}`);
+      } else if (kind === "line") {
+        const sub4 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
+        if (sub4 === "segment" && s.type === "segment") out.lines.push(`draw(${ref(s.args[0])}--${ref(s.args[1])}${pen(s)});`);
+        else if (sub4 === "segment") out.lines.push(`draw(${xy2(v.p)}--${xy2(add(v.p, v.d))}${pen(s)});`);
+        else {
+          const rg = opts.trimLines ? trimmedRange(v, sub4, visible.filter((x) => k.get(x.id) === "point").map((x) => vals.get(x.id)), 1e-9 * (box.x2 - box.x1), cm(0.35), cm(1.1)) : null;
+          const seg = rg ? [add(v.p, mul(v.d, rg[0])), add(v.p, mul(v.d, rg[1]))] : clipLine2(v, box, sub4 === "ray" ? 0 : -Infinity);
+          if (seg) out.lines.push(`draw(${sub4 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy2(seg[0])}--${xy2(seg[1])}${pen(s)}); // ${sub4 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${s.name || ""}`);
+        }
+      } else if (s.type === "polygon") {
+        const path2 = s.args.map(ref).join("--") + "--cycle";
+        out.fills.push(`fill(${path2}, ${rgb(st.fillColor || st.color || "#000000") || "black"}+opacity(${f32(st.fill ?? 0.1)}));`);
+        if (st.border) out.lines.push(`draw(${path2}${pen(s)});`);
+      } else if (s.type === "angle_mark") {
+        const { A, B, C: C2 } = v;
+        const a1 = Math.atan2(A.y - B.y, A.x - B.x);
+        let diff = Math.atan2(C2.y - B.y, C2.x - B.x) - a1;
+        while (diff <= -Math.PI) diff += 2 * Math.PI;
+        while (diff > Math.PI) diff -= 2 * Math.PI;
+        const deg = (r) => f32(r * 180 / Math.PI);
+        const r0 = cm(0.45);
+        const p = pen(s);
+        if (Math.abs(Math.abs(diff) - Math.PI / 2) < 1e-6 && (s.style || {}).right !== false) {
+          const r = r0 * 0.7;
+          out.marks.push(`draw(${ref(s.args[1])}+${f32(r)}*dir(${deg(a1)})--${ref(s.args[1])}+${f32(r)}*dir(${deg(a1)})+${f32(r)}*dir(${deg(a1 + diff)})--${ref(s.args[1])}+${f32(r)}*dir(${deg(a1 + diff)})${p}); // g\xF3c vu\xF4ng`);
+        } else {
+          const n = Math.max(1, Math.min(4, st.arcs || 1));
+          for (let i = 0; i < n; i++) out.marks.push(`draw(arc(${ref(s.args[1])}, ${f32(r0 + i * cm(0.09))}, ${deg(a1)}, ${deg(a1 + diff)})${p});`);
+        }
+      } else if (s.type === "segment_mark") {
+        const { A, B } = v;
+        const L2 = dist(A, B);
+        const u = { x: (B.x - A.x) / L2, y: (B.y - A.y) / L2 }, nn = { x: -u.y, y: u.x };
+        const M = mid(A, B);
+        const kk = Math.max(1, Math.min(4, st.ticks || 1));
+        const h = cm(0.13), gap = cm(0.08);
+        for (let i = 0; i < kk; i++) {
+          const off = (i - (kk - 1) / 2) * gap;
+          const c = { x: M.x + off * u.x, y: M.y + off * u.y };
+          out.marks.push(`draw(${xy2({ x: c.x - h * nn.x, y: c.y - h * nn.y })}--${xy2({ x: c.x + h * nn.x, y: c.y + h * nn.y })}${pen(s)});`);
+        }
+      } else if (v.kind === "locus") {
+        const W = box.x2 - box.x1, inBox = (p) => p && p.x > box.x1 - W && p.x < box.x2 + W && p.y > box.y1 - W && p.y < box.y2 + W;
+        let run3 = [];
+        const flush = () => {
+          if (run3.length > 1) out.lines.push(`draw(${run3.map(xy2).join("--")}${pen(s)}); // qu\u1EF9 t\xEDch`);
+          run3 = [];
+        };
+        for (const p of v.closed ? [...v.pts, v.pts[0]] : v.pts) {
+          if (inBox(p)) run3.push(p);
+          else flush();
+        }
+        flush();
+      } else if (kind === "point") {
+        const dir = st.labelOffset || (autoDirs.get(s.id) ? [autoDirs.get(s.id).x, autoDirs.get(s.id).y] : [1, 1]);
+        const ang = f32(Math.atan2(dir[1], dir[0]) * 180 / Math.PI);
+        const lbl = st.showLabel !== false && s.name ? `"${texLabel(s.name)}", ` : "";
+        const c = rgb((st.hollow ? st.color : st.fillColor || st.color) || "#000000");
+        out.dots.push(`dot(${lbl}${ref(s.id)}, ${lbl ? `dir(${ang}), ` : ""}${c ? c + ", " : ""}${st.hollow ? "FillDraw(white)" : "Fill"});`);
+      }
+    }
+    const L = [];
+    L.push(`// ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
+    L.push("// Asymptote thu\u1EA7n; tr\xEAn AoPS d\xE1n gi\u1EEFa [asy] v\xE0 [/asy]. \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc: s\u1EEDa unitsize.");
+    L.push(`unitsize(${f32(unit2)}cm);`);
+    L.push(`defaultpen(fontsize(10pt)+linewidth(${f32(baseWidth * PT_PER_PX2)}));`);
+    L.push("dotfactor = 5;");
+    const sec = (title, arr) => {
+      if (arr.length) {
+        L.push(`// ${title}`);
+        L.push(...arr);
+      }
+    };
+    sec("To\u1EA1 \u0111\u1ED9 c\xE1c \u0111i\u1EC3m", out.pairs);
+    sec("T\xF4 n\u1EC1n", out.fills);
+    sec("\u0110\u01B0\u1EDDng tr\xF2n", out.circles);
+    sec("\u0110\u01B0\u1EDDng th\u1EB3ng, \u0111o\u1EA1n th\u1EB3ng, tia", out.lines);
+    sec("\u0110\xE1nh d\u1EA5u g\xF3c, \u0111o\u1EA1n b\u1EB1ng nhau", out.marks);
+    sec("\u0110i\u1EC3m v\xE0 nh\xE3n", out.dots);
+    return L.join("\n") + "\n";
   }
 
   // src/ui/main.js
@@ -29443,14 +30504,14 @@ ${tk.v}
     const id = "img" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     app.registerImage(id, src);
     app.commit((doc2) => {
-      (doc2.images || (doc2.images = [])).push({ id, x: round(tl.x), y: round(tl.y), w: round(sw / v.scale), h: round(sh / v.scale) });
+      (doc2.images || (doc2.images = [])).push({ id, x: round2(tl.x), y: round2(tl.y), w: round2(sw / v.scale), h: round2(sh / v.scale) });
     });
     if (app.toolId !== "move") app.setTool("move");
     app.selectImage(id);
     toast('\u0110\xE3 ch\xE8n \u1EA3nh \u2013 k\xE9o \u0111\u1EC3 d\u1EDDi, k\xE9o g\xF3c d\u01B0\u1EDBi ph\u1EA3i \u0111\u1EC3 \u0111\u1ED5i c\u1EE1; "Kho\xE1 l\xE0m n\u1EC1n" \u0111\u1EC3 \u0111\u1ED3 h\xECnh l\xEAn tr\xEAn', 5e3);
     return id;
   }
-  var round = (x) => Math.round(x * 1e4) / 1e4;
+  var round2 = (x) => Math.round(x * 1e4) / 1e4;
 
   // node_modules/@marijn/find-cluster-break/src/index.js
   var rangeFrom = [];
@@ -49211,14 +50272,14 @@ ${tk.v}
     return [
       "# T\u1EF1 \u0111\u1ED5i trong c\xF4ng th\u1EE9c (g\xF5 xong l\xE0 \u0111\u1ED5i)",
       "[t\u1EF1 \u0111\u1ED5i]",
-      ...r.auto.map(([a, b]) => `${a} => ${esc7(b)}`),
+      ...r.auto.map(([a, b]) => `${a} => ${esc8(b)}`),
       "",
       "# G\xF5 t\u1EAFt: g\xF5 r\u1ED3i nh\u1EA5n Tab",
       "[g\xF5 t\u1EAFt]",
-      ...r.short.map(([a, b]) => `${a} => ${esc7(b)}`)
+      ...r.short.map(([a, b]) => `${a} => ${esc8(b)}`)
     ].join("\n");
   }
-  var esc7 = (s) => s.replace(/\n/g, "\\n");
+  var esc8 = (s) => s.replace(/\n/g, "\\n");
   function parseRules(text2) {
     const r = { auto: [], short: [] };
     let cur2 = null;
@@ -49570,15 +50631,15 @@ ${tk.v}
     function placeAt(b, px, py) {
       if (b.anchor === "figure") {
         const P2 = app.toUser(px, py);
-        b.x = round2(P2.x);
-        b.y = round2(P2.y);
+        b.x = round3(P2.x);
+        b.y = round3(P2.y);
       } else if (b.anchor === "point" && app.values.get(b.pt)) {
         const q = app.toScreen(app.values.get(b.pt));
         b.dx = Math.round(px - q.x);
         b.dy = Math.round(py - q.y);
       } else {
-        b.fx = round2(px / W());
-        b.fy = round2(py / H());
+        b.fx = round3(px / W());
+        b.fy = round3(py / H());
       }
     }
     function render3() {
@@ -49695,7 +50756,7 @@ ${tk.v}
       const b = byId(id);
       if (!b) return;
       if (a === "smaller" || a === "bigger") app.commit(() => {
-        b.font = Math.max(0.6, Math.min(3, round2((b.font || 1) * (a === "bigger" ? 1.15 : 1 / 1.15))));
+        b.font = Math.max(0.6, Math.min(3, round3((b.font || 1) * (a === "bigger" ? 1.15 : 1 / 1.15))));
       });
       else if (a === "collapse") app.commit(() => {
         b.collapsed = !b.collapsed;
@@ -49812,13 +50873,13 @@ ${tk.v}
       const b = { id, role, text: "", anchor: "screen", w, ...extra };
       if (b.fx == null && b.anchor === "screen") {
         if (role === "loigiai") {
-          b.fx = round2(Math.max(0.02, (W() - w - 12) / W()));
-          b.fy = round2(12 / H());
+          b.fx = round3(Math.max(0.02, (W() - w - 12) / W()));
+          b.fy = round3(12 / H());
         } else if (role === "de") {
-          b.fx = round2(12 / W());
-          b.fy = round2(12 / H());
+          b.fx = round3(12 / W());
+          b.fy = round3(12 / H());
         } else {
-          b.fx = round2(Math.max(0.02, (W() / 2 - w / 2) / W()));
+          b.fx = round3(Math.max(0.02, (W() / 2 - w / 2) / W()));
           b.fy = 0.35;
         }
       }
@@ -49916,7 +50977,7 @@ ${tk.v}
     render3();
     return api;
   }
-  var round2 = (x) => Math.round(x * 1e4) / 1e4;
+  var round3 = (x) => Math.round(x * 1e4) / 1e4;
 
   // src/ui/main.js
   function start() {
@@ -49929,16 +50990,16 @@ ${tk.v}
     }));
     document.getElementById("exit-projector").onclick = () => app.setProjector(false);
     const exMenu = document.getElementById("example-menu");
-    const esc8 = (t2) => String(t2).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const esc9 = (t2) => String(t2).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
     const groups = [];
     for (const e of THU_VIEN) {
       let g = groups.find((x) => x.name === e.nhom);
       if (!g) groups.push(g = { name: e.nhom, items: [] });
-      g.items.push(`<button data-lib="${e.id}" title="${esc8(e.de)}">${esc8(e.ten)}</button>`);
+      g.items.push(`<button data-lib="${e.id}" title="${esc9(e.de)}">${esc9(e.ten)}</button>`);
     }
-    groups.push({ name: "H\xECnh m\u1EABu", items: Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${esc8(e.title)}</button>`) });
+    groups.push({ name: "H\xECnh m\u1EABu", items: Object.entries(EXAMPLES).map(([k, e]) => `<button data-example="${k}">${esc9(e.title)}</button>`) });
     const GROUP_LABEL = { "C\u1EA5u h\xECnh": "C\u1EA5u h\xECnh hay g\u1EB7p" };
-    exMenu.innerHTML = groups.map((g) => `<div class="ex-col"><div class="menu-label">${esc8(GROUP_LABEL[g.name] || g.name)}</div>${g.items.join("")}</div>`).join("");
+    exMenu.innerHTML = groups.map((g) => `<div class="ex-col"><div class="menu-label">${esc9(GROUP_LABEL[g.name] || g.name)}</div>${g.items.join("")}</div>`).join("");
     app.loadExample = (key) => {
       const ex = EXAMPLES[key];
       if (!ex) return;
@@ -49968,6 +51029,15 @@ ${tk.v}
         "M\xE3 TikZ",
         toTikZ(doc2, { values: app.values, theme: app.theme, trimLines: app.renderer.trimLines }),
         `<div class="modal-body">Theo b\u1ED9 ki\u1EC3u \u0111ang ch\u1ECDn (<b>${app.theme === "mono" ? "\u0110\u01A1n s\u1EAFc" : "S\xE1ch gi\xE1o khoa"}</b>). D\xE1n v\xE0o t\xE0i li\u1EC7u LaTeX (ch\u1EC9 c\u1EA7n <code>\\usepackage{tikz}</code>). \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc b\u1EB1ng c\xE1ch s\u1EEDa <code>x=\u2026, y=\u2026</code>.</div>`
+      );
+    };
+    document.getElementById("btn-asy").onclick = () => {
+      const vis = app.visibleSet();
+      const doc2 = vis ? { ...app.doc, steps: app.doc.steps.map((s) => vis.has(s.id) ? s : { ...s, hidden: true }) } : app.doc;
+      textDialog(
+        "M\xE3 Asymptote",
+        toAsymptote(doc2, { values: app.values, theme: app.theme, trimLines: app.renderer.trimLines }),
+        '<div class="modal-body">Asymptote thu\u1EA7n (kh\xF4ng c\u1EA7n g\xF3i th\xEAm). Tr\xEAn AoPS: d\xE1n gi\u1EEFa <code>[asy]</code> v\xE0 <code>[/asy]</code>. \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc b\u1EB1ng c\xE1ch s\u1EEDa <code>unitsize</code>.</div>'
       );
     };
     document.getElementById("btn-share").onclick = () => shareLink(app);
@@ -50013,7 +51083,7 @@ ${tk.v}
     initDownloads();
     initShare(app).then(() => app.renderTabs());
     window.__app = app;
-    window.GeoCore = { ...core_exports, Builder, EXAMPLES, THU_VIEN, codec: codec_exports, explore, toTikZ };
+    window.GeoCore = { ...core_exports, Builder, EXAMPLES, THU_VIEN, codec: codec_exports, explore, toTikZ, toAsymptote };
     return app;
   }
   async function exportLatex(app) {

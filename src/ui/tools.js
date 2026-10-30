@@ -66,6 +66,8 @@ export const TOOLS = [
     ['Chọn đỉnh thứ nhất của tam giác', 'Chọn đỉnh thứ hai', 'Chọn đỉnh thứ ba'],
     (p, app) => [{ type: 'point_in', args: p, params: app.uvInTriangle(p, app.extraPos) }],
     { extraClick: 'Bấm vào trong tam giác để đặt điểm (khi kéo, điểm luôn ở trong tam giác)' }),
+  T('solve_point', 'Điểm thoả điều kiện', 'Cơ bản', '⌖', ['point'],
+    ['Bấm vào chỗ GẦN điểm cần tìm, rồi gõ điều kiện (vd: góc PAB = góc PBC, góc PBC = góc PCA)'], () => []),
   T('fixed_point', 'Điểm cố định', 'Quỹ tích', '⊛', ['curve', 'point'],
     ['Chọn đường thẳng/đường tròn thay đổi và điểm thay đổi (điểm tự do, trên đường hoặc trong tam giác) – thứ tự bất kỳ', 'Chọn nốt đối tượng còn lại'],
     (p) => [{ type: 'fixed_point', args: p, params: { which: 0 }, name: 'X' }, { type: 'fixed_point', args: p, params: { which: 1 }, name: 'Y' }],
@@ -91,7 +93,7 @@ export const TOOL_BY_ID = Object.fromEntries([...TOOLS, ...LIBRARY].map((t) => [
  */
 export const TOOLBAR = [
   { id: 'move', label: 'Chọn / kéo', icon: 'move', tools: ['move'] },
-  { id: 'point', label: 'Điểm', icon: 'point', tools: ['point', 'intersect', 'midpoint', 'point_in'] },
+  { id: 'point', label: 'Điểm', icon: 'point', tools: ['point', 'intersect', 'midpoint', 'point_in', 'solve_point'] },
   { id: 'circle', label: 'Đường tròn', icon: 'circle', tools: ['circle', 'circle_3pts', 'circle_radius'] },
   { id: 'line', label: 'Đoạn, tia, đường thẳng', icon: 'line', tools: ['segment', 'ray', 'line'] },
   { id: 'construct', label: 'Dựng', icon: 'construct', tools: ['perpendicular', 'parallel', 'perp_bisector', 'angle_bisector', 'ext_bisector', 'projection', 'reflect', 'angle_point', 'angle_line'] },

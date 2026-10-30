@@ -6,6 +6,9 @@ import { intersect } from '../core/geom.js';
 import { PALETTE, styleOf, isDraggableType } from '../core/styles.js';
 import { labelHTML } from '../core/names.js';
 import { TOOL_BY_ID } from './tools.js';
+import { claimsFor, CLAIMS } from '../explore/check.js';
+import { specialCases } from '../explore/special.js';
+import { showCheck } from './checkPanel.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -153,6 +156,12 @@ export function renderProps(app) {
     const v = app.values.get(s.id);
     if (v) html += `<div class="row coords">(${v.x.toFixed(3)}; ${v.y.toFixed(3)})</div>`;
   }
+  // bản 1.8: kiểm tra nhận định về các đối tượng đang chọn (theo thứ tự chọn)
+  const claims = claimsFor(app.doc, ids);
+  if (claims.length) html += `<div class="row check-row">Kiểm tra ${claims.map((c, i) => `<button class="mini" data-claim="${i}">${CLAIMS[c.type].title}?</button>`).join('')}</div>`;
+  // bản 1.8: đưa nhanh về trường hợp đặc biệt (một điểm đang chọn)
+  const specials = one && kind === 'point' ? specialCases(app.doc, app.values).filter((c) => c.about[0] === s.id || (c.key.startsWith('deu:') && c.about.includes(s.id))).slice(0, 8) : [];
+  if (specials.length) html += `<div class="row special-row">Đưa về ${specials.map((c, i) => `<button class="mini" data-special="${i}" title="${esc(c.label)}">${esc(shortLabel(c))}</button>`).join('')}</div>`;
   if (one && (kind === 'line' || kind === 'circle')) html += `<label class="row" title="Đường phụ: nét đứt, ẩn/hiện tất cả cùng lúc bằng Ctrl+Shift+D. Bỏ chọn: đường chính."><input id="p-aux" type="checkbox" ${s.aux ? 'checked' : ''}> Đường phụ (bỏ chọn: đường chính)</label>`;
   if (one && kind !== 'mark') html += `<label class="row"><input id="p-trace" type="checkbox" ${app.traceIds.has(s.id) ? 'checked' : ''}> Để lại vết khi kéo</label>`;
   if (one && s.args.length && STEP_TYPES[s.type] && !['locus', 'fixed_point'].includes(s.type)) {
@@ -179,6 +188,12 @@ export function renderProps(app) {
   host.querySelectorAll('[data-ticks]').forEach((b) => (b.onclick = () => app.setStyle(ids, { ticks: +b.dataset.ticks })));
   if (q('#p-swap')) q('#p-swap').onclick = () => app.setParams(s.id, { which: 1 - (paramsOf(s).which || 0) });
   if (q('#p-arc')) q('#p-arc').onclick = () => app.setParams(s.id, { contains: !paramsOf(s).contains });
+  host.querySelectorAll('[data-claim]').forEach((b) => (b.onclick = () => showCheck(app, claims[+b.dataset.claim])));
+  host.querySelectorAll('[data-special]').forEach((b) => (b.onclick = () => {
+    const c = specials[+b.dataset.special];
+    app.applyOverrides(c.patch);
+    app.showHint(`Đã đưa về: ${c.label} – Ctrl+Z để trở lại`);
+  }));
   if (q('#p-aux')) q('#p-aux').onchange = (e) => app.setStepProp(s.id, 'aux', e.target.checked);
   if (q('#p-trace')) q('#p-trace').onchange = (e) => app.toggleTrace(s.id, e.target.checked);
   host.querySelectorAll('[data-redef]').forEach((b) => (b.onclick = () => app.startRedefine(s.id, +b.dataset.redef)));
@@ -186,6 +201,11 @@ export function renderProps(app) {
   if (q('#p-join')) q('#p-join').onchange = (e) => app.setStepProp(s.id, 'joinPrev', e.target.checked);
   q('#p-del').onclick = () => app.deleteSteps(ids);
   placeCard(app, host, ids);
+}
+
+/** Nhãn ngắn trên nút "Đưa về": "cân tại A", "trung điểm BC", "trọng tâm"… */
+function shortLabel(c) {
+  return c.label.replace(/^tam giác \S+ /, '').replace(/^\S+ là /, '').replace(/^\S+ (đối xứng)/, '$1');
 }
 
 /** Thẻ nổi không được che chính đối tượng đang chọn: nếu che thì chuyển xuống góc dưới bên phải. */
