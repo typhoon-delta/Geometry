@@ -10,5 +10,5 @@ test('thước đo Khám phá trên các hình mẫu: không thụt lùi', () =>
   assert.ok(s.goalFound >= 23, `kết luận được báo: ${s.goalFound}`);
   assert.ok(s.goalTop3 >= 13, `kết luận trong top 3: ${s.goalTop3}`);
   assert.ok(s.goalProved >= 3, `kết luận chứng minh được: ${s.goalProved}`);
-  assert.ok(s.lemmaProved >= 4, `bổ đề chứng minh được: ${s.lemmaProved}`);
+  assert.ok(s.lemmaProved >= 6, `bổ đề chứng minh được: ${s.lemmaProved}`);
 });

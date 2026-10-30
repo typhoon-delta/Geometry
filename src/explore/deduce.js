@@ -234,6 +234,21 @@ export class Deducer {
     for (const p of C.pts) this.radius(i, p, f);
     for (const t of this.tangents) if (this.circleRoot(t.circle) === i) this.tangentRadius(t, f);
   }
+  /** Toạ độ đường tròn của nút (từ đối tượng dựng, tâm, hoặc 3 điểm). */
+  circleValue(i) {
+    const C = this.circles[i];
+    for (const o of C.objs) { const v = this.V(o); if (v && v.kind === 'circle') return v; }
+    const ps = [...C.pts];
+    if (C.center && ps.length) return { c: this.V(C.center), r: G.dist(this.V(C.center), this.V(ps[0])) };
+    if (ps.length >= 3) return G.circleThrough(this.V(ps[0]), this.V(ps[1]), this.V(ps[2]));
+    return null;
+  }
+  circleName(i) {
+    const C = this.circles[i];
+    for (const o of C.objs) { const n = stepById(this.doc, o)?.name; if (n) return n; }
+    if (C.center) return `(${this.name(C.center)})`;
+    return `(${[...C.pts].slice(0, 3).map((p) => this.name(p)).join('')})`;
+  }
   /** Bán kính: OA = OP với A là điểm đầu tiên trên đường tròn. */
   radius(i, p, f) {
     const C = this.circles[i];
@@ -304,6 +319,32 @@ export class Deducer {
       if (r) return r;
     }
     return null;
+  }
+  /** Đảo phương tích: P = AB ∩ CD (đã biết thẳng hàng) và PA·PB = PC·PD ⇒ A, B, C, D đồng viên. */
+  impliesCyclicPow(a, b, c, d) {
+    for (const [x, y, u, v] of [[a, b, c, d], [a, c, b, d], [a, d, b, c]]) {
+      for (const P of this.pts) {
+        if ([x, y, u, v].includes(P)) continue;
+        const l1 = this.lineThrough(x, y), l2 = this.lineThrough(u, v);
+        if (l1 === null || l2 === null || !this.lines[this.lineRoot(l1)].pts.has(P) || !this.lines[this.lineRoot(l2)].pts.has(P)) continue;
+        const r = this.len.implies(this.powRow(P, x, y, u, v));
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+  powRow(P, A, B, C, D) { return [['S' + pairKey(P, A), 1], ['S' + pairKey(P, B), 1], ['S' + pairKey(P, C), -1], ['S' + pairKey(P, D), -1]]; }
+  /** Các cát tuyến từ P tới đường tròn ci: đường thẳng (đã biết) qua P chứa ≥ 2 điểm đã biết của đường tròn. */
+  secants(P, ci) {
+    const C = this.circles[ci];
+    const out = [];
+    for (let i = 0; i < this.lines.length; i++) {
+      const L = this.lines[i];
+      if (!L.alive || L.rep !== i || !L.pts.has(P)) continue;
+      const on = [...L.pts].filter((q) => q !== P && C.pts.has(q));
+      if (on.length >= 2) out.push({ key: i, pts: on.slice(0, 2), why: [L.why.get(P), ...on.slice(0, 2).map((q) => C.why.get(q))].filter((z) => z !== undefined) });
+    }
+    return out;
   }
   impliesCollinear(a, b, c) {
     for (const [x, y, z] of [[a, b, c], [b, a, c], [c, a, b]]) {
@@ -435,6 +476,11 @@ export class Deducer {
           const li = this.lineThrough(a[0], a[1]) ?? this.newLine([], []);
           this.addToLine(li, a[0], f); this.addToLine(li, a[1], f); this.addToLine(li, s.id, f);
           this.len.add([['S' + pairKey(a[0], s.id), 1], ['S' + pairKey(s.id, a[1]), -1]], f);
+          // đường tròn đường kính AB (tâm là trung điểm): điểm nhìn AB dưới góc vuông nằm trên nó
+          const ci = this.newCircle([]);
+          this.setCenter(ci, s.id, f);
+          this.addToCircle(ci, a[0], f); this.addToCircle(ci, a[1], f);
+          this.diameters.push({ circle: ci, a: a[0], b: a[1], why: f });
           break;
         }
         case 'reflect': case 'reflect_pts': {
@@ -560,7 +606,31 @@ export class Deducer {
       const d = pts.filter((p) => p !== X).map((p) => [p, G.dist(V(p), V(X))]).filter(([, r]) => r > e).sort((x, y) => x[1] - y[1]);
       for (let i = 0; i + 1 < d.length; i++) for (let j = i + 1; j < d.length && d[j][1] - d[i][1] < e; j++) iso.push([X, d[i][0], d[j][0]]);
     }
-    return { lines: [...lines.values()], circles: [...circles.values()], iso };
+    // tam giác đồng dạng: chữ ký = các góc (có hướng) – chỉ các tam giác có ít nhất hai cạnh nằm trên đường đã biết
+    const similar = [], simSign = new Map();
+    const tris = [];
+    const lim2 = Math.min(pts.length, 24);
+    for (let i = 0; i < lim2; i++) for (let j = 0; j < lim2; j++) for (let k = 0; k < lim2; k++) {
+      if (i === j || j === k || i === k) continue;
+      const [A, B, C] = [pts[i], pts[j], pts[k]].map(V);
+      const area = G.cross(G.sub(B, A), G.sub(C, A));
+      if (Math.abs(area) < 1e-6 * this.scale * this.scale) continue;
+      const ga = G.directedAngle(B, A, C), gb = G.directedAngle(A, B, C);
+      tris.push({ t: [pts[i], pts[j], pts[k]], key: `${Math.round(Math.abs(ga) * 1e5)}|${Math.round(Math.abs(gb) * 1e5)}`, s: Math.sign(area) });
+    }
+    const byKey = new Map();
+    for (const T of tris) { if (!byKey.has(T.key)) byKey.set(T.key, []); byKey.get(T.key).push(T); }
+    for (const list of byKey.values()) {
+      if (list.length < 2 || list.length > 12) continue;
+      for (let x = 0; x < list.length; x++) for (let y = x + 1; y < list.length; y++) {
+        const T1 = list[x].t, T2 = list[y].t;
+        if (T1.every((p) => T2.includes(p))) continue;
+        const key = `sim:${T1.join()}:${T2.join()}`;
+        simSign.set(key, list[x].s === list[y].s ? 1 : -1);
+        similar.push([T1, T2]);
+      }
+    }
+    return { lines: [...lines.values()], circles: [...circles.values()], iso, similar: similar.slice(0, 400), simSign };
   }
 
   run() {
@@ -583,6 +653,101 @@ export class Deducer {
         this.len.add([['S' + pairKey(X, B.a), 1], ['S' + pairKey(X, B.b), -1]], f);
         changed = true;
       }
+      // điểm cách tâm một bán kính ⇒ thuộc đường tròn; điểm nhìn đường kính dưới góc vuông ⇒ thuộc đường tròn
+      for (let ci = 0; ci < this.circles.length; ci++) {
+        const C = this.circles[ci];
+        if (!C.alive || C.rep !== ci || C.pts.size < 1) continue;
+        const cv = this.circleValue(ci);
+        if (!cv) continue;
+        for (const X of this.pts) {
+          if (C.pts.has(X) || X === C.center || Math.abs(G.dist(this.V(X), cv.c) - cv.r) > this.e) continue;
+          let uses = null, how = '';
+          if (C.center) {
+            const A = [...C.pts][0];
+            uses = this.len.implies([['S' + pairKey(C.center, X), 1], ['S' + pairKey(C.center, A), -1]]);
+            how = `${this.name(C.center)}${this.name(X)} = ${this.name(C.center)}${this.name(A)}`;
+          }
+          if (!uses) for (const d of this.diameters) {
+            if (this.circleRoot(d.circle) !== ci || X === d.a || X === d.b) continue;
+            uses = this.ang.implies([[this.dirAB(X, d.a), 1], [this.dirAB(X, d.b), -1]]);
+            if (uses) { uses = [...uses, d.why]; how = `∠${this.name(d.a)}${this.name(X)}${this.name(d.b)} = 90°`; break; }
+          }
+          if (!uses) continue;
+          const f = this.fact('cyc', `${this.name(X)} thuộc đường tròn ${this.circleName(ci)} (vì ${how})`, 'radius-circle', uses);
+          this.addToCircle(ci, X, f);
+          changed = true;
+        }
+      }
+      // đường kính: tâm nằm giữa hai điểm của đường tròn ⇒ góc nội tiếp chắn nửa đường tròn
+      for (let ci = 0; ci < this.circles.length; ci++) {
+        const C = this.circles[ci];
+        if (!C.alive || C.rep !== ci || !C.center) continue;
+        const ps = [...C.pts];
+        for (let x = 0; x < ps.length; x++) for (let y = x + 1; y < ps.length; y++) {
+          const li = this.lineThrough(ps[x], C.center);
+          if (li === null || !this.lines[this.lineRoot(li)].pts.has(ps[y])) continue;
+          if (this.diameters.some((d) => this.circleRoot(d.circle) === ci && new Set([d.a, d.b, ps[x], ps[y]]).size === 2)) continue;
+          const f = this.fact('diam', `${this.name(ps[x])}${this.name(ps[y])} là đường kính của ${this.circleName(ci)}`, 'diameter', [C.why.get(ps[x]), C.why.get(ps[y]), this.lines[this.lineRoot(li)].why.get(ps[y])].filter((z) => z !== undefined));
+          const d = { circle: ci, a: ps[x], b: ps[y], why: f };
+          this.diameters.push(d);
+          for (const q of ps) this.thales(d, q, f);
+          changed = true;
+        }
+      }
+      // tam giác đồng dạng (góc – góc) ⇒ tỉ số cạnh
+      for (const [T1, T2] of cand.similar) {
+        const key = `sim:${T1.join()}:${T2.join()}`;
+        if (this.factKey.has(key)) continue;
+        const [a, b, c] = T1, [x, y, z] = T2;
+        const sg = cand.simSign.get(key);
+        const u1 = this.ang.implies(this.angleRow(this.dirAB(a, b), this.dirAB(a, c), this.dirAB(x, y), this.dirAB(x, z), sg));
+        const u2 = u1 && this.ang.implies(this.angleRow(this.dirAB(b, a), this.dirAB(b, c), this.dirAB(y, x), this.dirAB(y, z), sg));
+        if (!u2) continue;
+        const nm = (t) => t.map((q) => this.name(q)).join('');
+        const f = this.fact('sim', `Tam giác ${nm(T1)} đồng dạng tam giác ${nm(T2)} (góc – góc)`, 'similar-aa', [...u1, ...u2], null, key);
+        const S = (p, q) => 'S' + pairKey(p, q);
+        this.len.add([[S(a, b), 1], [S(x, y), -1], [S(b, c), -1], [S(y, z), 1]], f);
+        this.len.add([[S(a, b), 1], [S(x, y), -1], [S(a, c), -1], [S(x, z), 1]], f);
+        changed = true;
+      }
+      // phương tích: P nằm trên hai cát tuyến PAB, PCD của cùng một đường tròn ⇒ PA·PB = PC·PD
+      for (let ci = 0; ci < this.circles.length; ci++) {
+        const C = this.circles[ci];
+        if (!C.alive || C.rep !== ci || C.pts.size < 3) continue;
+        for (const P of this.pts) {
+          if (C.pts.has(P)) continue;
+          const sec = this.secants(P, ci);
+          for (let x = 1; x < sec.length; x++) {
+            const key = `pow:${ci}:${P}:${sec[0].key}:${sec[x].key}`;
+            if (this.factKey.has(key)) continue;
+            const [A, B] = sec[0].pts, [Cc, D] = sec[x].pts;
+            const f = this.fact('pow', `${this.name(P)}${this.name(A)}·${this.name(P)}${this.name(B)} = ${this.name(P)}${this.name(Cc)}·${this.name(P)}${this.name(D)} (phương tích của ${this.name(P)} với ${this.circleName(ci)})`, 'power', [...sec[0].why, ...sec[x].why], null, key);
+            this.len.add(this.powRow(P, A, B, Cc, D), f);
+            changed = true;
+          }
+        }
+      }
+      // trục đẳng phương: W, Z chung của hai đường tròn; P có cùng phương tích với hai đường tròn ⇒ P, W, Z thẳng hàng
+      for (const set of cand.lines) for (const P of set) {
+        for (let i = 0; i < this.circles.length; i++) for (let j = i + 1; j < this.circles.length; j++) {
+          const C1 = this.circles[i], C2 = this.circles[j];
+          if (!C1.alive || C1.rep !== i || !C2.alive || C2.rep !== j || C1.pts.has(P) || C2.pts.has(P)) continue;
+          const common = set.filter((q) => q !== P && C1.pts.has(q) && C2.pts.has(q));
+          if (common.length < 2) continue;
+          const [W, Z] = common;
+          const li = this.lineThrough(W, Z);
+          if (li !== null && this.lines[this.lineRoot(li)].pts.has(P)) continue;
+          const s1 = this.secants(P, i), s2 = this.secants(P, j);
+          let uses = null;
+          for (const a of s1) { for (const b of s2) { uses = this.len.implies(this.powRow(P, a.pts[0], a.pts[1], b.pts[0], b.pts[1])); if (uses) break; } if (uses) break; }
+          if (!uses) continue;
+          const f = this.fact('col', `${this.name(P)} có cùng phương tích với ${this.circleName(i)} và ${this.circleName(j)} nên nằm trên trục đẳng phương ${this.name(W)}${this.name(Z)}`, 'radical-axis', uses);
+          let L = this.lineThrough(W, Z);
+          if (L === null) { L = this.newLine([], []); this.addToLine(L, W, f); this.addToLine(L, Z, f); }
+          this.addToLine(L, P, f);
+          changed = true;
+        }
+      }
       // thẳng hàng
       for (const set of cand.lines) {
         const [A, B] = set;
@@ -604,8 +769,8 @@ export class Deducer {
         const [A, B, C3] = ci >= 0 ? set.filter((p) => this.circles[ci].pts.has(p)) : set;
         for (const D of set) {
           if ([A, B, C3].includes(D) || (ci >= 0 && this.circles[ci].pts.has(D))) continue;
-          // góc nội tiếp (có hướng, mod 180°): ∠(C A, C B) = ∠(D A, D B)
-          const uses = this.impliesCyclic(A, B, C3, D);
+          // góc nội tiếp (có hướng, mod 180°): ∠(C A, C B) = ∠(D A, D B); hoặc đảo của phương tích
+          const uses = this.impliesCyclic(A, B, C3, D) || this.impliesCyclicPow(A, B, C3, D);
           if (!uses) continue;
           const f = this.fact('cyc', `${this.ptsName([A, B, C3, D])} cùng thuộc một đường tròn`, 'angle-concyclic', uses, { pts: [A, B, C3, D], seg: [A, B], at: [C3, D] });
           if (ci < 0) { ci = this.newCircle([]); for (const p of [A, B, C3]) this.addToCircle(ci, p, f); }
