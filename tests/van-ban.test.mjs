@@ -1,7 +1,12 @@
 // Văn bản trong khung chữ (bản 1.4): chia bước, công thức KaTeX, liên kết tên điểm, xuất LaTeX.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { splitSteps, stepFrames, tokenize, linkNames, renderStep, toLatex, renameInText } from '../src/text/markup.js';
+import { toLatexHandout, toLatexSet } from '../src/export/latex.js';
 
 test('chia bước bằng ---, @k gắn khung trình bày', () => {
   const st = splitSteps('Gọi $M$ là trung điểm.\n---\nTa có $MB=MC$.\n--- @5\nVậy …');
@@ -60,4 +65,49 @@ test('đổi tên điểm: chữ trong khung đổi theo (công thức, từ to�
   assert.equal(renameInText('$AB$ và AB', names, new Map([['a', 'B'], ['b', 'A']])), '$BA$ và BA');
   // không có gì đổi thì giữ nguyên từng ký tự
   assert.equal(renameInText(t, names, new Map([['c', 'C']])), t);
+});
+
+test('lệnh LaTeX ngoài công thức: \\textbf, \\(..\\), align*, itemize, \\\\, ~, --', () => {
+  const html = renderStep('\\textbf{Lời giải.} Ta có \\(AB = AC\\) và \\emph{do đó}~xong -- hết.\\\\Dòng mới\n\\begin{align*} a &= b \\\\ c &= d \\end{align*}\n\n\\begin{enumerate}\n\\item Ý một\n\\item Ý \\textbf{hai}\n\\end{enumerate}');
+  assert.match(html, /<b>Lời giải\.<\/b>/);
+  assert.match(html, /<i>do đó<\/i>&nbsp;xong – hết\.<br>Dòng mới/);
+  assert.match(html, /katex-display/);
+  assert.match(html, /<ol><li>Ý một<\/li><li>Ý <b>hai<\/b><\/li><\/ol>/);
+  assert.doesNotMatch(html.replace(/<annotation[\s\S]*?<\/annotation>/g, ''), /\\textbf|\\begin|\\item|tex-err|katex-error/);
+});
+
+test('\\widehat, \\overrightarrow: không chèn <br> vào hình SVG của KaTeX', () => {
+  const html = renderStep('$\\widehat{ABC}$ và\n$\\overrightarrow{AB}$', { names: [{ name: 'A', id: 's1' }] });
+  const svgs = html.match(/<svg[\s\S]*?<\/svg>/g) || [];
+  assert.ok(svgs.length >= 2);
+  for (const s of svgs) assert.doesNotMatch(s, /<br>/);
+  assert.match(html, /và<br>/, 'xuống dòng trong chữ vẫn là <br>');
+});
+
+test('xuất LaTeX: giữ nguyên lệnh LaTeX, thoát %, không chèn \\\\ vào công thức', () => {
+  const tex = toLatex('\\textbf{Lời giải.} Ta có $\\widehat{ABC}=90^\\circ$ và 50% số điểm\n$$\na = b\n$$\nVì vậy\n\\begin{itemize}\n\\item một\n\\end{itemize}');
+  assert.match(tex, /^\\textbf\{Lời giải\.\} Ta có \$\\widehat\{ABC\}=90\^\\circ\$ và 50\\% số điểm/);
+  assert.match(tex, /\\\[\na = b\n\\\]/, 'công thức riêng dòng giữ nguyên, không có \\\\ bên trong');
+  assert.match(tex, /\nVì vậy\n\\begin\{itemize\}\n\\item một\n\\end\{itemize\}/, 'không ngắt dòng quanh \\begin, \\item');
+  assert.equal(toLatex('Dòng 1\nDòng 2'), 'Dòng 1 \\\\\nDòng 2');
+  assert.equal(toLatex('a\\%b 5% x_1'), 'a\\%b 5\\% x\\_1');
+});
+
+const hasLatex = (() => {
+  try { execFileSync('pdflatex', ['--version'], { stdio: 'ignore' }); return true; } catch { return false; }
+})();
+
+test('phiếu LaTeX (một bài và cả buổi) biên dịch được bằng pdflatex', { skip: !hasLatex && 'không có pdflatex' }, () => {
+  const lib = JSON.parse(readFileSync(new URL('../examples/thu-vien/imo2008-1.json', import.meta.url), 'utf8'));
+  const doc = { ...lib, boxes: [
+    { id: 'a', role: 'de', text: 'Chứng minh $\\widehat{BHC} = 180^\\circ - \\widehat{A}$, $\\overrightarrow{HA} \\ne \\vec{0}$, cung $\\wideparen{BC}$, 50% số điểm, $AB \\ssong CD$, $\\cung{AB}$.' },
+    { id: 'b', role: 'loigiai', text: '\\textbf{Ý a.} Ta có\n\\begin{align*}\n\\widehat{BHC} &= 180^\\circ - \\widehat{HBC} \\\\\n&= 180^\\circ - \\widehat{A}.\n\\end{align*}\nDo đó\n$$\nM_aA_1 = M_aA_2\n$$\n---\n\\begin{itemize}\n\\item $\\triangle ABC \\backsim \\triangle A\'B\'C\'$;\n\\item $\\measuredangle (AB, CD) = 90^\\circ$, \\(AB \\nparallel CD\\).\n\\end{itemize}\nVậy **sáu điểm** đồng viên. (đpcm)\n\n- ý một\n- ý hai' },
+  ] };
+  const dir = mkdtempSync(join(tmpdir(), 'phieu-'));
+  writeFileSync(join(dir, 'phieu.tex'), toLatexHandout(doc, {}).tex);
+  writeFileSync(join(dir, 'buoi.tex'), toLatexSet([{ title: 'IMO 2008 – Bài 1', docs: [doc] }, { title: 'Bài 2', docs: [doc] }], { title: 'Buổi 5', subtitle: '11 Toán', loiGiai: true }).tex);
+  for (const f of ['phieu', 'buoi']) {
+    execFileSync('pdflatex', ['-interaction=nonstopmode', '-halt-on-error', f + '.tex'], { cwd: dir, stdio: 'pipe' });
+    assert.ok(existsSync(join(dir, f + '.pdf')));
+  }
 });

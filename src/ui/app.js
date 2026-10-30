@@ -16,6 +16,7 @@ import { renderStepList, renderProps, renderToolOptions } from './panels.js';
 import { renameInText } from '../text/markup.js';
 import { tabDirty, tabDoc, isEmptyDoc } from './share.js';
 import { downloadFile } from './download.js';
+import { keyOf } from './shortcuts.js';
 
 const HISTORY_MAX = 200;
 
@@ -496,6 +497,53 @@ export class App {
   }
 
   /** Lấy (hoặc tạo) một điểm tại vị trí bấm: điểm có sẵn / giao điểm / điểm trên đường / điểm tự do. */
+  /**
+   * Chỗ hai đường cắt nhau ngay dưới con trỏ mà CHƯA có điểm (bản 1.6): {a, b, P} hoặc null. Dùng cho công cụ Chọn:
+   * bấm vào chỗ cắt là có giao điểm (như Sketchpad), rê chuột tới thì hiện trước một dấu.
+   */
+  crossingAt(sx, sy, hits = this.hitTest(sx, sy), radius = 9) {
+    if (hits.some((h) => h.kind === 'point' && h.d < radius + 3)) return null;
+    const curves = hits.filter((h) => h.kind === 'line' || h.kind === 'circle').slice(0, 4);
+    if (curves.length < 2) return null;
+    const P = this.toUser(sx, sy);
+    const px = 1 / this.view.scale;
+    let best = null;
+    for (let i = 0; i < curves.length; i++)
+      for (let j = i + 1; j < curves.length; j++)
+        for (const r of G.intersect(this.values.get(curves[i].id), this.values.get(curves[j].id))) {
+          const d = G.dist(r, P) / px;
+          // a là đường dựng trước (gợi ý đọc "giao điểm của d1 và d2")
+          const [u, w] = (curves[i].order || 0) <= (curves[j].order || 0) ? [curves[i], curves[j]] : [curves[j], curves[i]];
+          if (d < radius && (!best || d < best.d)) best = { d, a: u.id, b: w.id, P: r };
+        }
+    if (!best) return null;
+    // đã có điểm trùng chỗ cắt (vd điểm bị ẩn nhãn, hay nằm ngoài vùng bấm điểm) → không tạo trùng
+    if (this.existingPointAt(best.P, 0.01)) return null;
+    return best;
+  }
+
+  /** Dấu báo trước "bấm để lấy giao điểm" khi rê chuột tới chỗ cắt (công cụ Chọn). */
+  showCrossMark(cross) {
+    const key = cross ? `${cross.a}|${cross.b}` : null;
+    if (key === this.crossKey) return;
+    this.clearCrossMark();
+    if (!cross) return;
+    this.crossKey = key;
+    const P = cross.P;
+    this.crossMark = this.renderer.addExtra({ type: 'point', pts: [() => P], style: { color: '#3150d6', fill: '#dfe6ff', size: 7 } });
+    const nm = (id) => stepById(this.doc, id)?.name || '';
+    this.showHint(`Bấm để lấy giao điểm của ${nm(cross.a)} và ${nm(cross.b)}`);
+  }
+
+  clearCrossMark() {
+    if (!this.crossMark) return;
+    this.renderer.extra = this.renderer.extra.filter((x) => x !== this.crossMark);
+    this.crossMark = null;
+    this.crossKey = null;
+    this.view.requestDraw();
+    this.showHint();
+  }
+
   resolvePoint(sx, sy, hits) {
     const pHit = hits.find((h) => h.kind === 'point');
     if (pHit) return pHit.id;
@@ -576,6 +624,55 @@ export class App {
     this.showHint();
     renderToolOptions(this);
     renderProps(this);
+  }
+
+  /**
+   * Gọi công cụ bằng phím tắt / bảng lệnh (bản 1.6). Đang chọn sẵn các đối tượng hợp với công cụ thì DỰNG NGAY trên
+   * chúng (chọn trước, dựng sau – như Sketchpad); chọn mới đủ một phần thì dùng làm các lần chọn đầu.
+   */
+  activateTool(id) {
+    const sel = [...this.selection].filter((x) => stepById(this.doc, x));
+    this.setTool(id);
+    const tool = TOOL_BY_ID[id];
+    if (!sel.length || !tool || this.mode !== 'edit') return;
+    const k = kinds(this.doc);
+    if (tool.id === 'point') return;
+    if (tool.id === 'intersect') {
+      const cs = sel.filter((x) => k.get(x) === 'line' || k.get(x) === 'circle');
+      if (cs.length !== 2 || sel.length !== 2) return;
+      this.beginTx();
+      const n0 = this.doc.steps.length;
+      this.createIntersections(cs[0], cs[1], null);
+      this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
+      return this.finishTool();
+    }
+    if (tool.segmentShortcut && sel.length === 1 && stepById(this.doc, sel[0]).type === 'segment') {
+      this.beginTx();
+      this.picks = [...stepById(this.doc, sel[0]).args];
+      return this.completeTool(tool);
+    }
+    if (tool.inputs[0] === '...point') {
+      const pts = sel.filter((x) => k.get(x) === 'point');
+      if (pts.length < 3 || pts.length !== sel.length) return;
+      this.beginTx();
+      this.picks = pts;
+      return this.completeTool(tool);
+    }
+    // ghép theo kiểu đối tượng, giữ thứ tự đã chọn; chọn thừa hoặc không hợp thì thôi (dùng công cụ như thường)
+    const rest = [...sel], picks = [];
+    for (const t of tool.inputs) {
+      const j = rest.findIndex((x) => argAccepts(t, k.get(x)));
+      if (j < 0) break;
+      picks.push(rest.splice(j, 1)[0]);
+    }
+    if (rest.length || !picks.length) return;
+    this.beginTx();
+    this.picks = picks;
+    if (picks.length === tool.inputs.length) return this.completeTool(tool);
+    this.selection = new Set(picks);
+    this.refresh();
+    this.startPreview(tool);
+    this.showHint();
   }
 
   cancelTool() {
@@ -710,6 +807,11 @@ export class App {
     const k = kinds(this.doc);
     const pts = ids.filter((id) => k.get(id) === 'point' && !stepById(this.doc, id).hidden);
     this.selection = new Set(pts.length === 1 ? pts : ids.slice(0, 1));
+    // không dựng gì mới vì điểm cần dựng đã có (vd trực tâm H): chọn lại điểm đó và báo
+    if (!ids.length && specs.reused && specs.reused.length) {
+      this.selection = new Set([specs.reused[specs.reused.length - 1]]);
+      toast(`Đã có sẵn trên hình: ${this.name(specs.reused[specs.reused.length - 1])}`);
+    }
     this.finishTool();
   }
 
@@ -771,7 +873,10 @@ export class App {
         if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
         const hits = this.hitTest(sx, sy);
         let cursor = '';
-        if (this.toolId === 'move' || this.mode === 'present') {
+        const cross = this.toolId === 'move' && this.mode === 'edit' && !ev.shiftKey ? this.crossingAt(sx, sy, hits) : null;
+        this.showCrossMark(cross);
+        if (cross) cursor = 'copy';
+        else if (this.toolId === 'move' || this.mode === 'present') {
           const h = hits[0];
           if (h && h.kind === 'point' && isDraggableType(stepById(this.doc, h.id).type)) cursor = 'grab';
           else if (h && this.mode === 'edit') cursor = 'pointer';
@@ -845,6 +950,20 @@ export class App {
     if (this.panning) { this.startPan(e); return; } // ngón thứ hai: chụm để phóng
     this.mouse = this.toUser(sx, sy);
 
+    // Alt + bấm: ẩn ngay đối tượng được bấm (đường phụ sau khi đã lấy giao điểm…), công cụ nào cũng được
+    if (e.altKey && this.mode === 'edit' && !this.picks.length) {
+      const h = this.hitTest(sx, sy)[0];
+      if (h) {
+        e.stopPropagation();
+        e.preventDefault();
+        const s = stepById(this.doc, h.id);
+        this.selection.delete(h.id);
+        this.setStepProp(h.id, 'hidden', true);
+        toast(`Đã ẩn ${s.name || 'đối tượng'} – Ctrl+Z để hiện lại`);
+        return;
+      }
+    }
+
     if (this.toolId !== 'move' && this.mode === 'edit') {
       e.stopPropagation();
       e.preventDefault();
@@ -872,6 +991,19 @@ export class App {
       e.preventDefault();
       this.startDrag(e, { kind: 'point', id: h.id, start: JSON.stringify(this.doc) });
       if (this.mode === 'edit') this.select(h.id, e.shiftKey, false);
+      return;
+    }
+    // bấm đúng chỗ hai đường cắt nhau (chưa có điểm): lấy giao điểm luôn, chọn sẵn để gõ tên
+    const cross = this.mode === 'edit' && !e.shiftKey ? this.crossingAt(sx, sy, hits) : null;
+    if (cross) {
+      e.stopPropagation();
+      e.preventDefault();
+      this.beginTx();
+      const ids = this.createIntersections(cross.a, cross.b, this.toUser(sx, sy));
+      this.endTx();
+      this.clearCrossMark();
+      this.selection = new Set(ids.length ? [ids[0]] : []);
+      this.afterChange();
       return;
     }
     if (h) {
@@ -1324,7 +1456,8 @@ export class App {
         const many = g.tools.length > 1 || g.menu;
         const btn = (id) => {
           const t = TOOL_BY_ID[id];
-          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t.label)}"><span class="ti">${t.icon}</span><span class="tl">${escapeHTML(t.label)}</span></button>`;
+          const kb = keyOf(id);
+          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t.label)}${kb ? ` (${kb})` : ''}"><span class="ti">${t.icon}</span><span class="tl">${escapeHTML(t.label)}</span>${kb ? `<kbd>${kb}</kbd>` : ''}</button>`;
         };
         // nhóm có menu con (thư viện "Công cụ"): mỗi mục menu mở ra danh sách công cụ bên phải
         const items = g.submenus

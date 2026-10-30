@@ -48,9 +48,13 @@ export const MACROS = {
   '\\vecto': '\\overrightarrow{#1}',
 };
 
+// môi trường công thức viết thẳng ngoài $…$ (như trong tệp .tex): hiện như công thức riêng dòng
+const MATH_ENVS = ['align', 'align*', 'equation', 'equation*', 'gather', 'gather*', 'multline', 'multline*', 'flalign', 'flalign*', 'eqnarray', 'eqnarray*', 'alignat', 'alignat*'];
+
 /**
- * Tách một đoạn văn bản thành các mẩu: {t:'text'|'math'|'dmath'|'img', v}. Công thức được nhận trước nên dấu * trong
- * công thức không bị hiểu là chữ nghiêng.
+ * Tách một đoạn văn bản thành các mẩu: {t:'text'|'math'|'dmath'|'img', v, raw?, o?, c?}. Công thức được nhận trước
+ * nên dấu * trong công thức không bị hiểu là chữ nghiêng. Nhận: $…$, \(…\), $$…$$, \[…\], \begin{align*}…\end{align*}
+ * (và các môi trường công thức khác), ![](img:ID). o/c: dấu mở/đóng gốc (để ghi lại đúng như cũ).
  */
 export function tokenize(src) {
   const out = [];
@@ -59,10 +63,20 @@ export function tokenize(src) {
   while (i < src.length) {
     const c = src[i];
     if (c === '\\' && src[i + 1] === '$') { buf += '$'; raw += '\\$'; i += 2; continue; }
-    if (c === '\\' && src[i + 1] === '[') {
-      const j = src.indexOf('\\]', i + 2);
-      if (j >= 0) { flush(); out.push({ t: 'dmath', v: src.slice(i + 2, j), o: '\\[', c: '\\]' }); i = j + 2; continue; }
+    if (c === '\\' && (src[i + 1] === '[' || src[i + 1] === '(')) {
+      const close = src[i + 1] === '[' ? '\\]' : '\\)';
+      const j = src.indexOf(close, i + 2);
+      if (j >= 0) { flush(); out.push({ t: src[i + 1] === '[' ? 'dmath' : 'math', v: src.slice(i + 2, j), o: src.slice(i, i + 2), c: close }); i = j + 2; continue; }
     }
+    if (c === '\\' && src.startsWith('\\begin{', i)) {
+      const m = /^\\begin\{([a-zA-Z]+\*?)\}/.exec(src.slice(i));
+      if (m && MATH_ENVS.includes(m[1])) {
+        const endTag = `\\end{${m[1]}}`;
+        const j = src.indexOf(endTag, i);
+        if (j >= 0) { flush(); out.push({ t: 'dmath', v: src.slice(i, j + endTag.length), o: '', c: '', env: true }); i = j + endTag.length; continue; }
+      }
+    }
+    if (c === '\\' && i + 1 < src.length) { buf += c + src[i + 1]; raw += c + src[i + 1]; i += 2; continue; } // \% \{ \\ … giữ nguyên cặp
     if (c === '$' && src[i + 1] === '$') {
       const j = src.indexOf('$$', i + 2);
       if (j >= 0) { flush(); out.push({ t: 'dmath', v: src.slice(i + 2, j), o: '$$', c: '$$' }); i = j + 2; continue; }
@@ -85,8 +99,67 @@ export function tokenize(src) {
 }
 
 /** **đậm**, *nghiêng* trong chữ thường (đã thoát HTML). */
-function inlineText(s) {
+function markdownInline(s) {
   return esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<i>$2</i>');
+}
+
+// lệnh chữ của LaTeX (ngoài công thức) → thẻ HTML; nội dung trong ngoặc được hiểu tiếp (lồng nhau được)
+const TEXT_WRAP = {
+  textbf: ['<b>', '</b>'], textit: ['<i>', '</i>'], emph: ['<i>', '</i>'], textsl: ['<i>', '</i>'], underline: ['<u>', '</u>'],
+  texttt: ['<code>', '</code>'], textsc: ['<span style="font-variant:small-caps">', '</span>'], textrm: ['', ''], textsf: ['', ''],
+  textup: ['', ''], textnormal: ['', ''], mbox: ['', ''], text: ['', ''],
+  section: ['<b class="tb-h">', '</b>'], subsection: ['<b class="tb-h">', '</b>'], subsubsection: ['<b>', '</b>'], paragraph: ['<b>', '</b>'],
+};
+const TEXT_SYM = { '\\': '<br>', newline: '<br>', par: '<br>', '%': '%', '&': '&amp;', '#': '#', _: '_', '{': '{', '}': '}', $: '$', ' ': ' ', ',': '&thinsp;',
+  ldots: '…', dots: '…', quad: '&emsp;', qquad: '&emsp;&emsp;', textbackslash: '\\', LaTeX: 'LaTeX', TeX: 'TeX', S: '§', copyright: '©' };
+const TEXT_SKIP = new Set(['noindent', 'indent', 'medskip', 'bigskip', 'smallskip', 'centering', 'hfill', 'vfill', 'newpage', 'clearpage', 'raggedright', 'raggedleft', 'item']);
+const TEXT_SKIP_ARG = new Set(['vspace', 'hspace', 'label', 'vspace*', 'hspace*', 'index']);
+
+/** Chữ thường có lệnh LaTeX (\textbf{…}, \\, ~, --, \% …) + markdown → HTML. */
+function textHTML(src) {
+  let out = '', run = '';
+  const flushRun = () => {
+    if (!run) return;
+    out += markdownInline(run.replace(/---/g, '—').replace(/--/g, '–').replace(/``/g, '“').replace(/''/g, '”')).replace(/~/g, '&nbsp;').replace(/\n/g, '<br>');
+    run = '';
+  };
+  let i = 0;
+  while (i < src.length) {
+    if (src[i] !== '\\') { run += src[i++]; continue; }
+    const m = /^\\([A-Za-z]+\*?|.)/.exec(src.slice(i));
+    if (!m) { run += src[i++]; continue; }
+    const name = m[1].replace(/\*$/, '');
+    let j = i + m[0].length;
+    if (TEXT_WRAP[name] || TEXT_SKIP_ARG.has(m[1]) || TEXT_SKIP_ARG.has(name)) {
+      while (src[j] === ' ') j++;
+      if (src[j] === '[') { const k = src.indexOf(']', j); if (k > 0) j = k + 1; }
+      if (src[j] === '{') {
+        const k = matchBrace(src, j);
+        flushRun();
+        if (TEXT_WRAP[name]) out += TEXT_WRAP[name][0] + textHTML(src.slice(j + 1, k - 1)) + TEXT_WRAP[name][1];
+        i = k;
+        continue;
+      }
+    }
+    if (TEXT_SYM[m[1]] != null) { flushRun(); out += TEXT_SYM[m[1]]; i = j; continue; }
+    if (TEXT_SKIP.has(name)) { i = j; if (src[i] === ' ') i++; continue; }
+    run += m[0]; // lệnh không biết: để nguyên cho thầy/cô thấy
+    i = j;
+  }
+  flushRun();
+  return out;
+}
+
+/** Danh sách viết kiểu LaTeX (\begin{itemize} \item … \end{itemize}) → dòng kiểu markdown để hiển thị. */
+function latexListsToMarkdown(text) {
+  return text.replace(/\\begin\{(itemize|enumerate)\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (_, env, body) => {
+    const items = body.split(/\\item\b/).slice(1).map((x) => x.replace(/\s*\n\s*/g, ' ').trim());
+    return '\n\n' + items.map((x) => {
+      const lab = /^\[([^\]]*)\]\s*/.exec(x);
+      const t = lab ? `${lab[1]} ${x.slice(lab[0].length)}` : x;
+      return (env === 'enumerate' && !lab ? '1. ' : '- ') + t;
+    }).join('\n') + '\n\n';
+  });
 }
 
 /**
@@ -207,16 +280,16 @@ export function renderMath(tex, display, names) {
 export function renderStep(text, opts = {}) {
   const blocks = [];
   // gom dòng thành khối: đoạn văn / danh sách; công thức riêng dòng có thể trải nhiều dòng nên tách mẩu trên cả đoạn
-  const paras = String(text ?? '').split(/\n\s*\n/);
+  const paras = latexListsToMarkdown(String(text ?? '')).split(/\n\s*\n/);
   for (const para of paras) {
     if (!para.trim()) continue;
     const lines = para.split('\n');
     if (lines.every((l) => /^\s*([-*]|\d+\.)\s+/.test(l) || !l.trim())) {
-      const ordered = /^\s*\d+\./.test(lines[0]);
+      const ordered = /^\s*\d+\./.test(lines.find((l) => l.trim()));
       const items = lines.filter((l) => l.trim()).map((l) => `<li>${renderInline(l.replace(/^\s*([-*]|\d+\.)\s+/, ''), opts)}</li>`);
       blocks.push(ordered ? `<ol>${items.join('')}</ol>` : `<ul>${items.join('')}</ul>`);
     } else {
-      blocks.push(`<p>${renderInline(para, opts).replace(/\n/g, '<br>')}</p>`);
+      blocks.push(`<p>${renderInline(para.replace(/^\n+|\n+$/g, ''), opts)}</p>`);
     }
   }
   return blocks.join('');
@@ -224,38 +297,57 @@ export function renderStep(text, opts = {}) {
 
 function renderInline(src, opts) {
   return tokenize(src).map((tk) => {
-    if (tk.t === 'text') return inlineText(tk.v);
+    // xuống dòng chỉ đổi thành <br> trong CHỮ – không đụng vào HTML của KaTeX (dữ liệu SVG của \widehat, mũi tên…
+    // có ký tự xuống dòng; đổi thành <br> là hỏng hình)
+    if (tk.t === 'text') return textHTML(tk.raw);
     if (tk.t === 'math') return renderMath(tk.v, false, opts.names);
-    if (tk.t === 'dmath') return `<div class="dmath">${renderMath(tk.v, true, opts.names)}</div>`;
+    if (tk.t === 'dmath') return `<div class="dmath">${renderMath(tk.v.replace(/\\begin\{eqnarray(\*?)\}([\s\S]*)\\end\{eqnarray\*?\}/, '\\begin{align$1}$2\\end{align$1}'), true, opts.names)}</div>`;
     const url = opts.image ? opts.image(tk.v) : null;
     return url ? `<img class="tb-img" src="${esc(url)}" alt="ảnh">` : '<span class="tb-noimg">[ảnh không có trong link chia sẻ – mở tệp .json để xem]</span>';
   }).join('');
 }
 
 // ======================= xuất LaTeX =======================
-/** Văn bản (một bước) → mã LaTeX. imageFile(id) → tên tệp ảnh để \includegraphics. */
+/**
+ * Văn bản (một bước) → mã LaTeX. Chữ thường được coi là LaTeX (giữ nguyên \textbf{…}, \\, \begin{itemize}…);
+ * chỉ đổi markdown (**đậm**, *nghiêng*, dòng "- ", "1. ") và thoát các ký tự %, &, #, _, ^ chưa có "\" phía trước
+ * (để "50%" vẫn ra 50%). imageFile(id) → tên tệp ảnh để \includegraphics.
+ */
 export function toLatex(text, imageFile = (id) => id + '.png') {
   const out = [];
   for (const para of String(text ?? '').split(/\n\s*\n/)) {
     if (!para.trim()) continue;
     const lines = para.split('\n');
     if (lines.every((l) => /^\s*([-*]|\d+\.)\s+/.test(l) || !l.trim())) {
-      const env = /^\s*\d+\./.test(lines[0]) ? 'enumerate' : 'itemize';
+      const env = /^\s*\d+\./.test(lines.find((l) => l.trim())) ? 'enumerate' : 'itemize';
       out.push([`\\begin{${env}}`, ...lines.filter((l) => l.trim()).map((l) => `  \\item ${latexInline(l.replace(/^\s*([-*]|\d+\.)\s+/, ''), imageFile)}`), `\\end{${env}}`].join('\n'));
-    } else out.push(latexInline(para, imageFile).replace(/\n/g, '\\\\\n'));
+    } else out.push(latexInline(para, imageFile));
   }
   return out.join('\n\n');
 }
 
-const TEXT_ESC = { '\\': '\\textbackslash{}', '#': '\\#', '%': '\\%', '&': '\\&', _: '\\_', '{': '\\{', '}': '\\}', '~': '\\textasciitilde{}', '^': '\\textasciicircum{}' };
+const STRUCT = /^\s*\\(begin|end|item|\[|\]|section|subsection|paragraph|noindent|medskip|bigskip|smallskip|centering|vspace|newpage)\b|^\s*\\\[|^\s*\\\]/;
 
 function latexInline(src, imageFile) {
-  return tokenize(src).map((tk) => {
-    if (tk.t === 'math') return `$${tk.v}$`;
-    if (tk.t === 'dmath') return `\\[${tk.v}\\]`;
+  return tokenize(src).map((tk, idx, all) => {
+    if (tk.t === 'math') return tk.o === '\\(' ? `\\(${tk.v}\\)` : `$${tk.v}$`;
+    if (tk.t === 'dmath') return tk.env ? `\n${tk.v}\n` : `\\[${tk.v}\\]`;
     if (tk.t === 'img') return `\n\n\\begin{center}\\includegraphics[width=0.9\\linewidth]{${imageFile(tk.v)}}\\end{center}\n\n`;
-    return tk.v.replace(/[\\#%&_{}~^]/g, (c) => TEXT_ESC[c])
+    let t = tk.raw
+      .replace(/(^|[^\\])([%&#])/g, '$1\\$2').replace(/(^|[^\\])([%&#])/g, '$1\\$2') // hai lần: "%%" liền nhau
+      .replace(/(^|[^\\])_/g, "$1\\_").replace(/(^|[^\\])\^/g, '$1\\textasciicircum{}')
       .replace(/\*\*([^*]+)\*\*/g, '\\textbf{$1}').replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1\\emph{$2}');
+    // xuống dòng đơn trong đoạn = ngắt dòng (như khi xem trong khung), trừ quanh lệnh cấu trúc (\begin, \item…) và công thức riêng dòng
+    const L = t.split('\n');
+    t = L.map((line, k) => {
+      if (k === L.length - 1) return line;
+      const next = L[k + 1];
+      const plain = line.trim() && next.trim() && !/\\\\\s*$/.test(line) && !STRUCT.test(line) && !STRUCT.test(next);
+      return line + (plain ? ' \\\\' : '');
+    }).join('\n');
+    // dòng chữ ngay trước/sau công thức riêng dòng: không cần ngắt dòng
+    if (all[idx + 1] && all[idx + 1].t === 'dmath') t = t.replace(/ \\\\\n?$/, '');
+    return t;
   }).join('');
 }
 
@@ -266,6 +358,10 @@ export const LATEX_PREAMBLE = String.raw`\documentclass[12pt,a4paper]{article}
 \usepackage[margin=2cm]{geometry}
 \newcommand{\goc}{\angle}
 \newcommand{\tamgiac}{\triangle}
+\newcommand{\ssong}{\parallel}
+\newcommand{\vgoc}{\perp}
+\providecommand{\wideparen}[1]{\overset{\frown}{#1}}
+\providecommand{\overarc}[1]{\overset{\frown}{#1}}
 \newcommand{\cung}[1]{\overset{\frown}{#1}}
 \newcommand{\vecto}[1]{\overrightarrow{#1}}
 \setlength{\parindent}{0pt}

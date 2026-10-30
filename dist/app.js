@@ -2206,6 +2206,7 @@
     constructor(ctx) {
       this.ctx = ctx;
       this.list = [];
+      this.reused = [];
       this.vals = /* @__PURE__ */ new Map();
     }
     val(ref) {
@@ -2238,7 +2239,10 @@
       if (v && v.kind === "point") {
         for (const [ref, w] of this.vals) if (w && w.kind === "point" && dist(w, v) < 1e-9 * (1 + Math.hypot(v.x, v.y))) return ref;
         const ex = this.ctx.existingPointAt(v, 0.01);
-        if (ex) return ex;
+        if (ex) {
+          this.reused.push(ex);
+          return ex;
+        }
       }
       return this.add(type, args, opts);
     }
@@ -2260,6 +2264,7 @@
   var run = (fn) => (picks, ctx) => {
     const S2 = new Specs(ctx);
     fn(S2, picks, ctx);
+    S2.list.reused = S2.reused;
     return S2.list;
   };
   var poly = (S2, pts) => pts.forEach((p, i) => S2.seg(p, pts[(i + 1) % pts.length]));
@@ -17906,6 +17911,7 @@
     "\\cung": "\\overset{\\frown}{#1}",
     "\\vecto": "\\overrightarrow{#1}"
   };
+  var MATH_ENVS = ["align", "align*", "equation", "equation*", "gather", "gather*", "multline", "multline*", "flalign", "flalign*", "eqnarray", "eqnarray*", "alignat", "alignat*"];
   function tokenize(src) {
     const out = [];
     let i = 0, buf = "", raw = "";
@@ -17923,14 +17929,34 @@
         i += 2;
         continue;
       }
-      if (c === "\\" && src[i + 1] === "[") {
-        const j = src.indexOf("\\]", i + 2);
+      if (c === "\\" && (src[i + 1] === "[" || src[i + 1] === "(")) {
+        const close2 = src[i + 1] === "[" ? "\\]" : "\\)";
+        const j = src.indexOf(close2, i + 2);
         if (j >= 0) {
           flush();
-          out.push({ t: "dmath", v: src.slice(i + 2, j), o: "\\[", c: "\\]" });
+          out.push({ t: src[i + 1] === "[" ? "dmath" : "math", v: src.slice(i + 2, j), o: src.slice(i, i + 2), c: close2 });
           i = j + 2;
           continue;
         }
+      }
+      if (c === "\\" && src.startsWith("\\begin{", i)) {
+        const m = /^\\begin\{([a-zA-Z]+\*?)\}/.exec(src.slice(i));
+        if (m && MATH_ENVS.includes(m[1])) {
+          const endTag = `\\end{${m[1]}}`;
+          const j = src.indexOf(endTag, i);
+          if (j >= 0) {
+            flush();
+            out.push({ t: "dmath", v: src.slice(i, j + endTag.length), o: "", c: "", env: true });
+            i = j + endTag.length;
+            continue;
+          }
+        }
+      }
+      if (c === "\\" && i + 1 < src.length) {
+        buf += c + src[i + 1];
+        raw += c + src[i + 1];
+        i += 2;
+        continue;
       }
       if (c === "$" && src[i + 1] === "$") {
         const j = src.indexOf("$$", i + 2);
@@ -17967,8 +17993,113 @@
     flush();
     return out;
   }
-  function inlineText(s) {
+  function markdownInline(s) {
     return esc3(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>");
+  }
+  var TEXT_WRAP = {
+    textbf: ["<b>", "</b>"],
+    textit: ["<i>", "</i>"],
+    emph: ["<i>", "</i>"],
+    textsl: ["<i>", "</i>"],
+    underline: ["<u>", "</u>"],
+    texttt: ["<code>", "</code>"],
+    textsc: ['<span style="font-variant:small-caps">', "</span>"],
+    textrm: ["", ""],
+    textsf: ["", ""],
+    textup: ["", ""],
+    textnormal: ["", ""],
+    mbox: ["", ""],
+    text: ["", ""],
+    section: ['<b class="tb-h">', "</b>"],
+    subsection: ['<b class="tb-h">', "</b>"],
+    subsubsection: ["<b>", "</b>"],
+    paragraph: ["<b>", "</b>"]
+  };
+  var TEXT_SYM = {
+    "\\": "<br>",
+    newline: "<br>",
+    par: "<br>",
+    "%": "%",
+    "&": "&amp;",
+    "#": "#",
+    _: "_",
+    "{": "{",
+    "}": "}",
+    $: "$",
+    " ": " ",
+    ",": "&thinsp;",
+    ldots: "\u2026",
+    dots: "\u2026",
+    quad: "&emsp;",
+    qquad: "&emsp;&emsp;",
+    textbackslash: "\\",
+    LaTeX: "LaTeX",
+    TeX: "TeX",
+    S: "\xA7",
+    copyright: "\xA9"
+  };
+  var TEXT_SKIP = /* @__PURE__ */ new Set(["noindent", "indent", "medskip", "bigskip", "smallskip", "centering", "hfill", "vfill", "newpage", "clearpage", "raggedright", "raggedleft", "item"]);
+  var TEXT_SKIP_ARG = /* @__PURE__ */ new Set(["vspace", "hspace", "label", "vspace*", "hspace*", "index"]);
+  function textHTML(src) {
+    let out = "", run3 = "";
+    const flushRun = () => {
+      if (!run3) return;
+      out += markdownInline(run3.replace(/---/g, "\u2014").replace(/--/g, "\u2013").replace(/``/g, "\u201C").replace(/''/g, "\u201D")).replace(/~/g, "&nbsp;").replace(/\n/g, "<br>");
+      run3 = "";
+    };
+    let i = 0;
+    while (i < src.length) {
+      if (src[i] !== "\\") {
+        run3 += src[i++];
+        continue;
+      }
+      const m = /^\\([A-Za-z]+\*?|.)/.exec(src.slice(i));
+      if (!m) {
+        run3 += src[i++];
+        continue;
+      }
+      const name2 = m[1].replace(/\*$/, "");
+      let j = i + m[0].length;
+      if (TEXT_WRAP[name2] || TEXT_SKIP_ARG.has(m[1]) || TEXT_SKIP_ARG.has(name2)) {
+        while (src[j] === " ") j++;
+        if (src[j] === "[") {
+          const k = src.indexOf("]", j);
+          if (k > 0) j = k + 1;
+        }
+        if (src[j] === "{") {
+          const k = matchBrace(src, j);
+          flushRun();
+          if (TEXT_WRAP[name2]) out += TEXT_WRAP[name2][0] + textHTML(src.slice(j + 1, k - 1)) + TEXT_WRAP[name2][1];
+          i = k;
+          continue;
+        }
+      }
+      if (TEXT_SYM[m[1]] != null) {
+        flushRun();
+        out += TEXT_SYM[m[1]];
+        i = j;
+        continue;
+      }
+      if (TEXT_SKIP.has(name2)) {
+        i = j;
+        if (src[i] === " ") i++;
+        continue;
+      }
+      run3 += m[0];
+      i = j;
+    }
+    flushRun();
+    return out;
+  }
+  function latexListsToMarkdown(text2) {
+    return text2.replace(/\\begin\{(itemize|enumerate)\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (_, env, body) => {
+      const items = body.split(/\\item\b/).slice(1).map((x) => x.replace(/\s*\n\s*/g, " ").trim());
+      return "\n\n" + items.map((x) => {
+        const lab = /^\[([^\]]*)\]\s*/.exec(x);
+        const t2 = lab ? `${lab[1]} ${x.slice(lab[0].length)}` : x;
+        return (env === "enumerate" && !lab ? "1. " : "- ") + t2;
+      }).join("\n") + "\n\n";
+    });
   }
   function linkNames(tex, names) {
     return mapNames(tex, names, (f, id) => `\\htmlData{p=${id}}{${f}}`);
@@ -18061,25 +18192,25 @@
   }
   function renderStep(text2, opts = {}) {
     const blocks = [];
-    const paras = String(text2 ?? "").split(/\n\s*\n/);
+    const paras = latexListsToMarkdown(String(text2 ?? "")).split(/\n\s*\n/);
     for (const para of paras) {
       if (!para.trim()) continue;
       const lines = para.split("\n");
       if (lines.every((l) => /^\s*([-*]|\d+\.)\s+/.test(l) || !l.trim())) {
-        const ordered = /^\s*\d+\./.test(lines[0]);
+        const ordered = /^\s*\d+\./.test(lines.find((l) => l.trim()));
         const items = lines.filter((l) => l.trim()).map((l) => `<li>${renderInline(l.replace(/^\s*([-*]|\d+\.)\s+/, ""), opts)}</li>`);
         blocks.push(ordered ? `<ol>${items.join("")}</ol>` : `<ul>${items.join("")}</ul>`);
       } else {
-        blocks.push(`<p>${renderInline(para, opts).replace(/\n/g, "<br>")}</p>`);
+        blocks.push(`<p>${renderInline(para.replace(/^\n+|\n+$/g, ""), opts)}</p>`);
       }
     }
     return blocks.join("");
   }
   function renderInline(src, opts) {
     return tokenize(src).map((tk) => {
-      if (tk.t === "text") return inlineText(tk.v);
+      if (tk.t === "text") return textHTML(tk.raw);
       if (tk.t === "math") return renderMath(tk.v, false, opts.names);
-      if (tk.t === "dmath") return `<div class="dmath">${renderMath(tk.v, true, opts.names)}</div>`;
+      if (tk.t === "dmath") return `<div class="dmath">${renderMath(tk.v.replace(/\\begin\{eqnarray(\*?)\}([\s\S]*)\\end\{eqnarray\*?\}/, "\\begin{align$1}$2\\end{align$1}"), true, opts.names)}</div>`;
       const url = opts.image ? opts.image(tk.v) : null;
       return url ? `<img class="tb-img" src="${esc3(url)}" alt="\u1EA3nh">` : '<span class="tb-noimg">[\u1EA3nh kh\xF4ng c\xF3 trong link chia s\u1EBB \u2013 m\u1EDF t\u1EC7p .json \u0111\u1EC3 xem]</span>';
     }).join("");
@@ -18090,23 +18221,34 @@
       if (!para.trim()) continue;
       const lines = para.split("\n");
       if (lines.every((l) => /^\s*([-*]|\d+\.)\s+/.test(l) || !l.trim())) {
-        const env = /^\s*\d+\./.test(lines[0]) ? "enumerate" : "itemize";
+        const env = /^\s*\d+\./.test(lines.find((l) => l.trim())) ? "enumerate" : "itemize";
         out.push([`\\begin{${env}}`, ...lines.filter((l) => l.trim()).map((l) => `  \\item ${latexInline(l.replace(/^\s*([-*]|\d+\.)\s+/, ""), imageFile)}`), `\\end{${env}}`].join("\n"));
-      } else out.push(latexInline(para, imageFile).replace(/\n/g, "\\\\\n"));
+      } else out.push(latexInline(para, imageFile));
     }
     return out.join("\n\n");
   }
-  var TEXT_ESC = { "\\": "\\textbackslash{}", "#": "\\#", "%": "\\%", "&": "\\&", _: "\\_", "{": "\\{", "}": "\\}", "~": "\\textasciitilde{}", "^": "\\textasciicircum{}" };
+  var STRUCT = /^\s*\\(begin|end|item|\[|\]|section|subsection|paragraph|noindent|medskip|bigskip|smallskip|centering|vspace|newpage)\b|^\s*\\\[|^\s*\\\]/;
   function latexInline(src, imageFile) {
-    return tokenize(src).map((tk) => {
-      if (tk.t === "math") return `$${tk.v}$`;
-      if (tk.t === "dmath") return `\\[${tk.v}\\]`;
+    return tokenize(src).map((tk, idx, all) => {
+      if (tk.t === "math") return tk.o === "\\(" ? `\\(${tk.v}\\)` : `$${tk.v}$`;
+      if (tk.t === "dmath") return tk.env ? `
+${tk.v}
+` : `\\[${tk.v}\\]`;
       if (tk.t === "img") return `
 
 \\begin{center}\\includegraphics[width=0.9\\linewidth]{${imageFile(tk.v)}}\\end{center}
 
 `;
-      return tk.v.replace(/[\\#%&_{}~^]/g, (c) => TEXT_ESC[c]).replace(/\*\*([^*]+)\*\*/g, "\\textbf{$1}").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1\\emph{$2}");
+      let t2 = tk.raw.replace(/(^|[^\\])([%&#])/g, "$1\\$2").replace(/(^|[^\\])([%&#])/g, "$1\\$2").replace(/(^|[^\\])_/g, "$1\\_").replace(/(^|[^\\])\^/g, "$1\\textasciicircum{}").replace(/\*\*([^*]+)\*\*/g, "\\textbf{$1}").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1\\emph{$2}");
+      const L = t2.split("\n");
+      t2 = L.map((line2, k) => {
+        if (k === L.length - 1) return line2;
+        const next = L[k + 1];
+        const plain2 = line2.trim() && next.trim() && !/\\\\\s*$/.test(line2) && !STRUCT.test(line2) && !STRUCT.test(next);
+        return line2 + (plain2 ? " \\\\" : "");
+      }).join("\n");
+      if (all[idx + 1] && all[idx + 1].t === "dmath") t2 = t2.replace(/ \\\\\n?$/, "");
+      return t2;
     }).join("");
   }
   var LATEX_PREAMBLE = String.raw`\documentclass[12pt,a4paper]{article}
@@ -18115,6 +18257,10 @@
 \usepackage[margin=2cm]{geometry}
 \newcommand{\goc}{\angle}
 \newcommand{\tamgiac}{\triangle}
+\newcommand{\ssong}{\parallel}
+\newcommand{\vgoc}{\perp}
+\providecommand{\wideparen}[1]{\overset{\frown}{#1}}
+\providecommand{\overarc}[1]{\overset{\frown}{#1}}
 \newcommand{\cung}[1]{\overset{\frown}{#1}}
 \newcommand{\vecto}[1]{\overrightarrow{#1}}
 \setlength{\parindent}{0pt}
@@ -18574,6 +18720,292 @@
     window.addEventListener("beforeunload", () => saveDraft(app, { unloading: true }));
     app.saveDraftNow = () => saveDraft(app);
     later(500);
+  }
+
+  // src/ui/shortcuts.js
+  init_dialog();
+  var KEY = "hinh-hoc-dong:phim-tat";
+  var DEFAULT_KEYS = {
+    "Ctrl+P": "point",
+    "Ctrl+G": "intersect",
+    "Ctrl+M": "midpoint",
+    "Ctrl+D": "segment",
+    "Ctrl+L": "line",
+    "Ctrl+Shift+L": "ray",
+    "Ctrl+Q": "circle",
+    "Ctrl+Shift+O": "circumcircle",
+    // đường tròn ngoại tiếp + tâm O
+    // điểm đặc biệt: Shift + phím của đường tạo ra nó (giao 3 đường cao, 3 phân giác…)
+    "Ctrl+Shift+U": "orthocenter",
+    "Ctrl+Shift+B": "incenter",
+    "Ctrl+Shift+G": "centroid",
+    "Ctrl+U": "perpendicular",
+    "Ctrl+I": "parallel",
+    "Ctrl+J": "projection",
+    "Ctrl+B": "angle_bisector",
+    "Ctrl+Shift+M": "perp_bisector",
+    "Ctrl+E": "reflect"
+  };
+  var RESERVED = {
+    "Ctrl+N": "tr\xECnh duy\u1EC7t: c\u1EEDa s\u1ED5 m\u1EDBi",
+    "Ctrl+T": "tr\xECnh duy\u1EC7t: tab m\u1EDBi",
+    "Ctrl+W": "tr\xECnh duy\u1EC7t: \u0111\xF3ng tab",
+    "Ctrl+Shift+N": "tr\xECnh duy\u1EC7t",
+    "Ctrl+Shift+T": "tr\xECnh duy\u1EC7t",
+    "Ctrl+Shift+W": "tr\xECnh duy\u1EC7t",
+    "Ctrl+Shift+Q": "tr\xECnh duy\u1EC7t: tho\xE1t Chrome",
+    "Ctrl+Tab": "tr\xECnh duy\u1EC7t",
+    "Ctrl+R": "t\u1EA3i l\u1EA1i trang",
+    "Ctrl+Shift+R": "t\u1EA3i l\u1EA1i trang",
+    "Ctrl+Shift+I": "c\xF4ng c\u1EE5 nh\xE0 ph\xE1t tri\u1EC3n",
+    "Ctrl+Shift+J": "c\xF4ng c\u1EE5 nh\xE0 ph\xE1t tri\u1EC3n",
+    "Ctrl+Shift+C": "c\xF4ng c\u1EE5 nh\xE0 ph\xE1t tri\u1EC3n",
+    "Ctrl+C": "sao ch\xE9p",
+    "Ctrl+V": "d\xE1n",
+    "Ctrl+X": "c\u1EAFt",
+    "Ctrl+A": "ch\u1ECDn t\u1EA5t c\u1EA3",
+    "Ctrl+Z": "ho\xE0n t\xE1c",
+    "Ctrl+Y": "l\xE0m l\u1EA1i",
+    "Ctrl+Shift+Z": "l\xE0m l\u1EA1i",
+    "Ctrl+S": "l\u01B0u",
+    "Ctrl+Shift+S": "l\u01B0u t\u1EA5t c\u1EA3 c\xE1c tab",
+    "Ctrl+O": "m\u1EDF t\u1EC7p",
+    "Ctrl+K": "m\u1EDF kho b\xE0i",
+    "Ctrl+H": "\u1EA9n",
+    "Ctrl+Shift+H": "hi\u1EC7n l\u1EA1i",
+    "Ctrl+Enter": "so\u1EA1n l\u1EDDi gi\u1EA3i",
+    "Ctrl+/": "b\u1EA3ng ph\xEDm t\u1EAFt"
+  };
+  var keymap = null;
+  function loadKeymap() {
+    try {
+      const k = JSON.parse(localStorage.getItem(KEY) || "null");
+      keymap = k && typeof k === "object" ? k : { ...DEFAULT_KEYS };
+    } catch {
+      keymap = { ...DEFAULT_KEYS };
+    }
+    return keymap;
+  }
+  function saveKeymap() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(keymap));
+    } catch {
+    }
+  }
+  var getKeymap = () => keymap || loadKeymap();
+  function keyOf(id) {
+    for (const [k, v] of Object.entries(getKeymap())) if (v === id) return k;
+    return "";
+  }
+  function comboOf(e) {
+    let k;
+    if (/^Key[A-Z]$/.test(e.code)) k = e.code.slice(3);
+    else if (/^Digit\d$/.test(e.code)) k = e.code.slice(5);
+    else if (e.code === "Slash") k = "/";
+    else if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return null;
+    else k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+    return `${e.ctrlKey || e.metaKey ? "Ctrl+" : ""}${e.altKey ? "Alt+" : ""}${e.shiftKey ? "Shift+" : ""}${k}`;
+  }
+  var fold = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+  function allTools(app) {
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const g of app.toolbarGroups || []) {
+      for (const id of g.tools) {
+        const t2 = TOOL_BY_ID[id];
+        if (!t2 || seen.has(id) || id === "move") continue;
+        seen.add(id);
+        out.push({ id, label: t2.label, group: t2.menu ? t2.menu.replace(/^\d+\.\s*/, "") : g.label });
+      }
+    }
+    return out;
+  }
+  function searchTools(list, q, recent = []) {
+    const words = fold(q).split(/\s+/).filter(Boolean);
+    const score2 = (t2) => {
+      const name2 = fold(t2.label), hay = name2 + " " + fold(t2.group) + " " + t2.id.replace(/_/g, " ");
+      if (!words.length) return recent.includes(t2.id) ? 100 - recent.indexOf(t2.id) : 0;
+      const initials = name2.split(/[^a-z0-9]+/).filter(Boolean).map((w) => w[0]).join("");
+      let s = 0;
+      for (const w of words) {
+        if (name2.startsWith(w)) s += 30;
+        else if (new RegExp(`(^|[^a-z])${w}`).test(name2)) s += 20;
+        else if (hay.includes(w)) s += 8;
+        else if (w.length >= 2 && initials.includes(w)) s += 12;
+        else return -1;
+      }
+      return s + (recent.includes(t2.id) ? 5 : 0) - name2.length / 100;
+    };
+    return list.map((t2) => [score2(t2), t2]).filter(([s]) => s >= 0).sort((a, b) => b[0] - a[0]).map(([, t2]) => t2);
+  }
+  function setupShortcuts(app) {
+    loadKeymap();
+    document.addEventListener("keydown", (e) => {
+      if (document.querySelector(".modal-back")) return;
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
+      if (app.mode !== "edit") return;
+      if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        palette();
+        return;
+      }
+      const c = comboOf(e);
+      if (c === "Ctrl+/" || c === "Ctrl+Shift+/") {
+        e.preventDefault();
+        keysDialog();
+        return;
+      }
+      const id = c && getKeymap()[c];
+      if (id && TOOL_BY_ID[id]) {
+        e.preventDefault();
+        e.stopPropagation();
+        app.activateTool(id);
+      }
+    }, true);
+    async function palette() {
+      const list = allTools(app);
+      const recent = app.recentTools || [];
+      const id = await modal((box, close2) => {
+        box.classList.add("palette");
+        box.innerHTML = `<input type="text" class="pal-q" placeholder="G\xF5 t\xEAn c\xF4ng c\u1EE5 (kh\xF4ng c\u1EA7n d\u1EA5u): giao, vuong goc, ngoai tiep, dtnt\u2026" spellcheck="false" autocomplete="off"><div class="pal-list"></div>
+        <div class="pal-foot">\u2191\u2193 ch\u1ECDn \xB7 Enter d\xF9ng \xB7 Esc \u0111\xF3ng \xB7 <kbd>Ctrl+/</kbd> xem v\xE0 s\u1EEDa ph\xEDm t\u1EAFt${app.selection.size ? ` \xB7 \u0111ang ch\u1ECDn ${app.selection.size} \u0111\u1ED1i t\u01B0\u1EE3ng: d\u1EF1ng ngay tr\xEAn ch\xFAng n\u1EBFu h\u1EE3p` : ""}</div>`;
+        const inp = box.querySelector(".pal-q"), host = box.querySelector(".pal-list");
+        let rows = [], cur2 = 0;
+        const paint = () => {
+          rows = searchTools(list, inp.value, recent).slice(0, 12);
+          cur2 = Math.min(cur2, Math.max(0, rows.length - 1));
+          host.innerHTML = rows.length ? rows.map((t2, i) => `<button class="pal-row ${i === cur2 ? "on" : ""}" data-i="${i}"><span class="pal-ti">${TOOL_BY_ID[t2.id].icon || ""}</span><span class="pal-l">${t2.label}</span><span class="pal-g">${t2.group}</span>${keyOf(t2.id) ? `<kbd>${keyOf(t2.id)}</kbd>` : ""}</button>`).join("") : '<div class="note">Kh\xF4ng c\xF3 c\xF4ng c\u1EE5 n\xE0o kh\u1EDBp.</div>';
+        };
+        inp.oninput = () => {
+          cur2 = 0;
+          paint();
+        };
+        inp.onkeydown = (e) => {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            cur2 = Math.min(rows.length - 1, cur2 + 1);
+            paint();
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            cur2 = Math.max(0, cur2 - 1);
+            paint();
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (rows[cur2]) close2(rows[cur2].id);
+          }
+        };
+        host.onclick = (e) => {
+          const b2 = e.target.closest("[data-i]");
+          if (b2) close2(rows[+b2.dataset.i].id);
+        };
+        paint();
+      });
+      if (id) app.activateTool(id);
+    }
+    async function keysDialog() {
+      const list = allTools(app);
+      await modal((box, close2) => {
+        box.classList.add("wide", "keys-win");
+        box.innerHTML = `<h3>Ph\xEDm t\u1EAFt</h3>
+        <div class="modal-body">B\u1EA5m v\xE0o \xF4 ph\xEDm c\u1EE7a m\u1ED9t c\xF4ng c\u1EE5 r\u1ED3i nh\u1EA5n t\u1ED5 h\u1EE3p mu\u1ED1n d\xF9ng (n\xEAn d\xF9ng <kbd>Ctrl</kbd> + ch\u1EEF, ho\u1EB7c <kbd>Ctrl+Shift</kbd> + ch\u1EEF); <kbd>Backspace</kbd> \u0111\u1EC3 b\u1ECF ph\xEDm. \u0110ang ch\u1ECDn s\u1EB5n \u0111\u1ED1i t\u01B0\u1EE3ng th\xEC ph\xEDm t\u1EAFt d\u1EF1ng ngay tr\xEAn ch\xFAng. <kbd>Space</kbd>: t\xECm c\xF4ng c\u1EE5 theo t\xEAn.</div>
+        <input type="text" class="keys-q" placeholder="L\u1ECDc c\xF4ng c\u1EE5\u2026" spellcheck="false">
+        <div class="keys-list"></div>
+        <details class="keys-fixed"><summary>C\xE1c ph\xEDm c\u1ED1 \u0111\u1ECBnh kh\xE1c</summary><div class="keys-grid">${Object.entries({
+          "Space": "t\xECm c\xF4ng c\u1EE5 theo t\xEAn",
+          "Esc": "hu\u1EF7 / v\u1EC1 c\xF4ng c\u1EE5 Ch\u1ECDn",
+          "Ctrl+Z / Ctrl+Y": "ho\xE0n t\xE1c / l\xE0m l\u1EA1i",
+          "Delete": "xo\xE1 \u0111\u1ED1i t\u01B0\u1EE3ng \u0111ang ch\u1ECDn",
+          "Ctrl+H / Ctrl+Shift+H": "\u1EA9n \u0111\u1ED1i t\u01B0\u1EE3ng \u0111ang ch\u1ECDn / hi\u1EC7n l\u1EA1i t\u1EA5t c\u1EA3",
+          "Alt + b\u1EA5m": "\u1EA9n ngay \u0111\u1ED1i t\u01B0\u1EE3ng \u0111\u01B0\u1EE3c b\u1EA5m",
+          "g\xF5 ch\u1EEF / F2": "\u0111\u1EB7t t\xEAn \u0111i\u1EC3m \u0111ang ch\u1ECDn",
+          "Shift + b\u1EA5m/k\xE9o": "c\u0103n h\u01B0\u1EDBng ngang, d\u1ECDc, b\u01B0\u1EDBc 15\xB0",
+          "Home": "thu ph\xF3ng v\u1EEBa h\xECnh",
+          "Ctrl+S": "l\u01B0u (v\xE0o kho n\u1EBFu \u0111\xE3 k\u1EBFt n\u1ED1i)",
+          "Ctrl+Shift+S": "l\u01B0u t\u1EA5t c\u1EA3 c\xE1c tab ra t\u1EC7p",
+          "Ctrl+O": "m\u1EDF t\u1EC7p",
+          "Ctrl+K": "m\u1EDF kho b\xE0i",
+          "Ctrl+Enter": "so\u1EA1n l\u1EDDi gi\u1EA3i",
+          "Alt+1\u20269": "sang tab th\u1EE9 n",
+          "Ctrl+/": "b\u1EA3ng n\xE0y"
+        }).map(([k, v]) => `<kbd>${k}</kbd><span>${v}</span>`).join("")}</div></details>
+        <div class="k-msg note"></div>
+        <div class="modal-actions"><button class="k-reset" style="margin-right:auto">V\u1EC1 m\u1EB7c \u0111\u1ECBnh</button><button class="primary">Xong</button></div>`;
+        const host = box.querySelector(".keys-list"), q = box.querySelector(".keys-q"), msg = box.querySelector(".k-msg");
+        let waiting = null;
+        const paint = () => {
+          const rows = q.value.trim() ? searchTools(list, q.value) : list;
+          host.innerHTML = rows.map((t2) => `<div class="key-row"><span class="kr-l">${t2.label}</span><span class="kr-g">${t2.group}</span><button class="kr-k ${waiting === t2.id ? "wait" : ""}" data-id="${t2.id}">${waiting === t2.id ? "nh\u1EA5n ph\xEDm\u2026" : keyOf(t2.id) || "<i>\u2014</i>"}</button></div>`).join("");
+        };
+        host.onclick = (e) => {
+          const b2 = e.target.closest("[data-id]");
+          if (!b2) return;
+          waiting = b2.dataset.id;
+          msg.textContent = "";
+          paint();
+          host.querySelector(".kr-k.wait")?.focus();
+        };
+        const onKey = (e) => {
+          if (!waiting || e.target === q || !box.isConnected) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === "Escape") {
+            waiting = null;
+            paint();
+            return;
+          }
+          if (e.key === "Backspace" || e.key === "Delete") {
+            for (const [k, v] of Object.entries(keymap)) if (v === waiting) delete keymap[k];
+            saveKeymap();
+            waiting = null;
+            app.buildToolbar();
+            paint();
+            return;
+          }
+          const c = comboOf(e);
+          if (!c) return;
+          msg.classList.remove("ok");
+          if (!/^Ctrl\+|^Alt\+/.test(c) || /^Alt\+\d$/.test(c)) {
+            msg.textContent = "H\xE3y d\xF9ng Ctrl + ch\u1EEF (ho\u1EB7c Ctrl+Shift + ch\u1EEF): ch\u1EEF \u0111\u01A1n \u0111ang d\xF9ng \u0111\u1EC3 g\xF5 t\xEAn \u0111i\u1EC3m, Alt+s\u1ED1 \u0111\u1EC3 chuy\u1EC3n tab.";
+            return;
+          }
+          if (RESERVED[c]) {
+            msg.textContent = `${c} \u0111\xE3 d\xF9ng cho ${RESERVED[c]} \u2013 ch\u1ECDn t\u1ED5 h\u1EE3p kh\xE1c.`;
+            return;
+          }
+          const old = keymap[c];
+          for (const [k, v] of Object.entries(keymap)) if (v === waiting) delete keymap[k];
+          keymap[c] = waiting;
+          saveKeymap();
+          msg.textContent = old && old !== waiting && TOOL_BY_ID[old] ? `${c} tr\u01B0\u1EDBc \u0111\xE2y l\xE0 c\u1EE7a "${TOOL_BY_ID[old].label}" \u2013 \u0111\xE3 chuy\u1EC3n sang c\xF4ng c\u1EE5 n\xE0y.` : `\u0110\xE3 g\xE1n ${c}.`;
+          msg.classList.add("ok");
+          waiting = null;
+          app.buildToolbar();
+          paint();
+        };
+        document.addEventListener("keydown", onKey, true);
+        const done = (v) => {
+          document.removeEventListener("keydown", onKey, true);
+          close2(v);
+        };
+        q.oninput = paint;
+        box.querySelector(".k-reset").onclick = () => {
+          keymap = { ...DEFAULT_KEYS };
+          saveKeymap();
+          app.buildToolbar();
+          msg.textContent = "\u0110\xE3 \u0111\u1EB7t l\u1EA1i ph\xEDm t\u1EAFt m\u1EB7c \u0111\u1ECBnh.";
+          paint();
+        };
+        box.querySelector(".primary").onclick = () => done(true);
+        paint();
+      });
+    }
+    const b = document.getElementById("btn-keys");
+    if (b) b.onclick = () => keysDialog();
+    const p = document.getElementById("btn-palette");
+    if (p) p.onclick = () => palette();
+    app.buildToolbar();
+    return { palette, keysDialog };
   }
 
   // src/ui/app.js
@@ -19041,6 +19473,48 @@
       return best ? best.ids : [curves[0].id, curves[1].id];
     }
     /** Lấy (hoặc tạo) một điểm tại vị trí bấm: điểm có sẵn / giao điểm / điểm trên đường / điểm tự do. */
+    /**
+     * Chỗ hai đường cắt nhau ngay dưới con trỏ mà CHƯA có điểm (bản 1.6): {a, b, P} hoặc null. Dùng cho công cụ Chọn:
+     * bấm vào chỗ cắt là có giao điểm (như Sketchpad), rê chuột tới thì hiện trước một dấu.
+     */
+    crossingAt(sx, sy, hits = this.hitTest(sx, sy), radius = 9) {
+      if (hits.some((h) => h.kind === "point" && h.d < radius + 3)) return null;
+      const curves = hits.filter((h) => h.kind === "line" || h.kind === "circle").slice(0, 4);
+      if (curves.length < 2) return null;
+      const P2 = this.toUser(sx, sy);
+      const px = 1 / this.view.scale;
+      let best = null;
+      for (let i = 0; i < curves.length; i++)
+        for (let j = i + 1; j < curves.length; j++)
+          for (const r of intersect(this.values.get(curves[i].id), this.values.get(curves[j].id))) {
+            const d = dist(r, P2) / px;
+            const [u, w] = (curves[i].order || 0) <= (curves[j].order || 0) ? [curves[i], curves[j]] : [curves[j], curves[i]];
+            if (d < radius && (!best || d < best.d)) best = { d, a: u.id, b: w.id, P: r };
+          }
+      if (!best) return null;
+      if (this.existingPointAt(best.P, 0.01)) return null;
+      return best;
+    }
+    /** Dấu báo trước "bấm để lấy giao điểm" khi rê chuột tới chỗ cắt (công cụ Chọn). */
+    showCrossMark(cross2) {
+      const key = cross2 ? `${cross2.a}|${cross2.b}` : null;
+      if (key === this.crossKey) return;
+      this.clearCrossMark();
+      if (!cross2) return;
+      this.crossKey = key;
+      const P2 = cross2.P;
+      this.crossMark = this.renderer.addExtra({ type: "point", pts: [() => P2], style: { color: "#3150d6", fill: "#dfe6ff", size: 7 } });
+      const nm = (id) => stepById(this.doc, id)?.name || "";
+      this.showHint(`B\u1EA5m \u0111\u1EC3 l\u1EA5y giao \u0111i\u1EC3m c\u1EE7a ${nm(cross2.a)} v\xE0 ${nm(cross2.b)}`);
+    }
+    clearCrossMark() {
+      if (!this.crossMark) return;
+      this.renderer.extra = this.renderer.extra.filter((x) => x !== this.crossMark);
+      this.crossMark = null;
+      this.crossKey = null;
+      this.view.requestDraw();
+      this.showHint();
+    }
     resolvePoint(sx, sy, hits) {
       const pHit = hits.find((h) => h.kind === "point");
       if (pHit) return pHit.id;
@@ -19114,6 +19588,53 @@
       this.showHint();
       renderToolOptions(this);
       renderProps(this);
+    }
+    /**
+     * Gọi công cụ bằng phím tắt / bảng lệnh (bản 1.6). Đang chọn sẵn các đối tượng hợp với công cụ thì DỰNG NGAY trên
+     * chúng (chọn trước, dựng sau – như Sketchpad); chọn mới đủ một phần thì dùng làm các lần chọn đầu.
+     */
+    activateTool(id) {
+      const sel = [...this.selection].filter((x) => stepById(this.doc, x));
+      this.setTool(id);
+      const tool = TOOL_BY_ID[id];
+      if (!sel.length || !tool || this.mode !== "edit") return;
+      const k = kinds(this.doc);
+      if (tool.id === "point") return;
+      if (tool.id === "intersect") {
+        const cs = sel.filter((x) => k.get(x) === "line" || k.get(x) === "circle");
+        if (cs.length !== 2 || sel.length !== 2) return;
+        this.beginTx();
+        const n0 = this.doc.steps.length;
+        this.createIntersections(cs[0], cs[1], null);
+        this.lastCreatedPoints = this.doc.steps.slice(n0).map((x) => x.id);
+        return this.finishTool();
+      }
+      if (tool.segmentShortcut && sel.length === 1 && stepById(this.doc, sel[0]).type === "segment") {
+        this.beginTx();
+        this.picks = [...stepById(this.doc, sel[0]).args];
+        return this.completeTool(tool);
+      }
+      if (tool.inputs[0] === "...point") {
+        const pts = sel.filter((x) => k.get(x) === "point");
+        if (pts.length < 3 || pts.length !== sel.length) return;
+        this.beginTx();
+        this.picks = pts;
+        return this.completeTool(tool);
+      }
+      const rest = [...sel], picks = [];
+      for (const t2 of tool.inputs) {
+        const j = rest.findIndex((x) => argAccepts(t2, k.get(x)));
+        if (j < 0) break;
+        picks.push(rest.splice(j, 1)[0]);
+      }
+      if (rest.length || !picks.length) return;
+      this.beginTx();
+      this.picks = picks;
+      if (picks.length === tool.inputs.length) return this.completeTool(tool);
+      this.selection = new Set(picks);
+      this.refresh();
+      this.startPreview(tool);
+      this.showHint();
     }
     cancelTool() {
       this.picks = [];
@@ -19236,6 +19757,10 @@
       const k = kinds(this.doc);
       const pts = ids.filter((id) => k.get(id) === "point" && !stepById(this.doc, id).hidden);
       this.selection = new Set(pts.length === 1 ? pts : ids.slice(0, 1));
+      if (!ids.length && specs.reused && specs.reused.length) {
+        this.selection = /* @__PURE__ */ new Set([specs.reused[specs.reused.length - 1]]);
+        toast(`\u0110\xE3 c\xF3 s\u1EB5n tr\xEAn h\xECnh: ${this.name(specs.reused[specs.reused.length - 1])}`);
+      }
       this.finishTool();
     }
     finishTool() {
@@ -19296,7 +19821,10 @@
           if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
           const hits = this.hitTest(sx, sy);
           let cursor = "";
-          if (this.toolId === "move" || this.mode === "present") {
+          const cross2 = this.toolId === "move" && this.mode === "edit" && !ev.shiftKey ? this.crossingAt(sx, sy, hits) : null;
+          this.showCrossMark(cross2);
+          if (cross2) cursor = "copy";
+          else if (this.toolId === "move" || this.mode === "present") {
             const h = hits[0];
             if (h && h.kind === "point" && isDraggableType(stepById(this.doc, h.id).type)) cursor = "grab";
             else if (h && this.mode === "edit") cursor = "pointer";
@@ -19368,6 +19896,18 @@
         return;
       }
       this.mouse = this.toUser(sx, sy);
+      if (e.altKey && this.mode === "edit" && !this.picks.length) {
+        const h2 = this.hitTest(sx, sy)[0];
+        if (h2) {
+          e.stopPropagation();
+          e.preventDefault();
+          const s = stepById(this.doc, h2.id);
+          this.selection.delete(h2.id);
+          this.setStepProp(h2.id, "hidden", true);
+          toast(`\u0110\xE3 \u1EA9n ${s.name || "\u0111\u1ED1i t\u01B0\u1EE3ng"} \u2013 Ctrl+Z \u0111\u1EC3 hi\u1EC7n l\u1EA1i`);
+          return;
+        }
+      }
       if (this.toolId !== "move" && this.mode === "edit") {
         e.stopPropagation();
         e.preventDefault();
@@ -19392,6 +19932,18 @@
         e.preventDefault();
         this.startDrag(e, { kind: "point", id: h.id, start: JSON.stringify(this.doc) });
         if (this.mode === "edit") this.select(h.id, e.shiftKey, false);
+        return;
+      }
+      const cross2 = this.mode === "edit" && !e.shiftKey ? this.crossingAt(sx, sy, hits) : null;
+      if (cross2) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.beginTx();
+        const ids = this.createIntersections(cross2.a, cross2.b, this.toUser(sx, sy));
+        this.endTx();
+        this.clearCrossMark();
+        this.selection = new Set(ids.length ? [ids[0]] : []);
+        this.afterChange();
         return;
       }
       if (h) {
@@ -19867,7 +20419,8 @@
         const many = g.tools.length > 1 || g.menu;
         const btn = (id) => {
           const t2 = TOOL_BY_ID[id];
-          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t2.label)}"><span class="ti">${t2.icon}</span><span class="tl">${escapeHTML(t2.label)}</span></button>`;
+          const kb = keyOf(id);
+          return `<button class="tool" data-tool="${id}" title="${escapeHTML(t2.label)}${kb ? ` (${kb})` : ""}"><span class="ti">${t2.icon}</span><span class="tl">${escapeHTML(t2.label)}</span>${kb ? `<kbd>${kb}</kbd>` : ""}</button>`;
         };
         const items = g.submenus ? g.submenus.map((m) => {
           const ids = g.tools.filter((id) => TOOL_BY_ID[id].menu === m);
@@ -20758,13 +21311,13 @@
       return Object.entries(this.index.buoi).filter(([, b]) => b.bai.includes(ma)).map(([bm, b]) => ({ ma: bm, ...b })).sort((a, b) => String(b.ngay).localeCompare(String(a.ngay)));
     }
   };
-  var fold = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+  var fold2 = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
   function filterIndex(index, q = "", f = {}, sort = "moi") {
-    const words = fold(q).split(/\s+/).filter(Boolean);
+    const words = fold2(q).split(/\s+/).filter(Boolean);
     const taught = new Set(Object.values(index.buoi || {}).flatMap((b) => b.bai));
     let rows = Object.entries(index.bai || {}).filter(([ma, e]) => {
       if (words.length) {
-        const hay = fold([e.ten, sourceLabel(e.nguon), (e.chuDe || []).join(" "), (e.the || []).join(" "), e.tom, e.ghiChu, ma].join(" "));
+        const hay = fold2([e.ten, sourceLabel(e.nguon), (e.chuDe || []).join(" "), (e.the || []).join(" "), e.tom, e.ghiChu, ma].join(" "));
         if (!words.every((w) => hay.includes(w))) return false;
       }
       if (f.chuDe && f.chuDe.size && !(e.chuDe || []).some((c) => f.chuDe.has(c))) return false;
@@ -40147,13 +40700,13 @@
   }
   var handleKeyEvents = /* @__PURE__ */ Prec.default(/* @__PURE__ */ EditorView.domEventHandlers({
     keydown(event, view) {
-      return runHandlers(getKeymap(view.state), event, view, "editor");
+      return runHandlers(getKeymap2(view.state), event, view, "editor");
     }
   }));
-  var keymap = /* @__PURE__ */ Facet.define({ enables: handleKeyEvents });
+  var keymap2 = /* @__PURE__ */ Facet.define({ enables: handleKeyEvents });
   var Keymaps = /* @__PURE__ */ new WeakMap();
-  function getKeymap(state) {
-    let bindings = state.facet(keymap);
+  function getKeymap2(state) {
+    let bindings = state.facet(keymap2);
     let map = Keymaps.get(bindings);
     if (!map)
       Keymaps.set(bindings, map = buildKeymap(bindings.reduce((a, b) => a.concat(b), [])));
@@ -47551,7 +48104,7 @@
       return maps.length ? maps[0] : defaultSnippetKeymap;
     }
   });
-  var addSnippetKeymap = /* @__PURE__ */ Prec.highest(/* @__PURE__ */ keymap.compute([snippetKeymap], (state) => state.facet(snippetKeymap)));
+  var addSnippetKeymap = /* @__PURE__ */ Prec.highest(/* @__PURE__ */ keymap2.compute([snippetKeymap], (state) => state.facet(snippetKeymap)));
   var snippetPointerHandler = /* @__PURE__ */ EditorView.domEventHandlers({
     mousedown(event, view) {
       let active = view.state.field(snippetState, false), pos;
@@ -47818,7 +48371,7 @@
     { key: "PageUp", run: /* @__PURE__ */ moveCompletionSelection(false, "page") },
     { key: "Enter", run: acceptCompletion }
   ];
-  var completionKeymapExt = /* @__PURE__ */ Prec.highest(/* @__PURE__ */ keymap.computeN([completionConfig], (state) => state.facet(completionConfig).defaultKeymap ? [completionKeymap] : []));
+  var completionKeymapExt = /* @__PURE__ */ Prec.highest(/* @__PURE__ */ keymap2.computeN([completionConfig], (state) => state.facet(completionConfig).defaultKeymap ? [completionKeymap] : []));
 
   // src/text/snippets.js
   var DEFAULT_AUTO = [
@@ -47842,6 +48395,7 @@
     ["sqrt", "\\sqrt{${}}"],
     ["vec", "\\overrightarrow{${}}"],
     ["bar", "\\overline{${}}"],
+    ["hat", "\\widehat{${}}"],
     ["goc", "\\angle "],
     ["tgiac", "\\triangle "],
     ["inf", "\\infty "],
@@ -47862,6 +48416,7 @@
     [";bn", "\\cong "],
     [";dd", "\\sim "],
     [";fr", "\\frac{${}}{${}}"],
+    [";gh", "\\widehat{${}}"],
     [";vt", "\\overrightarrow{${}}"],
     [";cung", "\\overset{\\frown}{${}}"],
     [";dt", "$$\n${}\n$$"],
@@ -47949,33 +48504,55 @@
   // src/text/editor.js
   var COMMANDS = [
     "angle",
+    "widehat{}",
+    "overrightarrow{}",
+    "vec{}",
+    "overline{}",
+    "wideparen{}",
+    "overset{\\frown}{}",
     "triangle",
+    "vartriangle",
+    "measuredangle",
     "parallel",
+    "nparallel",
     "perp",
     "cong",
     "sim",
-    "frac",
-    "dfrac",
-    "sqrt",
-    "overline",
-    "overrightarrow",
-    "overset{\\frown}",
+    "backsim",
+    "equiv",
+    "odot",
     "circ",
     "cdot",
     "times",
+    "pm",
     "le",
     "ge",
     "ne",
+    "approx",
+    "frac{}{}",
+    "dfrac{}{}",
+    "sqrt{}",
     "Rightarrow",
+    "Leftarrow",
     "Leftrightarrow",
     "iff",
     "implies",
+    "mapsto",
+    "to",
+    "longrightarrow",
     "in",
     "notin",
     "cap",
     "cup",
     "subset",
-    "equiv",
+    "emptyset",
+    "therefore",
+    "because",
+    "infty",
+    "dots",
+    "cdots",
+    "quad",
+    "qquad",
     "alpha",
     "beta",
     "gamma",
@@ -47987,6 +48564,7 @@
     "theta",
     "lambda",
     "mu",
+    "Delta",
     "sin",
     "cos",
     "tan",
@@ -47994,22 +48572,34 @@
     "log",
     "ln",
     "text{}",
+    "textbf{}",
+    "textit{}",
+    "emph{}",
+    "underline{}",
+    "boxed{}",
     "left(",
     "right)",
+    "left[",
+    "right]",
+    "overbrace{}",
+    "underbrace{}",
     "begin{cases}",
     "end{cases}",
     "begin{aligned}",
     "end{aligned}",
-    "quad",
-    "qquad",
-    "dots",
-    "cdots",
-    "infty",
-    "pm",
+    "begin{align*}",
+    "end{align*}",
+    "begin{itemize}",
+    "begin{enumerate}",
+    "item",
+    "end{itemize}",
+    "end{enumerate}",
     "goc",
     "tamgiac",
     "cung{}",
-    "vecto{}"
+    "vecto{}",
+    "ssong",
+    "vgoc"
   ];
   function createEditor(parent, opts) {
     const rules = () => opts.rules ? opts.rules() : { auto: [], short: [] };
@@ -48036,7 +48626,7 @@
       view2.dispatch({ changes: { from: r.from, to: r.to, insert: open3 + sel + close2 }, selection: { anchor: r.from + open3.length + sel.length } });
       return true;
     };
-    const keys = keymap.of([
+    const keys = keymap2.of([
       {
         key: "Tab",
         run: (view2) => {
@@ -48066,7 +48656,8 @@
     const complete = (ctx) => {
       const b = before(ctx.state, ctx.pos);
       const cmd2 = /\\([A-Za-z]*)$/.exec(b);
-      if (cmd2) return { from: ctx.pos - cmd2[1].length, options: COMMANDS.map((c) => ({ label: c, type: "keyword", apply: c })), validFor: /^[A-Za-z]*$/ };
+      const opt = (c) => ({ label: c, type: "keyword", apply: c.includes("{}") ? (view2, _c, from, to) => snippet(c.replace(/\{\}/g, "{${}}"))(view2, null, from, to) : c });
+      if (cmd2) return { from: ctx.pos - cmd2[1].length, options: COMMANDS.map(opt), validFor: /^[A-Za-z]*$/ };
       if (!inMath(b)) return null;
       const w = /[A-Z][A-Za-z0-9_{}']*$/.exec(b);
       if (!ctx.explicit && !(w && w[0].includes("_"))) return null;
@@ -48081,7 +48672,7 @@
         extensions: [
           history2(),
           keys,
-          keymap.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...historyKeymap]),
+          keymap2.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...historyKeymap]),
           closeBrackets(),
           // tự đóng ( [ { $ – KHÔNG đóng dấu ' (dấu phẩy của tên điểm B')
           EditorState.languageData.of(() => [{ closeBrackets: { brackets: ["(", "[", "{", "$"] } }]),
@@ -48614,6 +49205,7 @@
     setupImages(app);
     const tb = setupTextBoxes(app);
     const kho = setupKho(app);
+    setupShortcuts(app);
     const onClick = (id, fn) => {
       const el = document.getElementById(id);
       if (el) el.onclick = fn;
