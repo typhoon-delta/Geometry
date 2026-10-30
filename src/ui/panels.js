@@ -153,6 +153,12 @@ export function renderProps(app) {
     const v = app.values.get(s.id);
     if (v) html += `<div class="row coords">(${v.x.toFixed(3)}; ${v.y.toFixed(3)})</div>`;
   }
+  if (one && (kind === 'line' || kind === 'circle')) html += `<label class="row" title="Đường phụ: nét đứt, ẩn/hiện tất cả cùng lúc bằng Ctrl+Shift+D. Bỏ chọn: đường chính."><input id="p-aux" type="checkbox" ${s.aux ? 'checked' : ''}> Đường phụ (bỏ chọn: đường chính)</label>`;
+  if (one && kind !== 'mark') html += `<label class="row"><input id="p-trace" type="checkbox" ${app.traceIds.has(s.id) ? 'checked' : ''}> Để lại vết khi kéo</label>`;
+  if (one && s.args.length && STEP_TYPES[s.type] && !['locus', 'fixed_point'].includes(s.type)) {
+    // sửa đối tượng cha: bấm một tên rồi bấm đối tượng thay thế trên hình
+    html += `<div class="row redef">Dựng từ ${s.args.map((a, i) => `<button class="mini" data-redef="${i}" title="Thay đối tượng này (các đối tượng phụ thuộc giữ nguyên)">${labelHTML(stepById(app.doc, a)?.name || '?')}</button>`).join('')}</div>`;
+  }
   if (one) {
     html += `<label class="row"><input id="p-hidden" type="checkbox" ${s.hidden ? 'checked' : ''}> Ẩn (đối tượng phụ)</label>`;
     html += `<label class="row"><input id="p-join" type="checkbox" ${s.joinPrev ? 'checked' : ''}> Gộp khung trình bày với bước trước</label>`;
@@ -173,6 +179,9 @@ export function renderProps(app) {
   host.querySelectorAll('[data-ticks]').forEach((b) => (b.onclick = () => app.setStyle(ids, { ticks: +b.dataset.ticks })));
   if (q('#p-swap')) q('#p-swap').onclick = () => app.setParams(s.id, { which: 1 - (paramsOf(s).which || 0) });
   if (q('#p-arc')) q('#p-arc').onclick = () => app.setParams(s.id, { contains: !paramsOf(s).contains });
+  if (q('#p-aux')) q('#p-aux').onchange = (e) => app.setStepProp(s.id, 'aux', e.target.checked);
+  if (q('#p-trace')) q('#p-trace').onchange = (e) => app.toggleTrace(s.id, e.target.checked);
+  host.querySelectorAll('[data-redef]').forEach((b) => (b.onclick = () => app.startRedefine(s.id, +b.dataset.redef)));
   if (q('#p-hidden')) q('#p-hidden').onchange = (e) => app.setStepProp(s.id, 'hidden', e.target.checked);
   if (q('#p-join')) q('#p-join').onchange = (e) => app.setStepProp(s.id, 'joinPrev', e.target.checked);
   q('#p-del').onclick = () => app.deleteSteps(ids);

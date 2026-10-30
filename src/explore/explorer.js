@@ -91,6 +91,11 @@ function randomOverrides(doc, base, scale, rand, perturb) {
       else if (host.sub === 'ray') t = Math.max(0.05, t * Math.exp((rand() * 2 - 1) * 0.5));
       else t += (rand() * 2 - 1) * 0.4;
       ov.set(s.id, { t });
+    } else if (s.type === 'point_in') {
+      // điểm trong tam giác: (u, v) ngẫu nhiên, tránh sát cạnh
+      let u = rand(), v = rand();
+      if (u + v > 1) { u = 1 - u; v = 1 - v; }
+      ov.set(s.id, { u: 0.08 + 0.84 * u, v: 0.08 + 0.84 * v });
     }
   }
   return ov;

@@ -10,7 +10,7 @@ import { evaluate, kinds, stepById } from '../core/model.js';
 import * as G from '../core/geom.js';
 import { autoLabelDirs } from '../core/labels.js';
 import { texLabel } from '../core/names.js';
-import { styleOf, PALETTE } from '../core/styles.js';
+import { styleOf, isShown, PALETTE } from '../core/styles.js';
 
 // Tên màu dễ đọc cho bảng màu chuẩn; màu khác đặt tên theo mã hex.
 const NAMED_COLORS = Object.fromEntries([
@@ -66,7 +66,7 @@ export function toTikZ(doc, opts = {}) {
   const theme = opts.theme || 'mono';
   const vals = opts.values || evaluate(doc);
   const k = kinds(doc);
-  const visible = doc.steps.filter((s) => !s.hidden && vals.get(s.id));
+  const visible = doc.steps.filter((s) => isShown(doc, s) && vals.get(s.id));
 
   // ---- khung bao ----
   const pts = [];
@@ -161,6 +161,14 @@ export function toTikZ(doc, opts = {}) {
       const path = s.args.map(ref).join(' -- ') + ' -- cycle';
       out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.1)}] ${path};`);
       if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path};`);
+    } else if (v.kind === 'locus') {
+      // quỹ tích: các khúc gấp khúc qua điểm mẫu (bỏ phần ra xa ngoài khung, ngắt ở chỗ không xác định)
+      const W = box.x2 - box.x1, inBox = (p) => p && p.x > box.x1 - W && p.x < box.x2 + W && p.y > box.y1 - W && p.y < box.y2 + W;
+      let run = [];
+      const flush = () => { if (run.length > 1) out.lines.push(`\\draw${lineOpts(s)} plot coordinates {${run.map(xy).join(' ')}}; % quỹ tích`); run = []; };
+      const ps = v.closed ? [...v.pts, v.pts[0]] : v.pts;
+      for (const p of ps) { if (inBox(p)) run.push(p); else flush(); }
+      flush();
     } else if (s.type === 'angle_mark') {
       out.marks.push(...angleMark(v, s, col(s), cm, ref));
     } else if (s.type === 'segment_mark') {

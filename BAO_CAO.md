@@ -920,3 +920,54 @@ ngưỡng, như trước (phím tắt không chạy gì khi kéo).
 * Công cụ không dựng gì mới vì điểm đã có (trực tâm H có sẵn): chọn lại điểm đó, báo *Đã có sẵn trên hình: H*.
 * smoke8 thêm 5 kiểm tra (trực tâm có sẵn, Ctrl+M với đoạn đang chọn, rê chuột báo trước, bấm chỗ cắt ra giao điểm, bấm
   lại không trùng). Dựng thử 23/23 đúng, số thao tác không đổi (1027); hiệu năng ×1 6,65 ms/khung.
+
+# Bản 1.7 – Quỹ tích, điểm cố định, góc bằng góc, đường phụ, chọn vùng, chép/dán
+
+Góp ý sau khi dựng Bài 16 (tam giác ABC, P trong tam giác, Q trên đường đẳng giác, E, F với ∠AQE = ∠PCB, ∠AQF = ∠PBC,
+tiếp tuyến TR, đường tròn (U) qua R – chứng minh (U) đi qua điểm cố định): "chưa có quỹ tích", "công cụ không cho chọn
+nhiều đối tượng cùng lúc", "câu hình này dựng kiểu gì cho dễ". Dựng thử Bài 16 trên bản 1.6 thì vướng: không chép được góc
+(phải quay bằng `rotate_by` rồi đoán chiều), quá nhiều đường phụ che hình, không có cách thấy điểm cố định, điểm P "trong
+tam giác" kéo ra ngoài được. Thầy/cô duyệt mọi đề xuất trừ "hiện mờ hai nghiệm để chọn"; giữ kéo nền = dời hình.
+
+## 1. Đã làm
+
+* **Góc bằng góc** (`angle_line`, `angle_point`): góc mẫu lấy trên hình (kéo hình thì góc đổi theo). Chiều chọn bằng chuột:
+  đường xem trước đi theo phía chuột, bấm là xong (`App.extraFlip`); điểm trên đường thì bấm gần chỗ điểm cần lấy. Cơ chế
+  chung "bấm thêm một lần sau khi chọn đủ" (`tool.extraClick`, `App.picksDone`) dùng cho cả điểm trong tam giác.
+* **Điểm trong tam giác** (`point_in`, tham số u, v): bậc tự do mới – kéo được, kẹp vào trong tam giác; bộ khám phá chỉ thử
+  vị trí trong tam giác; công cụ tự tạo coi nó là đầu vào.
+* **Điểm cố định** (`fixed_point`): dời thử điểm thay đổi tới 6 vị trí cố định (bước dời theo cỡ hình *trước* bước đó, để
+  khi kéo và khi tính lại toàn bộ cho cùng kết quả), giao vị trí hiện tại của đường với hai vị trí đầu, giữ nghiệm nằm trên
+  mọi vị trí. Bài 16 tìm ra X = (0,5; 3,5) trên AC; đường AD (D chạy trên BC) → A; họ đường song song → không có. Điểm cố
+  định là điểm thật của hình: nối, lấy giao, khám phá tiếp được.
+* **Quỹ tích** (`locus`, 160 mẫu, ngắt ở chỗ không xác định và bước nhảy bất thường) – vẽ, chọn, xuất TikZ (`plot
+  coordinates`). **Vết** khi kéo (điểm: chấm; đường thẳng/đường tròn: nét mờ) – không lưu vào hình, *Hiển thị › Xoá vết*.
+* **Đo**: độ dài, góc (độ), tỉ số; số hiện trên hình có nền mờ, cập nhật khi kéo, kéo chữ để dời.
+* **Đường phụ** (`step.aux`): đường vuông góc, song song, trung trực, phân giác, góc bằng góc dựng thêm tự là đường phụ –
+  nét đứt, xám. `Ctrl+Shift+D` ẩn/hiện tất cả (`doc.hideAux`, lưu theo hình; không vẽ, không bấm trúng, không vào TikZ).
+  Thẻ thuộc tính: bỏ *Đường phụ* để thành đường chính.
+* **Ctrl + kéo chọn vùng** (Shift: chọn thêm): điểm trong khung và mọi đối tượng dựng hoàn toàn từ chúng. Kết hợp với "chọn
+  trước, dựng sau" của bản 1.6.
+* **Chép/dán** (`Ctrl+C`/`Ctrl+V`): kèm đối tượng cha, dán được sang tab khác (giữ tên) hoặc chính hình đó (dời đi, tên mới);
+  clipboard chứa JSON nên dán được sang cửa sổ khác.
+* **Sửa đối tượng cha**: thẻ thuộc tính › *Dựng từ* › bấm tên cha › bấm đối tượng mới. Chặn vòng phụ thuộc; các bước được
+  sắp lại theo thứ tự dựng được (`topoOrder`), hoàn tác được.
+* Lõi Python (`lab/core`) có đủ các bước mới, cho **cùng kết quả số** với JS (dữ liệu đối chiếu thêm Bài 16 và một hình quỹ
+  tích – điểm cố định).
+
+## 2. Kiểm thử
+
+`npm test` 151 test (thêm 5 test lõi: góc bằng góc hai phía, điểm trong tam giác, điểm cố định của đường thẳng/đường tròn/họ
+song song, quỹ tích đường trung bình và quỹ tích trực tâm, số đo). Test Python đạt (đối chiếu JS gồm các ca bản 1.7).
+`npm run test:browser` đạt, thêm `tests/browser/smoke9.mjs` (40 kiểm tra: chọn phía góc bằng chuột, điểm E trên AC với
+∠EBC = ∠BAC, điểm trong tam giác và kéo ra ngoài, quỹ tích, vết, điểm cố định, ba số đo và kéo chữ, Ctrl + kéo chọn vùng,
+kéo nền vẫn dời hình, đường phụ và Ctrl+Shift+D, TikZ, chép/dán cùng tab – sang tab – qua sự kiện clipboard, sửa đối tượng
+cha, chặn vòng, hoàn tác). `npm run test:perf` đạt ngưỡng (×1 3,7 ms/khung, ×4 13,9 ms, p95 16,7 ms).
+
+## 3. Hạn chế
+
+* Điểm cố định tìm bằng số: họ đường mà vị trí thử bị suy biến (đường không xác định ở vị trí thử) có thể báo "không có"
+  dù có; điểm cố định nằm rất xa hình bị bỏ qua.
+* Quỹ tích chỉ theo điểm chạy trên đường (`point_on`); quỹ tích theo điểm trong miền chưa làm. Quỹ tích tính lại mỗi khung
+  khi kéo (160 lần dựng lại phần phụ thuộc) – hình rất lớn có nhiều quỹ tích có thể chậm.
+* Chép/dán không mang theo khung chữ, ảnh.

@@ -182,3 +182,92 @@ test('cập nhật từng phần khi kéo cho kết quả y hệt tính lại to
     for (const s of doc.steps) assert.deepEqual(vals.get(s.id), full.get(s.id), s.id);
   }
 });
+
+// ---------- bản 1.7 ----------
+test('góc bằng góc: đường qua O tạo với OX góc bằng ∠ABC (hai phía), điểm trên đường', () => {
+  const { b, A, B, C } = triangle();
+  const ca = b.add('segment', [C, A]);
+  const l0 = b.add('angle_line', [A, C, A, B, C], { flip: false });
+  const l1 = b.add('angle_line', [A, C, A, B, C], { flip: true });
+  const E = b.add('angle_point', [B, C, B, A, C, ca], { flip: false });
+  const v = evaluate(b.doc);
+  const angB = Math.abs(G.directedAngle(v.get(A), v.get(B), v.get(C)));
+  for (const l of [l0, l1]) {
+    const L = v.get(l);
+    const X = { x: L.p.x + L.d.x, y: L.p.y + L.d.y };
+    const a = Math.abs(G.directedAngle(v.get(C), v.get(A), X));
+    assert.ok(Math.abs(a - angB) < 1e-9 || Math.abs(180 - a - angB) < 1e-9);
+  }
+  assert.ok(Math.abs(G.cross(v.get(l0).d, v.get(l1).d)) > 1e-6, 'hai phía cho hai đường khác nhau');
+  // điểm E trên CA với ∠CBE = ∠BAC
+  const Ev = v.get(E);
+  assert.ok(collinear(v.get(C), v.get(A), Ev) < 1e-9);
+  close(Math.abs(G.directedAngle(v.get(C), v.get(B), Ev)), Math.abs(G.directedAngle(v.get(B), v.get(A), v.get(C))));
+});
+
+test('điểm trong tam giác theo (u, v)', () => {
+  const { b, A, B, C } = triangle();
+  const P = b.add('point_in', [A, B, C], { u: 0.2, v: 0.5 });
+  const v = evaluate(b.doc);
+  const a = v.get(A), bb = v.get(B), c = v.get(C);
+  closeP(v.get(P), { x: a.x + 0.2 * (bb.x - a.x) + 0.5 * (c.x - a.x), y: a.y + 0.2 * (bb.y - a.y) + 0.5 * (c.y - a.y) });
+});
+
+test('điểm cố định: đường AD (D chạy trên BC) luôn qua A; đường tròn qua hai điểm cố định; họ song song thì không có', () => {
+  const { b, A, B, C } = triangle();
+  const bc = b.add('segment', [B, C]);
+  const D = b.add('point_on', [bc], { t: 0.3 });
+  const ad = b.add('line', [A, D]);
+  const X = b.add('fixed_point', [ad, D]);
+  const X1 = b.add('fixed_point', [ad, D], { which: 1 });
+  // đường tròn (ABD) khi D chạy trên BC: qua A và B
+  const w = b.add('circumcircle', [A, B, D]);
+  const Y0 = b.add('fixed_point', [w, D]), Y1 = b.add('fixed_point', [w, D], { which: 1 });
+  const par = b.add('parallel', [D, b.add('line', [A, C])]);
+  const Z = b.add('fixed_point', [par, D]);
+  const v = evaluate(b.doc);
+  closeP(v.get(X), v.get(A), 1e-6);
+  assert.equal(v.get(X1), null);
+  const ys = [v.get(Y0), v.get(Y1)].sort((p, q) => p.x - q.x);
+  const ab = [v.get(A), v.get(B)].sort((p, q) => p.x - q.x);
+  closeP(ys[0], ab[0], 1e-6);
+  closeP(ys[1], ab[1], 1e-6);
+  assert.equal(v.get(Z), null);
+});
+
+test('quỹ tích: trung điểm AD khi D chạy trên BC là đường trung bình; trực tâm khi D chạy trên đường tròn ngoại tiếp', () => {
+  const { b, A, B, C } = triangle();
+  const bc = b.add('segment', [B, C]);
+  const D = b.add('point_on', [bc], { t: 0.3 });
+  const N = b.add('midpoint', [A, D]);
+  const L = b.add('locus', [N, D], { n: 50 });
+  const w = b.add('circumcircle', [A, B, C]);
+  const Q = b.add('point_on', [w], { t: 1 });
+  const H = b.add('orthocenter', [A, B, Q]);
+  const L2 = b.add('locus', [H, Q], { n: 80 });
+  const bad = b.add('locus', [N, A]);
+  const v = evaluate(b.doc);
+  const a = v.get(A), mB = G.mid(a, v.get(B)), mC = G.mid(a, v.get(C));
+  const loc = v.get(L);
+  assert.equal(loc.kind, 'locus');
+  assert.equal(loc.closed, false);
+  for (const p of loc.pts) assert.ok(collinear(mB, mC, p) < 1e-9);
+  closeP(loc.pts[0], mB);
+  closeP(loc.pts[loc.pts.length - 1], mC);
+  // trực tâm ABQ: ảnh của Q qua phép đối xứng → nằm trên đường tròn đối xứng của ω qua AB
+  const W = v.get(w), refl = G.reflectObject(W, { kind: 'line', p: a, d: G.sub(v.get(B), a), sub: 'line' });
+  const loc2 = v.get(L2);
+  assert.equal(loc2.closed, true);
+  for (const p of loc2.pts.filter(Boolean)) close(G.dist(p, refl.c), refl.r, 1e-6);
+  assert.equal(v.get(bad), null, 'điểm chạy phải là điểm trên đường');
+});
+
+test('số đo: độ dài, góc (độ), tỉ số', () => {
+  const b = new Builder();
+  const A = b.point(0, 0), B = b.point(3, 0), C = b.point(0, 4);
+  const l = b.add('measure_len', [B, C]), g = b.add('measure_angle', [B, A, C]), r = b.add('measure_ratio', [A, B, A, C]);
+  const v = evaluate(b.doc);
+  close(v.get(l).value, 5);
+  close(v.get(g).value, 90);
+  close(v.get(r).value, 0.75);
+});

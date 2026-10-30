@@ -1089,6 +1089,93 @@
       compute: ([A, B]) => circle(mid(A, B), dist(A, B) / 2),
       facts: (s) => [{ on: [s.args[0], s.id] }, { on: [s.args[1], s.id] }]
     },
+    // ---------- BẢN 1.7: góc bằng góc, điểm trong tam giác, điểm cố định, quỹ tích ----------
+    angle_line: {
+      // Đường qua O tạo với tia OX một góc bằng góc ∠ABC lấy trên hình (args: O, X, A, B, C). flip = false: quay OX
+      // theo đúng hướng của góc mẫu; flip = true: phía bên kia (chọn bằng cách rê chuột khi dựng).
+      kind: "line",
+      args: ["point", "point", "point", "point", "point"],
+      params: { flip: false },
+      label: "\u0110\u01B0\u1EDDng t\u1EA1o g\xF3c b\u1EB1ng g\xF3c cho tr\u01B0\u1EDBc",
+      compute: ([O, X, A, B, C2], p) => {
+        const a = directedAngle(A, B, C2);
+        if (a == null || dist(O, X) < EPS) return null;
+        return lineThrough(O, rotatePoint(X, O, p.flip ? -a : a));
+      },
+      facts: (s) => [{ on: [s.args[0], s.id] }]
+    },
+    angle_point: {
+      // Điểm E trên đường l với ∠XOE = ∠ABC (args: O, X, A, B, C, l); flip chọn phía – lấy theo chỗ bấm khi dựng.
+      kind: "point",
+      args: ["point", "point", "point", "point", "point", "line"],
+      params: { flip: false },
+      label: "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng t\u1EA1o g\xF3c b\u1EB1ng g\xF3c cho tr\u01B0\u1EDBc",
+      compute: ([O, X, A, B, C2, l], p) => {
+        const a = directedAngle(A, B, C2);
+        if (a == null || dist(O, X) < EPS) return null;
+        return intersectLL(lineThrough(O, rotatePoint(X, O, p.flip ? -a : a)), l);
+      },
+      facts: (s) => [{ on: [s.id, s.args[5]] }]
+    },
+    point_in: {
+      // Điểm thay đổi BÊN TRONG tam giác ABC: P = A + u·AB + v·AC (khi kéo luôn giữ u, v ≥ 0, u + v ≤ 1).
+      kind: "point",
+      args: ["point", "point", "point"],
+      params: { u: 1 / 3, v: 1 / 3 },
+      label: "\u0110i\u1EC3m trong tam gi\xE1c",
+      compute: ([A, B, C2], p) => pt(A.x + p.u * (B.x - A.x) + p.v * (C2.x - A.x), A.y + p.u * (B.y - A.y) + p.v * (C2.y - A.y))
+    },
+    fixed_point: {
+      // Điểm cố định của họ đường thẳng/đường tròn X khi điểm M thay đổi (args: X, M): dời thử M rồi giao các vị trí của X
+      // (xem model.js – SAMPLERS). which: chỉ số khi có hai điểm cố định (xếp theo x tăng).
+      kind: "point",
+      args: ["curve", "point"],
+      params: { which: 0 },
+      label: "\u0110i\u1EC3m c\u1ED1 \u0111\u1ECBnh",
+      sampler: true,
+      compute: () => null,
+      facts: (s) => [{ on: [s.id, s.args[0]] }]
+    },
+    locus: {
+      // Quỹ tích của điểm X khi điểm D chạy trên đường của nó (args: X, D; D là điểm trên đối tượng). Giá trị: đường gấp
+      // khúc lấy mẫu (xem model.js – SAMPLERS); không tham gia khám phá.
+      kind: "mark",
+      args: ["point", "point"],
+      params: { n: 160 },
+      label: "Qu\u1EF9 t\xEDch",
+      sampler: true,
+      compute: () => null
+    },
+    measure_len: {
+      // Số đo độ dài AB (hiện trên hình, cập nhật khi kéo). dx, dy: dời chữ (px).
+      kind: "mark",
+      args: ["point", "point"],
+      params: { dx: 0, dy: 0 },
+      label: "\u0110o \u0111\u1ED9 d\xE0i",
+      compute: ([A, B]) => ({ kind: "measure", m: "len", value: dist(A, B), at: { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } })
+    },
+    measure_angle: {
+      // Số đo góc ABC (độ, 0..180).
+      kind: "mark",
+      args: ["point", "point", "point"],
+      params: { dx: 0, dy: 0 },
+      label: "\u0110o g\xF3c",
+      compute: ([A, B, C2]) => {
+        const a = directedAngle(A, B, C2);
+        return a == null ? null : { kind: "measure", m: "angle", value: Math.abs(a), at: { x: B.x, y: B.y } };
+      }
+    },
+    measure_ratio: {
+      // Tỉ số AB/CD.
+      kind: "mark",
+      args: ["point", "point", "point", "point"],
+      params: { dx: 0, dy: 0 },
+      label: "\u0110o t\u1EC9 s\u1ED1",
+      compute: ([A, B, C2, D2]) => {
+        const cd = dist(C2, D2);
+        return cd < EPS ? null : { kind: "measure", m: "ratio", value: dist(A, B) / cd, at: { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } };
+      }
+    },
     // ---------- ĐÁNH DẤU (không tham gia khám phá) ----------
     polygon: {
       kind: "mark",
@@ -1160,10 +1247,10 @@
   var paramsOf = (step) => ({ ...STEP_TYPES[step.type]?.params || {}, ...step.params || {} });
   function evaluate(doc2, overrides = null) {
     const vals = /* @__PURE__ */ new Map();
-    for (const s of doc2.steps) vals.set(s.id, computeStep(s, vals, overrides));
+    for (const s of doc2.steps) vals.set(s.id, computeStep(s, vals, overrides, doc2));
     return vals;
   }
-  function computeStep(s, vals, overrides = null) {
+  function computeStep(s, vals, overrides = null, doc2 = null) {
     const def = STEP_TYPES[s.type];
     if (!def) return null;
     const variadic = def.args[0] === "...point";
@@ -1176,7 +1263,7 @@
     const p = overrides && overrides.has(s.id) ? { ...paramsOf(s), ...overrides.get(s.id) } : paramsOf(s);
     let v;
     try {
-      v = def.compute(argVals, p) || null;
+      v = def.sampler ? doc2 ? SAMPLERS[s.type](s, argVals, p, vals, doc2, overrides) : null : def.compute(argVals, p) || null;
     } catch {
       v = null;
     }
@@ -1188,12 +1275,96 @@
     for (const id of changedIds) need.add(id);
     const plan = doc2.steps.filter((s) => need.has(s.id));
     const update = (vals) => {
-      for (const s of plan) vals.set(s.id, computeStep(s, vals));
+      for (const s of plan) vals.set(s.id, computeStep(s, vals, null, doc2));
       return vals;
     };
     update.size = plan.length;
     return update;
   }
+  var FIX_OFFS = [[0.31, 0.12], [-0.22, 0.27], [0.17, -0.33], [-0.36, -0.08], [0.05, 0.41], [0.26, -0.14]];
+  var FIX_UV = [[0.2, 0.2], [0.55, 0.2], [0.2, 0.55], [0.33, 0.33], [0.12, 0.62], [0.6, 0.3]];
+  var FIX_DT = [0.37, -0.29, 0.61, -0.53, 0.19, -0.71];
+  var FIX_SEG = [0.15, 0.32, 0.5, 0.68, 0.85, 0.25];
+  function movedValues(doc2, vals, moverId, params, upto, overrides) {
+    const local = new Map(vals);
+    const ov = new Map(overrides || []);
+    ov.set(moverId, params);
+    const changed = /* @__PURE__ */ new Set([moverId]);
+    for (const s of doc2.steps) {
+      if (s.id === upto) break;
+      if (s.id === moverId || s.args.some((a) => changed.has(a))) {
+        local.set(s.id, computeStep(s, local, ov, doc2));
+        changed.add(s.id);
+      }
+    }
+    return local;
+  }
+  function trialParams(step, vals, doc2, upto) {
+    const p = paramsOf(step);
+    if (step.type === "free_point") {
+      let sum = 0, n = 0;
+      for (const t2 of doc2.steps) {
+        if (t2.id === upto) break;
+        const v = vals.get(t2.id);
+        if (t2.id !== step.id && v && v.kind === "point") {
+          sum += Math.hypot(v.x - p.x, v.y - p.y);
+          n++;
+        }
+      }
+      const sc = 0.15 * (n ? sum / n : 1) || 0.15;
+      return FIX_OFFS.map(([dx, dy]) => ({ x: p.x + dx * sc, y: p.y + dy * sc }));
+    }
+    if (step.type === "point_in") return FIX_UV.map(([u, v]) => ({ u, v }));
+    if (step.type === "point_on") {
+      const host = vals.get(step.args[0]);
+      if (!host) return [];
+      if (host.kind === "line" && host.sub === "segment") return FIX_SEG.map((t2) => ({ t: t2 }));
+      if (host.kind === "line" && host.sub === "ray") return FIX_DT.map((d) => ({ t: Math.max(0, p.t) * Math.exp(d) + 0.05 }));
+      return FIX_DT.map((d) => ({ t: p.t + d }));
+    }
+    return [];
+  }
+  var distTo = (P2, X) => X.kind === "line" ? distPointLine(P2, X) : Math.abs(dist(P2, X.c) - X.r);
+  var SAMPLERS = {
+    /** Điểm cố định của họ X (đường thẳng/đường tròn) khi M thay đổi. */
+    fixed_point(s, [X], p, vals, doc2, overrides) {
+      const mover = doc2.steps.find((t2) => t2.id === s.args[1]);
+      if (!mover) return null;
+      const objs = [X];
+      for (const tp of trialParams(mover, vals, doc2, s.id)) {
+        const v = movedValues(doc2, vals, mover.id, tp, s.id, overrides).get(s.args[0]);
+        if (v && v.kind === X.kind) objs.push(v);
+      }
+      if (objs.length < 4) return null;
+      const size = X.kind === "circle" ? X.r : 1;
+      const cand = X.kind === "line" ? [intersectLL(objs[1], objs[2])].filter(Boolean) : intersectCC(objs[1], objs[2]);
+      const tol = 1e-6 * (1 + size + Math.max(0, ...cand.map((c) => Math.hypot(c.x, c.y))));
+      const good = cand.filter((c) => objs.every((o) => distTo(c, o) <= tol)).sort((a, b) => a.x - b.x || a.y - b.y);
+      const r = good[p.which || 0];
+      return r ? pt(r.x, r.y) : null;
+    },
+    /** Quỹ tích của X khi D chạy trên đường của nó: đường gấp khúc n điểm (null ở chỗ không xác định). */
+    locus(s, _args, p, vals, doc2, overrides) {
+      const D2 = doc2.steps.find((t2) => t2.id === s.args[1]);
+      if (!D2 || D2.type !== "point_on") return null;
+      const host = vals.get(D2.args[0]);
+      if (!host) return null;
+      const n = Math.max(8, Math.min(600, p.n | 0 || 160));
+      const t0 = paramsOf(D2).t;
+      let a, b;
+      if (host.kind === "circle") [a, b] = [0, 2 * Math.PI];
+      else if (host.sub === "segment") [a, b] = [0, 1];
+      else if (host.sub === "ray") [a, b] = [0, Math.max(4, 3 * Math.abs(t0))];
+      else [a, b] = [t0 - 3, t0 + 3];
+      const pts = [];
+      for (let i = 0; i <= n; i++) {
+        const t2 = a + (b - a) * i / n;
+        const v = movedValues(doc2, vals, D2.id, { t: t2 }, s.id, overrides).get(s.args[0]);
+        pts.push(v && v.kind === "point" ? { x: v.x, y: v.y } : null);
+      }
+      return { kind: "locus", pts, closed: host.kind === "circle" };
+    }
+  };
   function valueFinite(v) {
     if (v.kind === "point") return Number.isFinite(v.x) && Number.isFinite(v.y);
     if (v.kind === "line") return [v.p.x, v.p.y, v.d.x, v.d.y].every(Number.isFinite);
@@ -1402,9 +1573,9 @@
 
   // src/core/labels.js
   var N_DIR = 16;
-  function autoLabelDirs(doc2, values, isShown = (s) => !s.hidden) {
+  function autoLabelDirs(doc2, values, isShown2 = (s) => !s.hidden) {
     const k = kinds(doc2);
-    const shown = doc2.steps.filter((s) => isShown(s) && values.get(s.id));
+    const shown = doc2.steps.filter((s) => isShown2(s) && values.get(s.id));
     const pts = shown.filter((s) => k.get(s.id) === "point");
     const curves = shown.filter((s) => k.get(s.id) === "line" || k.get(s.id) === "circle");
     if (!pts.length) return /* @__PURE__ */ new Map();
@@ -1607,6 +1778,10 @@
       segment_mark: { color: "#c0504d", ticks: 1 }
     }
   };
+  var AUX = {
+    mono: { color: "#4b5563", dash: true },
+    textbook: { color: "#8a8f98", dash: true }
+  };
   var current = "mono";
   function setTheme(id) {
     if (THEMES[id]) current = id;
@@ -1614,14 +1789,16 @@
   }
   function styleOf(step, kind, theme2 = current) {
     const t2 = BY_KIND[theme2] ? theme2 : "mono";
-    const st = { ...BY_KIND[t2][kind || "mark"], ...BY_TYPE[t2][step.type] || {}, ...step.style || {} };
+    const aux = step.aux && (kind === "line" || kind === "circle") ? AUX[t2] : null;
+    const st = { ...BY_KIND[t2][kind || "mark"], ...BY_TYPE[t2][step.type] || {}, ...aux || {}, ...step.style || {} };
     if (kind === "point" && step.style && step.style.color && !step.style.fillColor) {
       st.fillColor = step.style.color;
       st.hollow = false;
     }
     return st;
   }
-  var isDraggableType = (type) => type === "free_point" || type === "point_on";
+  var isShown = (doc2, s) => !s.hidden && !(s.aux && doc2.hideAux);
+  var isDraggableType = (type) => type === "free_point" || type === "point_on" || type === "point_in";
 
   // src/ui/render.js
   var LABEL = { mono: { font: 15 }, textbook: { font: 16 } };
@@ -1643,6 +1820,8 @@
       this.labelOffsets = /* @__PURE__ */ new Map();
       this.labelBoxes = /* @__PURE__ */ new Map();
       this.drawnIds = /* @__PURE__ */ new Set();
+      this.measureBoxes = /* @__PURE__ */ new Map();
+      this.traces = null;
       view.painter = (ctx, v) => this.draw(ctx, v);
       view.onViewChange(() => this.onViewChange());
     }
@@ -1663,7 +1842,7 @@
       this.imageSel = opts.imageSel || null;
       const order = { polygon: 0, circle: 1, line: 2, mark: 3, point: 4 };
       const layer = (s, kind) => order[s.type === "polygon" ? "polygon" : kind] ?? 3;
-      this.items = doc2.steps.filter((s) => !s.hidden && (!visible || visible.has(s.id))).map((s) => {
+      this.items = doc2.steps.filter((s) => isShown(doc2, s) && (!visible || visible.has(s.id))).map((s) => {
         const kind = k.get(s.id);
         return { s, kind, st: styleOf(s, kind, theme2), sel: selected.has(s.id), hl: highlight.has(s.id), layer: layer(s, kind) };
       }).sort((a, b) => a.layer - b.layer);
@@ -1787,6 +1966,8 @@
       ctx.lineJoin = "round";
       if (this.grid) drawGrid(ctx, view);
       this.drawImages(ctx, view);
+      this.measureBoxes = /* @__PURE__ */ new Map();
+      if (this.traces) this.drawTraces(ctx, view);
       const labels = [];
       const trimPts = this.trimPoints();
       this.lineRanges = /* @__PURE__ */ new Map();
@@ -1825,6 +2006,11 @@
             ctx.setLineDash([]);
             ctx.stroke();
           }
+        } else if (v.kind === "locus") {
+          drawLocus(ctx, view, v, sel ? "#60a5fa" : color, width * (sel ? 1.8 : 1), st.dash);
+        } else if (v.kind === "measure") {
+          const box = drawMeasure(ctx, view, this.doc, s, v, this.values, sc, sel ? "#2563eb" : hl ? "#b45309" : st.color);
+          if (box) this.measureBoxes.set(s.id, box);
         } else if (s.type === "angle_mark" || s.type === "segment_mark") {
           const px = 1 / view.scale;
           const [X, Y] = s.type === "angle_mark" ? angleMarkPath(v, st, px, sc) : segMarkPath(v, st, px, sc);
@@ -1850,7 +2036,93 @@
       }
     }
   };
+  Renderer.prototype.drawTraces = function(ctx, view) {
+    const sc = this.scale;
+    for (const tr of this.traces.values()) {
+      if (!tr.items.length) continue;
+      if (tr.kind === "point") {
+        ctx.fillStyle = TRACE;
+        for (const p of tr.items) {
+          const q = view.toScreen(p);
+          ctx.fillRect(q.x - 1.2 * sc, q.y - 1.2 * sc, 2.4 * sc, 2.4 * sc);
+        }
+      } else {
+        ctx.globalAlpha = 0.45;
+        for (const v of tr.items) {
+          if (tr.kind === "circle") strokeCircle(ctx, view.toScreen(v.c), v.r * view.scale, TRACE, 0.8 * sc, false);
+          else strokeLine(ctx, view, v, "line", TRACE, 0.8 * sc, false);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+  };
   var round1 = (v) => Math.round(v * 10) / 10;
+  var TRACE = "#2f8f9d";
+  function drawLocus(ctx, view, v, color, width, dash) {
+    const Q = v.pts.map((p) => p ? view.toScreen(p) : null);
+    const steps = [];
+    for (let i = 1; i < Q.length; i++) if (Q[i] && Q[i - 1]) steps.push(Math.hypot(Q[i].x - Q[i - 1].x, Q[i].y - Q[i - 1].y));
+    steps.sort((a, b) => a - b);
+    const med = steps.length ? steps[steps.length >> 1] : 0;
+    const jump = Math.max(40, 8 * med);
+    setStroke(ctx, color, width, dash);
+    ctx.beginPath();
+    let pen = false;
+    const n = Q.length;
+    for (let i = 0; i < n + (v.closed ? 1 : 0); i++) {
+      const q = Q[i % n], prev = i ? Q[(i - 1) % n] : null;
+      if (!q || Math.abs(q.x) > 1e6 || Math.abs(q.y) > 1e6) {
+        pen = false;
+        continue;
+      }
+      if (pen && prev && Math.hypot(q.x - prev.x, q.y - prev.y) <= jump) ctx.lineTo(q.x, q.y);
+      else ctx.moveTo(q.x, q.y);
+      pen = true;
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  var plainName = (n) => String(n || "?").replace(/[_{}]/g, "");
+  var fmtNum = (x, d) => x.toFixed(d).replace(".", ",");
+  function measureText(doc2, s, v) {
+    const n = s.args.map((a) => plainName(doc2.steps.find((x) => x.id === a)?.name));
+    if (v.m === "len") return `${n[0]}${n[1]} = ${fmtNum(v.value, 2)}`;
+    if (v.m === "angle") return `\u2220${n[0]}${n[1]}${n[2]} = ${fmtNum(v.value, 1)}\xB0`;
+    return `${n[0]}${n[1]}/${n[2]}${n[3]} = ${fmtNum(v.value, 3)}`;
+  }
+  function drawMeasure(ctx, view, doc2, s, v, values, sc, color) {
+    const text2 = measureText(doc2, s, v);
+    let q = view.toScreen(v.at);
+    if (v.m === "angle") {
+      const A = values.get(s.args[0]), C2 = values.get(s.args[2]);
+      const a = A && view.toScreen(A), c = C2 && view.toScreen(C2);
+      if (a && c) {
+        const u1 = norm2(a.x - q.x, a.y - q.y), u2 = norm2(c.x - q.x, c.y - q.y);
+        let b = norm2(u1.x + u2.x, u1.y + u2.y);
+        if (!Number.isFinite(b.x)) b = { x: 0, y: -1 };
+        q = { x: q.x + b.x * 34 * sc, y: q.y + b.y * 34 * sc };
+      }
+    } else q = { x: q.x, y: q.y - 12 * sc };
+    const p = s.params || {};
+    const x = q.x + (p.dx || 0) * sc, y = q.y + (p.dy || 0) * sc;
+    const fpx = 13 * sc;
+    ctx.font = `${fpx}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+    const w = ctx.measureText(text2).width;
+    const box = { x: x - w / 2 - 4 * sc, y: y - fpx * 0.75, w: w + 8 * sc, h: fpx * 1.5 };
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text2, x, y);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    return box;
+  }
+  function norm2(x, y) {
+    const l = Math.hypot(x, y);
+    return { x: x / l, y: y / l };
+  }
   function setStroke(ctx, color, width, dash) {
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
@@ -3063,6 +3335,73 @@
     T2("circle_radius", "Compa (t\xE2m, b\xE1n k\xEDnh AB)", "\u0110\u01B0\u1EDDng tr\xF2n", "\u2300", ["point", "point", "point"], ["Ch\u1ECDn t\xE2m", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t c\u1EE7a b\xE1n k\xEDnh", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"], one("circle_radius")),
     T2("reflect", "\u0110\u1ED1i x\u1EE9ng", "Bi\u1EBFn h\xECnh", "\u21CB", ["obj", "pl"], ["Ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EA7n l\u1EA5y \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m, \u0111\u01B0\u1EDDng, \u0111\u01B0\u1EDDng tr\xF2n)", "Ch\u1ECDn t\xE2m \u0111\u1ED1i x\u1EE9ng (\u0111i\u1EC3m) ho\u1EB7c tr\u1EE5c \u0111\u1ED1i x\u1EE9ng (\u0111\u01B0\u1EDDng th\u1EB3ng)"], (p) => [{ type: "reflect", args: p, prime: true }]),
     T2("projection", "H\xECnh chi\u1EBFu", "Bi\u1EBFn h\xECnh", "\u22BE", ["point", "line"], ["Ch\u1ECDn \u0111i\u1EC3m v\xE0 \u0111\u01B0\u1EDDng th\u1EB3ng (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"], (p) => [{ type: "projection", args: p }], { anyOrder: true }),
+    // ---- bản 1.7 ----
+    T2(
+      "angle_point",
+      "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng t\u1EA1o g\xF3c b\u1EB1ng g\xF3c cho tr\u01B0\u1EDBc",
+      "\u0110\u01B0\u1EDDng",
+      "\u2220=",
+      ["point", "point", "point", "point", "point", "line"],
+      [
+        "G\xF3c m\u1EABu: ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t",
+        "G\xF3c m\u1EABu: ch\u1ECDn \u0110\u1EC8NH",
+        "G\xF3c m\u1EABu: ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai",
+        "Ch\u1ECDn \u0111\u1EC9nh O c\u1EE7a g\xF3c c\u1EA7n d\u1EF1ng",
+        "Ch\u1ECDn \u0111i\u1EC3m X tr\xEAn c\u1EA1nh c\xF3 s\u1EB5n (tia OX)",
+        "Ch\u1ECDn \u0111\u01B0\u1EDDng ch\u1EE9a \u0111i\u1EC3m c\u1EA7n d\u1EF1ng \u2013 b\u1EA5m G\u1EA6N ch\u1ED7 \u0111i\u1EC3m c\u1EA7n l\u1EA5y (\u0111\u1EC3 ch\u1ECDn ph\xEDa)"
+      ],
+      ([A, B, C2, O, X, l], app) => {
+        const v = [O, X, A, B, C2, l].map((id) => app.values.get(id));
+        const cand = [false, true].map((flip) => ({ flip, P: STEP_TYPES.angle_point.compute(v, { flip }) }));
+        const m = app.mouse;
+        const ok = cand.filter((c) => c.P).sort((a, b) => Math.hypot(a.P.x - m.x, a.P.y - m.y) - Math.hypot(b.P.x - m.x, b.P.y - m.y));
+        return [{ type: "angle_point", args: [O, X, A, B, C2, l], params: { flip: ok.length ? ok[0].flip : false } }];
+      },
+      { allowRepeat: true }
+    ),
+    T2(
+      "angle_line",
+      "\u0110\u01B0\u1EDDng t\u1EA1o g\xF3c b\u1EB1ng g\xF3c cho tr\u01B0\u1EDBc",
+      "\u0110\u01B0\u1EDDng",
+      "\u2220/",
+      ["point", "point", "point", "point", "point"],
+      ["G\xF3c m\u1EABu: ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "G\xF3c m\u1EABu: ch\u1ECDn \u0110\u1EC8NH", "G\xF3c m\u1EABu: ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai", "Ch\u1ECDn \u0111\u1EC9nh O c\u1EE7a g\xF3c c\u1EA7n d\u1EF1ng", "Ch\u1ECDn \u0111i\u1EC3m X tr\xEAn c\u1EA1nh c\xF3 s\u1EB5n (tia OX)"],
+      ([A, B, C2, O, X], app) => [{ type: "angle_line", args: [O, X, A, B, C2], params: { flip: app.extraFlip(O, X, A, B, C2) } }],
+      { allowRepeat: true, extraClick: "R\xEA chu\u1ED9t sang ph\xEDa mu\u1ED1n d\u1EF1ng r\u1ED3i b\u1EA5m", extraPreview: "angle_line" }
+    ),
+    T2(
+      "point_in",
+      "\u0110i\u1EC3m trong tam gi\xE1c",
+      "C\u01A1 b\u1EA3n",
+      "\u25EC",
+      ["point", "point", "point"],
+      ["Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 nh\u1EA5t c\u1EE7a tam gi\xE1c", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 hai", "Ch\u1ECDn \u0111\u1EC9nh th\u1EE9 ba"],
+      (p, app) => [{ type: "point_in", args: p, params: app.uvInTriangle(p, app.extraPos) }],
+      { extraClick: "B\u1EA5m v\xE0o trong tam gi\xE1c \u0111\u1EC3 \u0111\u1EB7t \u0111i\u1EC3m (khi k\xE9o, \u0111i\u1EC3m lu\xF4n \u1EDF trong tam gi\xE1c)" }
+    ),
+    T2(
+      "fixed_point",
+      "\u0110i\u1EC3m c\u1ED1 \u0111\u1ECBnh",
+      "Qu\u1EF9 t\xEDch",
+      "\u229B",
+      ["curve", "point"],
+      ["Ch\u1ECDn \u0111\u01B0\u1EDDng th\u1EB3ng/\u0111\u01B0\u1EDDng tr\xF2n thay \u0111\u1ED5i v\xE0 \u0111i\u1EC3m thay \u0111\u1ED5i (\u0111i\u1EC3m t\u1EF1 do, tr\xEAn \u0111\u01B0\u1EDDng ho\u1EB7c trong tam gi\xE1c) \u2013 th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"],
+      (p) => [{ type: "fixed_point", args: p, params: { which: 0 }, name: "X" }, { type: "fixed_point", args: p, params: { which: 1 }, name: "Y" }],
+      { anyOrder: true, after: "fixedPoint" }
+    ),
+    T2(
+      "locus",
+      "Qu\u1EF9 t\xEDch",
+      "Qu\u1EF9 t\xEDch",
+      "\u223F",
+      ["point", "point"],
+      ["Ch\u1ECDn \u0111i\u1EC3m c\u1EA7n v\u1EBD qu\u1EF9 t\xEDch (vd trung \u0111i\u1EC3m N)", "Ch\u1ECDn \u0111i\u1EC3m ch\u1EA1y (\u0111i\u1EC3m n\u1EB1m tr\xEAn m\u1ED9t \u0111\u01B0\u1EDDng, d\u1EF1ng b\u1EB1ng c\xF4ng c\u1EE5 \u0110i\u1EC3m b\u1EA5m l\xEAn \u0111\u01B0\u1EDDng)"],
+      (p) => [{ type: "locus", args: p }],
+      { after: "locus" }
+    ),
+    T2("measure_len", "\u0110o \u0111\u1ED9 d\xE0i", "\u0110o", "|\u2194|", ["point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111i\u1EC3m th\u1EE9 hai"], one("measure_len"), { segmentShortcut: true }),
+    T2("measure_angle", "\u0110o g\xF3c", "\u0110o", "\u2220\xB0", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], one("measure_angle")),
+    T2("measure_ratio", "\u0110o t\u1EC9 s\u1ED1 AB/CD", "\u0110o", "a/b", ["point", "point", "point", "point"], ["Ch\u1ECDn A", "Ch\u1ECDn B", "Ch\u1ECDn C", "Ch\u1ECDn D (t\u1EC9 s\u1ED1 AB/CD)"], one("measure_ratio"), { allowRepeat: true }),
     T2("angle_mark", "\u0110\xE1nh d\u1EA5u g\xF3c", "\u0110\xE1nh d\u1EA5u", "\u2221", ["point", "point", "point"], ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai"], (p, app) => [{ type: "angle_mark", args: p, style: { ...app.markStyle("angle") } }]),
     T2("segment_mark", "\u0110\xE1nh d\u1EA5u \u0111o\u1EA1n", "\u0110\xE1nh d\u1EA5u", "\u2AFD", ["point", "point"], ["Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 nh\u1EA5t (ho\u1EB7c b\u1EA5m v\xE0o m\u1ED9t \u0111o\u1EA1n th\u1EB3ng)", "Ch\u1ECDn \u0111\u1EA7u m\xFAt th\u1EE9 hai"], (p, app) => [{ type: "segment_mark", args: p, style: { ...app.markStyle("segment") } }], { segmentShortcut: true }),
     T2("polygon", "T\xF4 mi\u1EC1n \u0111a gi\xE1c", "\u0110\xE1nh d\u1EA5u", "\u25B1", ["...point"], ["Ch\u1ECDn l\u1EA7n l\u01B0\u1EE3t c\xE1c \u0111\u1EC9nh; b\u1EA5m l\u1EA1i \u0111\u1EC9nh \u0111\u1EA7u (ho\u1EB7c Enter) \u0111\u1EC3 k\u1EBFt th\xFAc"], (p, app) => [{ type: "polygon", args: p, style: { ...app.markStyle("polygon") } }], { preview: "polygon" })
@@ -3070,11 +3409,12 @@
   var TOOL_BY_ID = Object.fromEntries([...TOOLS, ...LIBRARY].map((t2) => [t2.id, t2]));
   var TOOLBAR = [
     { id: "move", label: "Ch\u1ECDn / k\xE9o", icon: "move", tools: ["move"] },
-    { id: "point", label: "\u0110i\u1EC3m", icon: "point", tools: ["point", "intersect", "midpoint"] },
+    { id: "point", label: "\u0110i\u1EC3m", icon: "point", tools: ["point", "intersect", "midpoint", "point_in"] },
     { id: "circle", label: "\u0110\u01B0\u1EDDng tr\xF2n", icon: "circle", tools: ["circle", "circle_3pts", "circle_radius"] },
     { id: "line", label: "\u0110o\u1EA1n, tia, \u0111\u01B0\u1EDDng th\u1EB3ng", icon: "line", tools: ["segment", "ray", "line"] },
-    { id: "construct", label: "D\u1EF1ng", icon: "construct", tools: ["perpendicular", "parallel", "perp_bisector", "angle_bisector", "ext_bisector", "projection", "reflect"] },
-    { id: "mark", label: "\u0110\xE1nh d\u1EA5u", icon: "mark", tools: ["angle_mark", "segment_mark", "polygon"] },
+    { id: "construct", label: "D\u1EF1ng", icon: "construct", tools: ["perpendicular", "parallel", "perp_bisector", "angle_bisector", "ext_bisector", "projection", "reflect", "angle_point", "angle_line"] },
+    { id: "mark", label: "\u0110\xE1nh d\u1EA5u, \u0111o", icon: "mark", tools: ["angle_mark", "segment_mark", "polygon", "measure_len", "measure_angle", "measure_ratio"] },
+    { id: "locus", label: "Qu\u1EF9 t\xEDch, \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh", icon: "locus", tools: ["locus", "fixed_point"] },
     { id: "library", label: "C\xF4ng c\u1EE5", icon: "tools", tools: LIBRARY.map((t2) => t2.id), submenus: MENUS }
   ];
 
@@ -3089,6 +3429,7 @@
     construct: svg('<path d="M3 18h18M12 18V4"/><path d="M12 15h3v3"/>' + dot2(12, 6, 1.8)),
     triangle: svg('<path d="M12 4L3.5 19h17z"/>' + dot2(12, 4, 1.8) + dot2(3.5, 19, 1.8) + dot2(20.5, 19, 1.8)),
     mark: svg('<path d="M4 19h16M4 19L16 6"/><path d="M10 19a6 6 0 0 0-1.8-4.3"/><path d="M8 11.5l2 2M10 9.5l2 2"/>'),
+    locus: svg('<path d="M3 17c3-9 6-12 9-6s6 4 9-5" stroke-dasharray="2.2 2.2"/>' + dot2(12, 11, 1.8) + '<path d="M12 11l4 7"/>' + dot2(16, 18, 1.8)),
     tools: svg('<path d="M5 4l8 8-8 8z" fill="currentColor" stroke-width="1"/><circle cx="18" cy="7" r="1.4" fill="currentColor"/><circle cx="18" cy="12" r="1.4" fill="currentColor"/><circle cx="18" cy="17" r="1.4" fill="currentColor"/>'),
     undo: svg('<path d="M9 7H4V2"/><path d="M4 7a9 9 0 1 1-1 7"/>'),
     redo: svg('<path d="M15 7h5V2"/><path d="M20 7a9 9 0 1 0 1 7"/>'),
@@ -3113,7 +3454,7 @@
     }
     return out;
   }
-  var isRoot = (s) => !s.args.length || s.type === "point_on";
+  var isRoot = (s) => !s.args.length || s.type === "point_on" || s.type === "point_in";
   function createMacro(doc2, selectedIds, label) {
     const k = kinds(doc2);
     const sel = selectedIds.filter((id) => stepById(doc2, id));
@@ -3336,6 +3677,11 @@
       const v = app.values.get(s.id);
       if (v) html += `<div class="row coords">(${v.x.toFixed(3)}; ${v.y.toFixed(3)})</div>`;
     }
+    if (one2 && (kind === "line" || kind === "circle")) html += `<label class="row" title="\u0110\u01B0\u1EDDng ph\u1EE5: n\xE9t \u0111\u1EE9t, \u1EA9n/hi\u1EC7n t\u1EA5t c\u1EA3 c\xF9ng l\xFAc b\u1EB1ng Ctrl+Shift+D. B\u1ECF ch\u1ECDn: \u0111\u01B0\u1EDDng ch\xEDnh."><input id="p-aux" type="checkbox" ${s.aux ? "checked" : ""}> \u0110\u01B0\u1EDDng ph\u1EE5 (b\u1ECF ch\u1ECDn: \u0111\u01B0\u1EDDng ch\xEDnh)</label>`;
+    if (one2 && kind !== "mark") html += `<label class="row"><input id="p-trace" type="checkbox" ${app.traceIds.has(s.id) ? "checked" : ""}> \u0110\u1EC3 l\u1EA1i v\u1EBFt khi k\xE9o</label>`;
+    if (one2 && s.args.length && STEP_TYPES[s.type] && !["locus", "fixed_point"].includes(s.type)) {
+      html += `<div class="row redef">D\u1EF1ng t\u1EEB ${s.args.map((a, i) => `<button class="mini" data-redef="${i}" title="Thay \u0111\u1ED1i t\u01B0\u1EE3ng n\xE0y (c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng ph\u1EE5 thu\u1ED9c gi\u1EEF nguy\xEAn)">${labelHTML(stepById(app.doc, a)?.name || "?")}</button>`).join("")}</div>`;
+    }
     if (one2) {
       html += `<label class="row"><input id="p-hidden" type="checkbox" ${s.hidden ? "checked" : ""}> \u1EA8n (\u0111\u1ED1i t\u01B0\u1EE3ng ph\u1EE5)</label>`;
       html += `<label class="row"><input id="p-join" type="checkbox" ${s.joinPrev ? "checked" : ""}> G\u1ED9p khung tr\xECnh b\xE0y v\u1EDBi b\u01B0\u1EDBc tr\u01B0\u1EDBc</label>`;
@@ -3357,6 +3703,9 @@
     host.querySelectorAll("[data-ticks]").forEach((b) => b.onclick = () => app.setStyle(ids, { ticks: +b.dataset.ticks }));
     if (q("#p-swap")) q("#p-swap").onclick = () => app.setParams(s.id, { which: 1 - (paramsOf(s).which || 0) });
     if (q("#p-arc")) q("#p-arc").onclick = () => app.setParams(s.id, { contains: !paramsOf(s).contains });
+    if (q("#p-aux")) q("#p-aux").onchange = (e) => app.setStepProp(s.id, "aux", e.target.checked);
+    if (q("#p-trace")) q("#p-trace").onchange = (e) => app.toggleTrace(s.id, e.target.checked);
+    host.querySelectorAll("[data-redef]").forEach((b) => b.onclick = () => app.startRedefine(s.id, +b.dataset.redef));
     if (q("#p-hidden")) q("#p-hidden").onchange = (e) => app.setStepProp(s.id, "hidden", e.target.checked);
     if (q("#p-join")) q("#p-join").onchange = (e) => app.setStepProp(s.id, "joinPrev", e.target.checked);
     q("#p-del").onclick = () => app.deleteSteps(ids);
@@ -18294,12 +18643,13 @@ ${tk.v}
     const out = { format: doc2.format, version: doc2.version };
     if (doc2.title) out.title = doc2.title;
     if (doc2.view) out.view = doc2.view;
+    if (doc2.hideAux) out.hideAux = true;
     if (doc2.images && doc2.images.length) out.images = doc2.images;
     if (doc2.boxes && doc2.boxes.length) out.boxes = doc2.boxes;
     if (doc2.imageData && Object.keys(doc2.imageData).length) out.imageData = doc2.imageData;
     out.steps = doc2.steps.map((s) => {
       const t2 = { id: s.id, type: s.type, args: s.args };
-      for (const k of ["params", "name", "style", "hidden", "joinPrev"]) {
+      for (const k of ["params", "name", "style", "hidden", "aux", "joinPrev"]) {
         const v = s[k];
         if (v === void 0 || v === false || typeof v === "object" && v && !Array.isArray(v) && !Object.keys(v).length) continue;
         t2[k] = v;
@@ -18773,6 +19123,7 @@ ${tk.v}
     "Ctrl+K": "m\u1EDF kho b\xE0i",
     "Ctrl+H": "\u1EA9n",
     "Ctrl+Shift+H": "hi\u1EC7n l\u1EA1i",
+    "Ctrl+Shift+D": "\u1EA9n/hi\u1EC7n \u0111\u01B0\u1EDDng ph\u1EE5",
     "Ctrl+Enter": "so\u1EA1n l\u1EDDi gi\u1EA3i",
     "Ctrl+/": "b\u1EA3ng ph\xEDm t\u1EAFt"
   };
@@ -18923,6 +19274,9 @@ ${tk.v}
           "Home": "thu ph\xF3ng v\u1EEBa h\xECnh",
           "Ctrl+S": "l\u01B0u (v\xE0o kho n\u1EBFu \u0111\xE3 k\u1EBFt n\u1ED1i)",
           "Ctrl+Shift+S": "l\u01B0u t\u1EA5t c\u1EA3 c\xE1c tab ra t\u1EC7p",
+          "Ctrl + k\xE9o n\u1EC1n": "ch\u1ECDn v\xF9ng (th\xEAm Shift: ch\u1ECDn th\xEAm)",
+          "Ctrl+C / Ctrl+V": "ch\xE9p / d\xE1n \u0111\u1ED1i t\u01B0\u1EE3ng (c\u1EA3 sang tab kh\xE1c)",
+          "Ctrl+Shift+D": "\u1EA9n / hi\u1EC7n m\u1ECDi \u0111\u01B0\u1EDDng ph\u1EE5",
           "Ctrl+O": "m\u1EDF t\u1EC7p",
           "Ctrl+K": "m\u1EDF kho b\xE0i",
           "Ctrl+Enter": "so\u1EA1n l\u1EDDi gi\u1EA3i",
@@ -19010,6 +19364,7 @@ ${tk.v}
 
   // src/ui/app.js
   var HISTORY_MAX = 200;
+  var AUX_TOOLS = /* @__PURE__ */ new Set(["perpendicular", "parallel", "perp_bisector", "angle_bisector", "ext_bisector", "angle_line"]);
   var App = class {
     constructor() {
       this.doc = emptyDoc();
@@ -19034,6 +19389,8 @@ ${tk.v}
       this.imageSel = null;
       this.typeToRename = true;
       this.fitKey = "Home";
+      this.traceIds = /* @__PURE__ */ new Set();
+      this.clipboard = null;
     }
     // ================= khởi tạo =================
     mount() {
@@ -19073,6 +19430,7 @@ ${tk.v}
       this.highlight.clear();
       this.relation = null;
       this.cancelTool();
+      this.clearTraces(true);
       if (doc2.view && Array.isArray(doc2.view.bbox)) this.view.setBoundingBox(doc2.view.bbox);
       this.refresh();
       this.emit("load");
@@ -19337,6 +19695,7 @@ ${tk.v}
       });
       this.renderer.clearExtra();
       this.drawRelationOverlay?.();
+      document.getElementById("btn-aux")?.classList.toggle("on", !this.doc.hideAux);
       this.renderPanels();
       this.emit("refresh");
     }
@@ -19353,7 +19712,45 @@ ${tk.v}
     quickUpdate() {
       if (this.dragUpdater) this.dragUpdater(this.values);
       else this.values = evaluate(this.doc);
+      if (this.traceIds.size) this.recordTraces();
       this.renderer.update(this.values);
+    }
+    // ================= vết (bản 1.7) =================
+    /** Bật/tắt để lại vết khi kéo cho đối tượng id (điểm, đường thẳng, đường tròn). */
+    toggleTrace(id, on = !this.traceIds.has(id)) {
+      if (on) this.traceIds.add(id);
+      else {
+        this.traceIds.delete(id);
+        this.renderer.traces?.delete(id);
+      }
+      if (on) toast("K\xE9o m\u1ED9t \u0111i\u1EC3m t\u1EF1 do \u0111\u1EC3 th\u1EA5y v\u1EBFt. Xo\xE1 v\u1EBFt: Hi\u1EC3n th\u1ECB \u203A Xo\xE1 v\u1EBFt");
+      this.renderPanels();
+      this.view.requestDraw();
+    }
+    recordTraces() {
+      const tr = this.renderer.traces || (this.renderer.traces = /* @__PURE__ */ new Map());
+      const k = kinds(this.doc);
+      for (const id of this.traceIds) {
+        const v = this.values.get(id);
+        if (!v) continue;
+        let rec = tr.get(id);
+        if (!rec) tr.set(id, rec = { kind: k.get(id), items: [] });
+        const last2 = rec.items[rec.items.length - 1];
+        if (rec.kind === "point") {
+          if (last2 && dist(last2, v) * this.view.scale < 1.5) continue;
+          rec.items.push({ x: v.x, y: v.y });
+          if (rec.items.length > 4e3) rec.items.shift();
+        } else {
+          rec.items.push(JSON.parse(JSON.stringify(v)));
+          if (rec.items.length > 400) rec.items.shift();
+        }
+      }
+    }
+    /** Xoá các vết đã vẽ; all = true: tắt luôn chế độ để lại vết. */
+    clearTraces(all = false) {
+      if (this.renderer) this.renderer.traces = null;
+      if (all) this.traceIds.clear();
+      this.view?.requestDraw();
     }
     renderPanels() {
       renderStepList(this);
@@ -19391,7 +19788,7 @@ ${tk.v}
       let order = 0;
       for (const s of this.doc.steps) {
         order++;
-        if (s.hidden || vis && !vis.has(s.id)) continue;
+        if (!isShown(this.doc, s) || vis && !vis.has(s.id)) continue;
         const v = this.values.get(s.id);
         const kind = k.get(s.id);
         if (!v || kind === "mark") continue;
@@ -19402,9 +19799,14 @@ ${tk.v}
         else if ((kind === "line" || kind === "circle") && d <= 7 * f) out.push({ id: s.id, kind, d, pri: 1, order });
       }
       for (const s of this.doc.steps) {
-        if (s.hidden || vis && !vis.has(s.id) || k.get(s.id) !== "mark") continue;
+        if (!isShown(this.doc, s) || vis && !vis.has(s.id) || k.get(s.id) !== "mark") continue;
         const v = this.values.get(s.id);
         if (!v) continue;
+        if (v.kind === "measure") {
+          const b = this.renderer.measureBoxes.get(s.id);
+          if (b && sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) out.push({ id: s.id, kind: "mark", d: 0, pri: -1, measure: true });
+          continue;
+        }
         const d = markDistance(v, P2, px * f) / px;
         if (d <= 9 * f) out.push({ id: s.id, kind: "mark", d, pri: 2 });
       }
@@ -19612,7 +20014,7 @@ ${tk.v}
       if (tool.segmentShortcut && sel.length === 1 && stepById(this.doc, sel[0]).type === "segment") {
         this.beginTx();
         this.picks = [...stepById(this.doc, sel[0]).args];
-        return this.completeTool(tool);
+        return this.picksDone(tool);
       }
       if (tool.inputs[0] === "...point") {
         const pts = sel.filter((x) => k.get(x) === "point");
@@ -19630,7 +20032,7 @@ ${tk.v}
       if (rest.length || !picks.length) return;
       this.beginTx();
       this.picks = picks;
-      if (picks.length === tool.inputs.length) return this.completeTool(tool);
+      if (picks.length === tool.inputs.length) return this.picksDone(tool);
       this.selection = new Set(picks);
       this.refresh();
       this.startPreview(tool);
@@ -19638,6 +20040,7 @@ ${tk.v}
     }
     cancelTool() {
       this.picks = [];
+      this.awaitExtra = false;
       this.renderer?.clearExtra();
       if (this.tx) {
         this.endTx();
@@ -19653,6 +20056,10 @@ ${tk.v}
         return;
       }
       const t2 = TOOL_BY_ID[this.toolId];
+      if (!msg && this.awaitExtra && t2.extraClick) {
+        el.textContent = `${t2.label}: ${t2.extraClick} \xB7 Esc: hu\u1EF7`;
+        return;
+      }
       const i = Math.min(this.picks.length, t2.hints.length - 1);
       const sel = this.selection.size === 1 && !this.picks.length ? stepById(this.doc, [...this.selection][0]) : null;
       const tip = sel && sel.name && kinds(this.doc).get(sel.id) === "point" ? ` \xB7 G\xF5 ch\u1EEF \u0111\u1EC3 \u0111\u1EB7t t\xEAn ${sel.name}` : "";
@@ -19675,6 +20082,11 @@ ${tk.v}
       const tool = TOOL_BY_ID[this.toolId];
       const hits = this.hitTest(sx, sy).filter((h) => h.kind !== "mark");
       this.beginTx();
+      if (this.awaitExtra) {
+        this.extraPos = this.toUser(sx, sy);
+        this.awaitExtra = false;
+        return this.completeTool(tool);
+      }
       if (tool.id === "point") {
         const id2 = this.resolvePoint(sx, sy, hits);
         this.endTx();
@@ -19708,7 +20120,7 @@ ${tk.v}
         const s = stepById(this.doc, hits[0].id);
         if (s.type === "segment") {
           this.picks = [...s.args];
-          return this.completeTool(tool);
+          return this.picksDone(tool);
         }
       }
       const need = this.neededTypes(tool);
@@ -19717,7 +20129,7 @@ ${tk.v}
       if (!id && need.some((t2) => argAccepts(t2, "point"))) id = this.resolvePoint(sx, sy, hits);
       if (!id) return this.showHint(`H\xE3y ch\u1ECDn ${need.map(typeName).join(" ho\u1EB7c ")}`);
       if (tool.inputs[0] === "...point") {
-        if (this.picks.length >= 3 && id === this.picks[0]) return this.completeTool(tool);
+        if (this.picks.length >= 3 && id === this.picks[0]) return this.picksDone(tool);
         if (this.picks.includes(id)) return;
         this.picks.push(id);
       } else {
@@ -19733,7 +20145,7 @@ ${tk.v}
           }
           this.picks = ordered;
         }
-        if (this.picks.length === tool.inputs.length) return this.completeTool(tool);
+        if (this.picks.length === tool.inputs.length) return this.picksDone(tool);
       }
       this.selection = new Set(this.picks);
       this.refresh();
@@ -19751,9 +20163,25 @@ ${tk.v}
       });
       if (out) toast("\u0110i\u1EC3m v\u1EEBa d\u1EF1ng n\u1EB1m ngo\xE0i khung nh\xECn \u2013 nh\u1EA5n Home (ho\u1EB7c Hi\u1EC3n th\u1ECB \u203A Thu ph\xF3ng v\u1EEBa h\xECnh) \u0111\u1EC3 th\u1EA5y c\u1EA3 h\xECnh", 4200);
     }
+    /** Đã chọn đủ đối số: dựng ngay, hoặc (công cụ có extraClick) chờ thêm một lần bấm để chọn phía / vị trí. */
+    picksDone(tool) {
+      if (!tool.extraClick) return this.completeTool(tool);
+      this.awaitExtra = true;
+      this.extraPos = null;
+      this.selection = new Set(this.picks);
+      this.refresh();
+      this.startExtraPreview(tool);
+      this.showHint();
+    }
     completeTool(tool) {
+      this.awaitExtra = false;
       const specs = tool.make(this.picks, this);
-      const ids = this.addSteps(specs);
+      let ids = this.addSteps(specs);
+      if (tool.after) ids = this.afterTool(tool.after, ids);
+      if (AUX_TOOLS.has(tool.id)) for (const id of ids) {
+        const st = stepById(this.doc, id);
+        if (kinds(this.doc).get(id) === "line") st.aux = true;
+      }
       const k = kinds(this.doc);
       const pts = ids.filter((id) => k.get(id) === "point" && !stepById(this.doc, id).hidden);
       this.selection = new Set(pts.length === 1 ? pts : ids.slice(0, 1));
@@ -19765,6 +20193,7 @@ ${tk.v}
     }
     finishTool() {
       this.picks = [];
+      this.awaitExtra = false;
       this.renderer.clearExtra();
       this.endTx();
       if (this.toolId === "intersect") this.selection = new Set(this.lastCreatedPoints && this.lastCreatedPoints.length === 1 ? this.lastCreatedPoints : []);
@@ -19779,6 +20208,61 @@ ${tk.v}
       if (kind === "angle") return { ...c(m.color), arcs: m.arcs };
       if (kind === "segment") return { ...c(m.color), ticks: m.ticks };
       return { ...c(m.polyColor) };
+    }
+    /**
+     * Việc làm thêm sau khi công cụ thêm bước (bản 1.7). fixedPoint: bỏ các điểm cố định không tìm được; locus: bỏ nếu
+     * điểm chạy không phải điểm trên đường. Trả về danh sách id còn lại.
+     */
+    afterTool(kind, ids) {
+      const vals = evaluate(this.doc);
+      const bad = ids.filter((id) => !vals.get(id));
+      if (bad.length) this.doc.steps = removeSteps(this.doc, bad).doc.steps;
+      const left = ids.filter((id) => !bad.includes(id));
+      if (kind === "fixedPoint") {
+        if (!left.length) toast("Kh\xF4ng t\xECm th\u1EA5y \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh: \u0111\u01B0\u1EDDng n\xE0y kh\xF4ng \u0111i qua \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh n\xE0o khi \u0111i\u1EC3m \u0111\xE3 ch\u1ECDn thay \u0111\u1ED5i (ho\u1EB7c \u0111i\u1EC3m \u0111\xF3 kh\xF4ng \u0111\u1ED5i \u0111\u01B0\u1EE3c)", 5e3);
+        else toast(left.length === 1 ? `\u0110i\u1EC3m c\u1ED1 \u0111\u1ECBnh: ${this.name(left[0])}` : `C\xF3 hai \u0111i\u1EC3m c\u1ED1 \u0111\u1ECBnh: ${left.map((id) => this.name(id)).join(", ")}`);
+      } else if (kind === "locus" && !left.length) {
+        toast("\u0110i\u1EC3m ch\u1EA1y ph\u1EA3i l\xE0 \u0111i\u1EC3m n\u1EB1m tr\xEAn m\u1ED9t \u0111\u01B0\u1EDDng (d\u1EF1ng b\u1EB1ng c\xF4ng c\u1EE5 \u0110i\u1EC3m b\u1EA5m l\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng/\u0111\u01B0\u1EDDng tr\xF2n), v\xE0 \u0111i\u1EC3m c\u1EA7n v\u1EBD qu\u1EF9 t\xEDch ph\u1EA3i ph\u1EE5 thu\u1ED9c v\xE0o n\xF3", 5500);
+      }
+      return left;
+    }
+    /** Phía của đường tạo góc theo chỗ chuột (extraPos): cùng phía với chuột so với đường OX. */
+    extraFlip(O, X, A, B, C2) {
+      const [o, x] = [O, X].map((id) => this.values.get(id));
+      const P2 = this.extraPos || this.mouse;
+      const a = directedAngle(...[A, B, C2].map((id) => this.values.get(id)));
+      if (!o || !x || a == null) return false;
+      const side = (x.x - o.x) * (P2.y - o.y) - (x.y - o.y) * (P2.x - o.x);
+      const sn = Math.sin(a * Math.PI / 180);
+      return Math.abs(sn) > 1e-12 && Math.sign(side) !== Math.sign(sn);
+    }
+    /** Toạ độ (u, v) của điểm P trong tam giác (A, B, C là id), kẹp vào trong tam giác: u, v ≥ 0, u + v ≤ 1. */
+    uvInTriangle([A, B, C2], P2) {
+      const [a, b, c] = [A, B, C2].map((id) => this.values.get(id));
+      return clampUV(a, b, c, P2);
+    }
+    startExtraPreview(tool) {
+      this.renderer.clearExtra();
+      const r = this.renderer;
+      const v = (id) => () => this.values.get(id);
+      if (tool.extraPreview === "angle_line") {
+        const [A, B, C2, O, X] = this.picks;
+        const dirPt = () => {
+          const flip = this.extraFlip(O, X, A, B, C2);
+          const [o, x, a, b, c] = [O, X, A, B, C2].map((id) => this.values.get(id));
+          const ang = directedAngle(a, b, c);
+          return ang == null ? null : rotatePoint(x, o, flip ? -ang : ang);
+        };
+        r.addExtra({ type: "ray", pts: [v(O), dirPt], style: { color: "#2563eb" } });
+      } else if (tool.id === "point_in") {
+        const [A, B, C2] = this.picks;
+        r.addExtra({ type: "polyline", pts: [v(A), v(B), v(C2), v(A)], style: { color: "#2563eb" } });
+        r.addExtra({ type: "point", pts: [() => {
+          const [a, b, c] = [A, B, C2].map((id) => this.values.get(id));
+          const uv = clampUV(a, b, c, this.mouse);
+          return { x: a.x + uv.u * (b.x - a.x) + uv.v * (c.x - a.x), y: a.y + uv.u * (b.y - a.y) + uv.v * (c.y - a.y) };
+        }], style: { size: 4 } });
+      }
     }
     startPreview(tool) {
       this.renderer.clearExtra();
@@ -19818,7 +20302,7 @@ ${tk.v}
             const an = this.pickAnchors();
             if (an.length) this.mouse = this.angleSnap(this.mouse, an);
           }
-          if (this.picks.length && this.renderer.extra.length) this.view.requestDraw();
+          if ((this.picks.length || this.awaitExtra) && this.renderer.extra.length) this.view.requestDraw();
           const hits = this.hitTest(sx, sy);
           let cursor = "";
           const cross2 = this.toolId === "move" && this.mode === "edit" && !ev.shiftKey ? this.crossingAt(sx, sy, hits) : null;
@@ -19908,6 +20392,33 @@ ${tk.v}
           return;
         }
       }
+      if (this.redefine) {
+        e.stopPropagation();
+        e.preventDefault();
+        const { id, i, t: t2 } = this.redefine;
+        let h2 = this.hitTest(sx, sy).find((x) => x.kind !== "mark" && argAccepts(t2, x.kind) && x.id !== id);
+        let nid = h2?.id;
+        if (!nid && argAccepts(t2, "point")) {
+          this.beginTx();
+          nid = this.resolvePoint(sx, sy, this.hitTest(sx, sy));
+        }
+        this.redefine = null;
+        this.stage.classList.toggle("tool-active", this.toolId !== "move");
+        if (!nid) {
+          this.endTx();
+          this.refresh();
+          return this.showHint();
+        }
+        const ok = this.redefineArg(id, i, nid);
+        if (this.tx) {
+          if (!ok) this.doc = JSON.parse(this.tx);
+          this.endTx();
+        }
+        this.selection = /* @__PURE__ */ new Set([id]);
+        this.afterChange();
+        this.showHint();
+        return;
+      }
       if (this.toolId !== "move" && this.mode === "edit") {
         e.stopPropagation();
         e.preventDefault();
@@ -19927,6 +20438,14 @@ ${tk.v}
       }
       const h = hits[0];
       const step = h ? stepById(this.doc, h.id) : null;
+      if (h && h.measure && this.mode === "edit") {
+        e.stopPropagation();
+        e.preventDefault();
+        const p = step.params || {};
+        this.select(h.id, e.shiftKey, false);
+        this.startDrag(e, { kind: "measure", id: h.id, start: JSON.stringify(this.doc), sx, sy, off: [p.dx || 0, p.dy || 0] });
+        return;
+      }
       if (h && h.kind === "point" && isDraggableType(step.type)) {
         e.stopPropagation();
         e.preventDefault();
@@ -19960,6 +20479,11 @@ ${tk.v}
         this.startImageDrag(e, imh.id, imh.handle);
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && this.mode === "edit") {
+        e.preventDefault();
+        this.startMarquee(e, e.shiftKey);
+        return;
+      }
       e.preventDefault();
       if (this.mode === "edit" && (this.selection.size || this.imageSel) && !e.shiftKey) {
         this.selection.clear();
@@ -19986,6 +20510,12 @@ ${tk.v}
         const { sx, sy, shift: shift2 } = pending;
         pending = null;
         this.mouse = this.toUser(sx, sy);
+        if (info.kind === "measure") {
+          const sc = this.projector ? 1.9 : 1;
+          step.params = { ...step.params || {}, dx: round12(info.off[0] + (sx - info.sx) / sc), dy: round12(info.off[1] + (sy - info.sy) / sc) };
+          this.view.requestDraw();
+          return;
+        }
         if (info.kind === "label") {
           const sc = this.projector ? 1.9 : 1;
           const off = [round12(info.off[0] + (sx - info.sx) / sc), round12(info.off[1] - (sy - info.sy) / sc)];
@@ -20000,6 +20530,8 @@ ${tk.v}
         } else if (step.type === "point_on") {
           const c = this.values.get(step.args[0]);
           if (c) step.params = { ...step.params || {}, t: round9(paramOf(c, target)) };
+        } else if (step.type === "point_in") {
+          step.params = { ...step.params || {}, ...this.uvInTriangle(step.args, target) };
         }
         this.quickUpdate();
       };
@@ -20024,6 +20556,139 @@ ${tk.v}
       window.addEventListener("pointermove", move, true);
       window.addEventListener("pointerup", up, true);
       window.addEventListener("pointercancel", up, true);
+    }
+    /**
+     * Ctrl + kéo: chọn mọi điểm trong khung, cùng các đối tượng dựng hoàn toàn từ những thứ đã chọn (đoạn AB khi A, B
+     * trong khung; đường tròn (ABC); đường vuông góc từ A xuống BC…).
+     */
+    startMarquee(e, additive) {
+      const a = this.eventPos(e);
+      let b = a;
+      const box = () => ({ x1: Math.min(a.sx, b.sx), x2: Math.max(a.sx, b.sx), y1: Math.min(a.sy, b.sy), y2: Math.max(a.sy, b.sy) });
+      const P2 = (f) => () => this.toUser(f().sx, f().sy);
+      const corners = [P2(() => ({ sx: box().x1, sy: box().y1 })), P2(() => ({ sx: box().x2, sy: box().y1 })), P2(() => ({ sx: box().x2, sy: box().y2 })), P2(() => ({ sx: box().x1, sy: box().y2 }))];
+      this.renderer.clearExtra();
+      this.renderer.addExtra({ type: "polyline", pts: [...corners, corners[0]], style: { color: "#2563eb", width: 1 } });
+      const move = (ev) => {
+        b = this.eventPos(ev);
+        this.view.requestDraw();
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move, true);
+        window.removeEventListener("pointerup", up, true);
+        window.removeEventListener("pointercancel", up, true);
+        this.renderer.clearExtra();
+        const r = box();
+        const sel = additive ? new Set(this.selection) : /* @__PURE__ */ new Set();
+        if (r.x2 - r.x1 > 3 || r.y2 - r.y1 > 3) for (const id of this.objectsInBox(r)) sel.add(id);
+        this.selection = sel;
+        this.refresh();
+        if (sel.size) this.showHint(`\u0110\xE3 ch\u1ECDn ${sel.size} \u0111\u1ED1i t\u01B0\u1EE3ng \xB7 Ctrl+H: \u1EA9n \xB7 Delete: xo\xE1 \xB7 Ctrl+C: ch\xE9p \xB7 ho\u1EB7c g\u1ECDi m\u1ED9t c\xF4ng c\u1EE5 \u0111\u1EC3 d\u1EF1ng tr\xEAn ch\xFAng`);
+      };
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", up, true);
+      window.addEventListener("pointercancel", up, true);
+    }
+    objectsInBox(r) {
+      const k = kinds(this.doc);
+      const out = /* @__PURE__ */ new Set();
+      for (const s of this.doc.steps) {
+        if (!isShown(this.doc, s)) continue;
+        const v = this.values.get(s.id);
+        if (!v) continue;
+        if (k.get(s.id) === "point") {
+          const q = this.toScreen(v);
+          if (q.x >= r.x1 && q.x <= r.x2 && q.y >= r.y1 && q.y <= r.y2) out.add(s.id);
+        } else if (s.args.length && s.args.every((a) => out.has(a))) out.add(s.id);
+      }
+      return [...out];
+    }
+    // ================= chép / dán (bản 1.7) =================
+    /** Các bước cần chép: đối tượng đang chọn cùng mọi đối tượng cha của chúng (theo thứ tự dựng). */
+    copySelection() {
+      const sel = [...this.selection].filter((id) => stepById(this.doc, id));
+      if (!sel.length) return null;
+      const need = new Set(sel);
+      for (let i = this.doc.steps.length - 1; i >= 0; i--) {
+        const s = this.doc.steps[i];
+        if (need.has(s.id)) for (const a of s.args) need.add(a);
+      }
+      const steps = clone({ steps: this.doc.steps.filter((s) => need.has(s.id)) }).steps;
+      for (const s of steps) delete s.joinPrev;
+      this.clipboard = { format: "hinh-hoc-dong-chep", version: 1, steps, selected: sel, from: this.tabIdx };
+      toast(`\u0110\xE3 ch\xE9p ${sel.length} \u0111\u1ED1i t\u01B0\u1EE3ng${steps.length > sel.length ? ` (k\xE8m ${steps.length - sel.length} \u0111\u1ED1i t\u01B0\u1EE3ng cha)` : ""} \u2013 Ctrl+V \u0111\u1EC3 d\xE1n (c\u1EA3 sang tab kh\xE1c)`);
+      return this.clipboard;
+    }
+    /**
+     * Dán: thêm các bước đã chép với id mới. Tên đã có trên hình thì đặt tên mới. Dán vào chính hình vừa chép thì các
+     * điểm tự do được dời đi một chút (bản sao tách khỏi hình gốc).
+     */
+    pasteClip(clip3) {
+      if (!clip3 || clip3.format !== "hinh-hoc-dong-chep" || !Array.isArray(clip3.steps) || !clip3.steps.length) return false;
+      const same = clip3.from === this.tabIdx && clip3.steps.some((s) => stepById(this.doc, s.id)?.type === s.type);
+      const map = /* @__PURE__ */ new Map();
+      const k = /* @__PURE__ */ new Map();
+      const before = JSON.stringify(this.doc);
+      const added = [];
+      const off = same ? 0.08 * this.figureScale() : 0;
+      for (const s0 of clip3.steps) {
+        const def = STEP_TYPES[s0.type];
+        if (!def) continue;
+        const s = clone(s0);
+        s.id = newId(this.doc);
+        s.args = s.args.map((a) => map.get(a) ?? a);
+        if (s.args.some((a) => !stepById(this.doc, a))) {
+          this.doc = JSON.parse(before);
+          toast("Kh\xF4ng d\xE1n \u0111\u01B0\u1EE3c: thi\u1EBFu \u0111\u1ED1i t\u01B0\u1EE3ng cha");
+          return false;
+        }
+        if (s.type === "free_point" && off) s.params = { ...s.params, x: round6(s.params.x + off), y: round6(s.params.y - off) };
+        const kind = def.kind === "same" ? kinds(this.doc).get(s.args[0]) : def.kind;
+        if (s.name && this.nameUsed(s.name)) s.name = nextName(this.doc, kind);
+        this.doc.steps.push(s);
+        map.set(s0.id, s.id);
+        k.set(s.id, kind);
+        added.push(s.id);
+      }
+      if (!added.length) return false;
+      for (const id of added.slice(1)) stepById(this.doc, id).joinPrev = true;
+      this.pushUndo(before);
+      this.selection = new Set((clip3.selected || []).map((id) => map.get(id)).filter(Boolean));
+      this.afterChange();
+      toast(`\u0110\xE3 d\xE1n ${added.length} \u0111\u1ED1i t\u01B0\u1EE3ng`);
+      return true;
+    }
+    // ================= sửa đối tượng cha (bản 1.7) =================
+    /** Bắt đầu thay đối số thứ i của bước id: lần bấm tiếp theo trên hình chọn đối tượng thay thế. */
+    startRedefine(id, i) {
+      const s = stepById(this.doc, id);
+      if (!s) return;
+      const def = STEP_TYPES[s.type];
+      const t2 = def.args[0] === "...point" ? "point" : def.args[i];
+      this.redefine = { id, i, t: t2 };
+      this.showHint(`Thay ${this.name(s.args[i]) || "\u0111\u1ED1i t\u01B0\u1EE3ng"} c\u1EE7a ${s.name || "\u0111\u1ED1i t\u01B0\u1EE3ng"}: b\u1EA5m v\xE0o ${typeName(t2)} thay th\u1EBF (Esc: hu\u1EF7)`);
+      this.stage.classList.add("tool-active");
+    }
+    /** Thay đối số; bước và các bước phụ thuộc được dời xuống sau đối tượng mới nếu cần. */
+    redefineArg(id, i, newArg) {
+      const s = stepById(this.doc, id);
+      if (!s || newArg === id || dependents(this.doc, [id]).has(newArg)) {
+        toast("Kh\xF4ng thay \u0111\u01B0\u1EE3c: \u0111\u1ED1i t\u01B0\u1EE3ng m\u1EDBi ph\u1EE5 thu\u1ED9c v\xE0o ch\xEDnh \u0111\u1ED1i t\u01B0\u1EE3ng \u0111ang s\u1EEDa");
+        return false;
+      }
+      const k = kinds(this.doc);
+      const def = STEP_TYPES[s.type];
+      const t2 = def.args[0] === "...point" ? "point" : def.args[i];
+      if (!argAccepts(t2, k.get(newArg))) {
+        toast(`C\u1EA7n ch\u1ECDn ${typeName(t2)}`);
+        return false;
+      }
+      this.commit((doc2) => {
+        stepById(doc2, id).args[i] = newArg;
+        doc2.steps = topoOrder(doc2.steps);
+      });
+      toast(`\u0110\xE3 thay: ${this.name(id) || "\u0111\u1ED1i t\u01B0\u1EE3ng"} gi\u1EDD d\u1EF1ng t\u1EEB ${this.name(newArg)}`);
+      return true;
     }
     select(id, additive = false, rerender = true) {
       this.imageSel = null;
@@ -20228,9 +20893,21 @@ ${tk.v}
     updateMenuChecks() {
       document.querySelectorAll("[data-theme]").forEach((b) => b.classList.toggle("on", b.dataset.theme === this.theme));
       document.getElementById("btn-grid")?.classList.toggle("on", this.grid);
+      document.getElementById("btn-aux")?.classList.toggle("on", !this.doc.hideAux);
       document.getElementById("btn-trim")?.classList.toggle("on", !!this.renderer?.trimLines);
       document.getElementById("menu-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
       document.getElementById("btn-panel")?.classList.toggle("on", document.body.classList.contains("panel-open"));
+    }
+    /** Hiện/ẩn mọi đường phụ cùng lúc (lưu trong hình: doc.hideAux). */
+    toggleAux() {
+      const n = this.doc.steps.filter((s) => s.aux).length;
+      const hide = !this.doc.hideAux;
+      this.commit((doc2) => {
+        if (hide) doc2.hideAux = true;
+        else delete doc2.hideAux;
+      });
+      this.updateMenuChecks();
+      toast(hide ? `\u0110\xE3 \u1EA9n ${n} \u0111\u01B0\u1EDDng ph\u1EE5 (Ctrl+Shift+D \u0111\u1EC3 hi\u1EC7n l\u1EA1i)` : n ? `\u0110\xE3 hi\u1EC7n ${n} \u0111\u01B0\u1EDDng ph\u1EE5` : "Ch\u01B0a c\xF3 \u0111\u01B0\u1EDDng ph\u1EE5 n\xE0o: \u0111\u01B0\u1EDDng vu\xF4ng g\xF3c, song song, trung tr\u1EF1c, ph\xE2n gi\xE1c d\u1EF1ng th\xEAm l\xE0 \u0111\u01B0\u1EDDng ph\u1EE5 (b\u1ECF ch\u1ECDn \u1EDF th\u1EBB thu\u1ED9c t\xEDnh \u0111\u1EC3 th\xE0nh \u0111\u01B0\u1EDDng ch\xEDnh)", 4e3);
     }
     toggleGrid() {
       this.grid = !this.grid;
@@ -20242,7 +20919,7 @@ ${tk.v}
       const pts = [];
       const vis = this.visibleSet();
       for (const s of this.doc.steps) {
-        if (s.hidden || vis && !vis.has(s.id)) continue;
+        if (!isShown(this.doc, s) || vis && !vis.has(s.id)) continue;
         const v = this.values.get(s.id);
         if (!v) continue;
         if (v.kind === "point") pts.push(v);
@@ -20321,7 +20998,11 @@ ${tk.v}
           return;
         }
         if (e.key === "Escape") {
-          if (this.picks.length) this.cancelTool();
+          if (this.redefine) {
+            this.redefine = null;
+            this.stage.classList.toggle("tool-active", this.toolId !== "move");
+            this.showHint();
+          } else if (this.picks.length || this.awaitExtra) this.cancelTool();
           else if (this.toolId !== "move") this.setTool("move");
           else {
             this.selection.clear();
@@ -20330,6 +21011,9 @@ ${tk.v}
           }
         } else if (e.key === "Enter" && this.picks.length >= 3 && TOOL_BY_ID[this.toolId].inputs[0] === "...point") {
           this.completeTool(TOOL_BY_ID[this.toolId]);
+        } else if (ctrl && e.shiftKey && (e.key === "d" || e.key === "D")) {
+          e.preventDefault();
+          this.toggleAux();
         } else if (ctrl && (e.key === "h" || e.key === "H") && e.shiftKey) {
           e.preventDefault();
           this.showHidden();
@@ -20343,6 +21027,38 @@ ${tk.v}
           e.preventDefault();
           this.deleteImage(this.imageSel);
         }
+      });
+      const editable2 = (t2) => {
+        const tag = (t2.tagName || "").toLowerCase();
+        return tag === "input" || tag === "textarea" || t2.isContentEditable || !!t2.closest?.(".cm-editor");
+      };
+      document.addEventListener("copy", (e) => {
+        if (editable2(e.target) || document.querySelector(".modal-back") || this.mode !== "edit" || !this.selection.size) return;
+        if (String(window.getSelection?.() || "").trim()) return;
+        const clip3 = this.copySelection();
+        if (!clip3) return;
+        e.preventDefault();
+        try {
+          e.clipboardData.setData("text/plain", JSON.stringify(clip3));
+        } catch {
+        }
+      });
+      document.addEventListener("paste", (e) => {
+        if (editable2(e.target) || document.querySelector(".modal-back") || this.mode !== "edit") return;
+        const items = [...e.clipboardData?.items || []];
+        if (items.some((it) => it.kind === "file")) return;
+        const text2 = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
+        let clip3 = null;
+        if (text2 && text2.includes("hinh-hoc-dong-chep")) {
+          try {
+            clip3 = JSON.parse(text2);
+          } catch {
+            clip3 = null;
+          }
+        } else if (!text2) clip3 = this.clipboard;
+        if (!clip3) return;
+        e.preventDefault();
+        this.pasteClip(clip3);
       });
       document.addEventListener("fullscreenchange", () => {
         if (!document.fullscreenElement && this.projector) this.setProjector(false);
@@ -20584,6 +21300,11 @@ ${tk.v}
       on("btn-hide", () => this.hideSelected());
       on("btn-show-hidden", () => this.showHidden());
       on("btn-grid", () => this.toggleGrid());
+      on("btn-aux", () => this.toggleAux());
+      on("btn-clear-trace", () => {
+        this.clearTraces();
+        toast("\u0110\xE3 xo\xE1 v\u1EBFt");
+      });
       on("btn-trim", () => {
         this.renderer.trimLines = !this.renderer.trimLines;
         savePref("trim", this.renderer.trimLines ? "1" : "0");
@@ -20629,10 +21350,44 @@ ${tk.v}
   function typeName(t2) {
     return { point: "m\u1ED9t \u0111i\u1EC3m", line: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng", circle: "m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n", curve: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng/\u0111\u01B0\u1EDDng tr\xF2n", obj: "m\u1ED9t \u0111\u1ED1i t\u01B0\u1EE3ng", pl: "m\u1ED9t \u0111i\u1EC3m ho\u1EB7c \u0111\u01B0\u1EDDng th\u1EB3ng", "...point": "m\u1ED9t \u0111i\u1EC3m" }[t2] || t2;
   }
+  function clampUV(a, b, c, P2) {
+    if (!a || !b || !c || !P2) return { u: 1 / 3, v: 1 / 3 };
+    const bx = b.x - a.x, by = b.y - a.y, cx = c.x - a.x, cy = c.y - a.y, px = P2.x - a.x, py = P2.y - a.y;
+    const det = bx * cy - by * cx;
+    if (Math.abs(det) < 1e-12) return { u: 1 / 3, v: 1 / 3 };
+    let u = (px * cy - py * cx) / det, v = (bx * py - by * px) / det;
+    u = Math.max(0, u);
+    v = Math.max(0, v);
+    if (u + v > 1) {
+      const t2 = u + v;
+      u /= t2;
+      v /= t2;
+    }
+    return { u: round9(u), v: round9(v) };
+  }
+  function topoOrder(steps) {
+    const done = /* @__PURE__ */ new Set(), out = [], rest = [...steps];
+    while (rest.length) {
+      const j = rest.findIndex((s2) => s2.args.every((a) => done.has(a)));
+      if (j < 0) return steps;
+      const [s] = rest.splice(j, 1);
+      done.add(s.id);
+      out.push(s);
+    }
+    return out;
+  }
   function markDistance(v, P2, px) {
     if (v.kind === "angle") return Math.abs(dist(v.B, P2) - 20 * px);
     if (v.kind === "segmark") return dist(mid(v.A, v.B), P2);
     if (v.kind === "polygon") return pointInPolygon(P2, v.pts) ? 0 : Infinity;
+    if (v.kind === "locus") {
+      let best = Infinity;
+      for (let i = 1; i < v.pts.length; i++) {
+        const a = v.pts[i - 1], b = v.pts[i];
+        if (a && b) best = Math.min(best, distToObject({ kind: "line", sub: "segment", p: a, d: { x: b.x - a.x, y: b.y - a.y } }, P2));
+      }
+      return best;
+    }
     return Infinity;
   }
   function pointInPolygon(P2, pts) {
@@ -21435,7 +22190,7 @@ ${tk.v}
     const theme2 = opts.theme || "mono";
     const vals = opts.values || evaluate(doc2);
     const k = kinds(doc2);
-    const visible = doc2.steps.filter((s) => !s.hidden && vals.get(s.id));
+    const visible = doc2.steps.filter((s) => isShown(doc2, s) && vals.get(s.id));
     const pts = [];
     for (const s of visible) {
       const v = vals.get(s.id);
@@ -21518,6 +22273,19 @@ ${tk.v}
         const path2 = s.args.map(ref).join(" -- ") + " -- cycle";
         out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(st.fill ?? 0.1)}] ${path2};`);
         if (st.border) out.lines.push(`\\draw${lineOpts(s)} ${path2};`);
+      } else if (v.kind === "locus") {
+        const W = box.x2 - box.x1, inBox = (p) => p && p.x > box.x1 - W && p.x < box.x2 + W && p.y > box.y1 - W && p.y < box.y2 + W;
+        let run3 = [];
+        const flush = () => {
+          if (run3.length > 1) out.lines.push(`\\draw${lineOpts(s)} plot coordinates {${run3.map(xy).join(" ")}}; % qu\u1EF9 t\xEDch`);
+          run3 = [];
+        };
+        const ps = v.closed ? [...v.pts, v.pts[0]] : v.pts;
+        for (const p of ps) {
+          if (inBox(p)) run3.push(p);
+          else flush();
+        }
+        flush();
       } else if (s.type === "angle_mark") {
         out.marks.push(...angleMark(v, s, col(s), cm, ref));
       } else if (s.type === "segment_mark") {
@@ -22980,6 +23748,13 @@ ${tk.v}
         else if (host.sub === "ray") t2 = Math.max(0.05, t2 * Math.exp((rand() * 2 - 1) * 0.5));
         else t2 += (rand() * 2 - 1) * 0.4;
         ov.set(s.id, { t: t2 });
+      } else if (s.type === "point_in") {
+        let u = rand(), v = rand();
+        if (u + v > 1) {
+          u = 1 - u;
+          v = 1 - v;
+        }
+        ov.set(s.id, { u: 0.08 + 0.84 * u, v: 0.08 + 0.84 * v });
       }
     }
     return ov;
@@ -46238,10 +47013,10 @@ ${tk.v}
       if (!/\S/.test(line2.text))
         indent = 0;
       let cur2 = /^\s*/.exec(line2.text)[0];
-      let norm2 = indentString(state, indent);
-      if (cur2 != norm2 || range.from < line2.from + cur2.length) {
+      let norm3 = indentString(state, indent);
+      if (cur2 != norm3 || range.from < line2.from + cur2.length) {
         updated[line2.from] = indent;
-        changes2.push({ from: line2.from, to: line2.from + cur2.length, insert: norm2 });
+        changes2.push({ from: line2.from, to: line2.from + cur2.length, insert: norm3 });
       }
     });
     if (!changes.changes.empty)

@@ -111,6 +111,33 @@ và mọi công cụ cần chọn điểm cũng vậy: bấm vào chỗ cắt l�
 * Điểm vừa dựng nằm ngoài khung nhìn: chương trình nhắc; phím `Home` thu phóng vừa hình.
 * `Esc`: huỷ thao tác đang dở / về công cụ Chọn.
 
+### Bản 1.7: góc bằng góc, điểm trong tam giác, quỹ tích, điểm cố định, đo
+
+* **Đường tạo góc bằng góc cho trước** (nhóm *Dựng*): chọn góc mẫu (điểm trên cạnh – **đỉnh** – điểm trên cạnh), rồi đỉnh O
+  của góc cần dựng và điểm X trên cạnh có sẵn; **rê chuột sang phía muốn dựng** (đường xem trước đi theo) rồi bấm.
+* **Điểm trên đường tạo góc bằng góc cho trước**: như trên, rồi chọn đường chứa điểm cần lấy – bấm **gần chỗ điểm cần
+  lấy** để chọn phía. Vd đề "E trên AC sao cho ∠AQE = ∠PCB": góc mẫu P, C, B; đỉnh Q; điểm A; đường AC.
+* **Điểm trong tam giác** (nhóm *Điểm*): chọn ba đỉnh rồi bấm vào trong tam giác. Kéo thì điểm luôn ở trong tam giác
+  (ra ngoài thì dừng ở cạnh); khám phá chỉ thử các vị trí trong tam giác.
+* **Quỹ tích** (nhóm *Quỹ tích, điểm cố định*): chọn điểm cần vẽ quỹ tích rồi điểm chạy (điểm trên đường thẳng/đường tròn,
+  dựng bằng công cụ Điểm bấm lên đường). Quỹ tích cập nhật khi kéo các điểm khác.
+* **Vết**: chọn một điểm (đường thẳng, đường tròn) → tích *Để lại vết khi kéo* ở thẻ thuộc tính, rồi kéo điểm khác.
+  *Hiển thị › Xoá vết*. Vết không lưu vào hình.
+* **Điểm cố định**: chọn đường thẳng/đường tròn thay đổi và điểm thay đổi (điểm tự do, trên đường, trong tam giác) – thứ tự
+  bất kỳ. Chương trình dời thử điểm đó, giao các vị trí của đường rồi dựng điểm cố định (đường tròn: có thể hai điểm),
+  hoặc báo không có. Điểm cố định là một điểm dựng được, dùng tiếp được (nối, lấy giao…).
+* **Đo** (nhóm *Đánh dấu, đo*): độ dài AB (bấm vào đoạn được luôn), góc ABC (độ), tỉ số AB/CD – số hiện trên hình, cập nhật
+  khi kéo; kéo chữ để dời chỗ.
+* **Đường phụ**: đường vuông góc, song song, trung trực, phân giác, góc bằng góc dựng thêm là **đường phụ** – nét đứt, nhạt
+  hơn. `Ctrl+Shift+D` (*Hiển thị › Hiện các đường phụ*) ẩn/hiện **tất cả** cùng lúc (điểm dựng từ chúng vẫn hiện; TikZ
+  cũng bỏ). Muốn một đường là đường chính: bỏ tích *Đường phụ* ở thẻ thuộc tính (và ngược lại).
+* **Ctrl + kéo nền**: chọn vùng – mọi điểm trong khung cùng các đối tượng dựng hoàn toàn từ chúng (đoạn, đường tròn, đường
+  vuông góc…); thêm `Shift` để chọn thêm. Kéo nền không `Ctrl` vẫn là dời hình.
+* **Chép / dán** (`Ctrl+C` / `Ctrl+V`): chép các đối tượng đang chọn kèm mọi đối tượng cha; dán sang **tab khác** (giữ tên)
+  hoặc vào chính hình đó (bản sao dời đi một chút, tên mới).
+* **Sửa đối tượng cha**: chọn một đối tượng, ở thẻ thuộc tính mục *Dựng từ* bấm tên đối tượng cha muốn thay rồi bấm đối
+  tượng thay thế trên hình – vd trung điểm AB thành trung điểm AD, các đối tượng dựng sau vẫn giữ nguyên.
+
 ### Menu Công cụ
 
 Biểu tượng cuối của thanh công cụ dọc (▶⋮) mở menu nhiều tầng:
