@@ -331,6 +331,14 @@ export function setupTextBoxes(app) {
       render();
       edit(id, { atEnd: true });
     },
+    /** Thêm một đoạn vào cuối khung lời giải (tạo khung nếu chưa có) – dùng cho "Chèn vào lời giải" của Khám phá. */
+    appendSolution(text) {
+      let b = boxes().find((x) => x.role === 'loigiai');
+      const id = b ? b.id : newBox('loigiai');
+      app.commit((doc) => { const bb = doc.boxes.find((x) => x.id === id); bb.text = (bb.text ? bb.text.replace(/\s+$/, '') + '\n\n' : '') + text; });
+      render();
+      return id;
+    },
     /** Khung trình bày cuối cùng mà chữ cần (để trình bày đi hết các bước lời giải). */
     lastFrame() {
       let m = 0;

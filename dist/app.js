@@ -237,18 +237,18 @@
     return { kind: "circle", c: { x: c.x, y: c.y }, r };
   }
   var lineThrough = (a, b, subtype = "line") => line(a, sub(b, a), subtype);
-  function project(P2, l) {
-    const t2 = dot(sub(P2, l.p), l.d) / dot(l.d, l.d);
+  function project(P4, l) {
+    const t2 = dot(sub(P4, l.p), l.d) / dot(l.d, l.d);
     return pt(l.p.x + t2 * l.d.x, l.p.y + t2 * l.d.y);
   }
-  var lineParam = (P2, l) => dot(sub(P2, l.p), l.d) / dot(l.d, l.d);
-  var distPointLine = (P2, l) => Math.abs(cross(l.d, sub(P2, l.p))) / norm(l.d);
-  function reflectPointOverPoint(P2, C2) {
-    return pt(2 * C2.x - P2.x, 2 * C2.y - P2.y);
+  var lineParam = (P4, l) => dot(sub(P4, l.p), l.d) / dot(l.d, l.d);
+  var distPointLine = (P4, l) => Math.abs(cross(l.d, sub(P4, l.p))) / norm(l.d);
+  function reflectPointOverPoint(P4, C2) {
+    return pt(2 * C2.x - P4.x, 2 * C2.y - P4.y);
   }
-  function reflectPointOverLine(P2, l) {
-    const F = project(P2, l);
-    return pt(2 * F.x - P2.x, 2 * F.y - P2.y);
+  function reflectPointOverLine(P4, l) {
+    const F = project(P4, l);
+    return pt(2 * F.x - P4.x, 2 * F.y - P4.y);
   }
   function intersectLL(l1, l2) {
     const den = cross(l1.d, l2.d);
@@ -289,8 +289,8 @@
   function intersect(o1, o2) {
     if (!o1 || !o2) return [];
     if (o1.kind === "line" && o2.kind === "line") {
-      const P2 = intersectLL(o1, o2);
-      return P2 ? [P2] : [];
+      const P4 = intersectLL(o1, o2);
+      return P4 ? [P4] : [];
     }
     if (o1.kind === "line" && o2.kind === "circle") return intersectLC(o1, o2);
     if (o1.kind === "circle" && o2.kind === "line") return intersectLC(o2, o1);
@@ -374,26 +374,26 @@
     if (obj.kind === "circle") return pt(obj.c.x + obj.r * Math.cos(t2), obj.c.y + obj.r * Math.sin(t2));
     return null;
   }
-  function paramOf(obj, P2) {
+  function paramOf(obj, P4) {
     if (obj.kind === "line") {
-      let t2 = lineParam(P2, obj);
+      let t2 = lineParam(P4, obj);
       if (obj.sub === "segment") t2 = Math.min(1, Math.max(0, t2));
       else if (obj.sub === "ray") t2 = Math.max(0, t2);
       return t2;
     }
-    if (obj.kind === "circle") return Math.atan2(P2.y - obj.c.y, P2.x - obj.c.x);
+    if (obj.kind === "circle") return Math.atan2(P4.y - obj.c.y, P4.x - obj.c.x);
     return 0;
   }
-  function distToObject(obj, P2) {
+  function distToObject(obj, P4) {
     if (!obj) return Infinity;
-    if (obj.kind === "point") return dist(obj, P2);
-    if (obj.kind === "circle") return Math.abs(dist(obj.c, P2) - obj.r);
-    if (obj.kind === "line") return dist(pointOn(obj, paramOf(obj, P2)), P2);
+    if (obj.kind === "point") return dist(obj, P4);
+    if (obj.kind === "circle") return Math.abs(dist(obj.c, P4) - obj.r);
+    if (obj.kind === "line") return dist(pointOn(obj, paramOf(obj, P4)), P4);
     return Infinity;
   }
   function reflectObject(X, M) {
     if (!X || !M) return null;
-    const f = M.kind === "point" ? (P2) => reflectPointOverPoint(P2, M) : (P2) => reflectPointOverLine(P2, M);
+    const f = M.kind === "point" ? (P4) => reflectPointOverPoint(P4, M) : (P4) => reflectPointOverLine(P4, M);
     if (X.kind === "point") return f(X);
     if (X.kind === "line") {
       const a = f(X.p);
@@ -403,15 +403,15 @@
     if (X.kind === "circle") return circle(f(X.c), X.r);
     return null;
   }
-  function rotatePoint(P2, O, deg) {
+  function rotatePoint(P4, O, deg) {
     const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
-    const x = P2.x - O.x, y = P2.y - O.y;
+    const x = P4.x - O.x, y = P4.y - O.y;
     return pt(O.x + c * x - s * y, O.y + s * x + c * y);
   }
-  var homothetyPoint = (P2, O, k) => pt(O.x + k * (P2.x - O.x), O.y + k * (P2.y - O.y));
-  var translatePoint = (P2, A, B) => pt(P2.x + B.x - A.x, P2.y + B.y - A.y);
-  function invertPoint(P2, c) {
-    const dx = P2.x - c.c.x, dy = P2.y - c.c.y, d2 = dx * dx + dy * dy;
+  var homothetyPoint = (P4, O, k) => pt(O.x + k * (P4.x - O.x), O.y + k * (P4.y - O.y));
+  var translatePoint = (P4, A, B) => pt(P4.x + B.x - A.x, P4.y + B.y - A.y);
+  function invertPoint(P4, c) {
+    const dx = P4.x - c.c.x, dy = P4.y - c.c.y, d2 = dx * dx + dy * dy;
     if (d2 < EPS * EPS) return null;
     const k = c.r * c.r / d2;
     return pt(c.c.x + k * dx, c.c.y + k * dy);
@@ -422,8 +422,8 @@
     const O = c.c;
     if (!passesThrough(X, O)) return null;
     if (X.kind === "line") return line(X.p, X.d);
-    const P2 = invertPoint(pt(2 * X.c.x - O.x, 2 * X.c.y - O.y), c);
-    return P2 ? line(P2, perp(sub(X.c, O))) : null;
+    const P4 = invertPoint(pt(2 * X.c.x - O.x, 2 * X.c.y - O.y), c);
+    return P4 ? line(P4, perp(sub(X.c, O))) : null;
   }
   function invertToCircle(X, c) {
     if (!X || !c) return null;
@@ -441,11 +441,11 @@
     if (norm(u) < EPS || norm(v) < EPS) return null;
     return Math.atan2(cross(u, v), dot(u, v)) * 180 / Math.PI;
   }
-  function spiralPoint(P2, O, A, B) {
+  function spiralPoint(P4, O, A, B) {
     const a = sub(A, O), b = sub(B, O), a2 = dot(a, a);
     if (a2 < EPS * EPS) return null;
     const re = dot(a, b) / a2, im = cross(a, b) / a2;
-    const x = P2.x - O.x, y = P2.y - O.y;
+    const x = P4.x - O.x, y = P4.y - O.y;
     return pt(O.x + re * x - im * y, O.y + im * x + re * y);
   }
   function mapObject(X, f) {
@@ -461,14 +461,14 @@
     }
     return null;
   }
-  function tangentAt(c, P2) {
-    const r = sub(P2, c.c);
+  function tangentAt(c, P4) {
+    const r = sub(P4, c.c);
     if (norm(r) < EPS) return null;
-    return line(P2, perp(r));
+    return line(P4, perp(r));
   }
-  function tangentPoints(c, P2) {
-    const M = mid(c.c, P2);
-    return intersectCC(c, { kind: "circle", c: M, r: dist(M, P2) });
+  function tangentPoints(c, P4) {
+    const M = mid(c.c, P4);
+    return intersectCC(c, { kind: "circle", c: M, r: dist(M, P4) });
   }
   function commonTangent(c1, c2, internal, which) {
     const D2 = sub(c2.c, c1.c);
@@ -506,9 +506,9 @@
     if (Math.abs(s) < 1e-12 * Math.max(c1.r, c2.r)) return null;
     return pt((c2.r * c1.c.x - c1.r * c2.c.x) / s, (c2.r * c1.c.y - c1.r * c2.c.y) / s);
   }
-  var area2 = (P2, Q, R) => cross(sub(Q, P2), sub(R, P2));
-  function barycentric(P2, A, B, C2) {
-    return [area2(P2, B, C2), area2(P2, C2, A), area2(P2, A, B)];
+  var area2 = (P4, Q, R) => cross(sub(Q, P4), sub(R, P4));
+  function barycentric(P4, A, B, C2) {
+    return [area2(P4, B, C2), area2(P4, C2, A), area2(P4, A, B)];
   }
   function fromBarycentric(u, v, w, A, B, C2) {
     const s = u + v + w;
@@ -522,9 +522,9 @@
     const a = dist(B, C2), b = dist(C2, A), c = dist(A, B);
     return fromBarycentric(-a, b, c, A, B, C2);
   }
-  function isogonalConjugate(P2, A, B, C2) {
+  function isogonalConjugate(P4, A, B, C2) {
     if (!triangleOK(A, B, C2)) return null;
-    const [u, v, w] = barycentric(P2, A, B, C2);
+    const [u, v, w] = barycentric(P4, A, B, C2);
     const sc = Math.abs(area2(A, B, C2));
     if ([u, v, w].some((x) => Math.abs(x) < 1e-12 * sc)) return null;
     const [a2, b2, c2] = sides2(A, B, C2);
@@ -544,8 +544,8 @@
     const N = ninePointCenter(A, B, C2);
     return N ? isogonalConjugate(N, A, B, C2) : null;
   }
-  function isogonalLine(B, A, C2, P2) {
-    const u = unit(sub(B, A)), v = unit(sub(C2, A)), p = sub(P2, A);
+  function isogonalLine(B, A, C2, P4) {
+    const u = unit(sub(B, A)), v = unit(sub(C2, A)), p = sub(P4, A);
     if (!u || !v || norm(p) < EPS) return null;
     let w = add(u, v);
     w = norm(w) < 1e-9 ? perp(u) : unit(w);
@@ -576,8 +576,8 @@
     const dd = Math.hypot(l.d.x, l.d.y);
     if (!(dd > 0)) return null;
     let t0 = Infinity, t1 = -Infinity, n = 0;
-    for (const P2 of pts) {
-      const ex = P2.x - l.p.x, ey = P2.y - l.p.y;
+    for (const P4 of pts) {
+      const ex = P4.x - l.p.x, ey = P4.y - l.p.y;
       if (Math.abs(l.d.x * ey - l.d.y * ex) / dd > tol) continue;
       const t2 = (ex * l.d.x + ey * l.d.y) / (dd * dd);
       if (sub4 === "ray" && t2 < -1e-9) continue;
@@ -598,13 +598,13 @@
     const a = directedAngle(A, B, C2);
     return a == null ? NaN : Math.abs(a) * Math.PI / 180;
   }
-  function condResidual(c, P2, objs) {
-    const g = (i) => i < 0 ? P2 : objs[i];
+  function condResidual(c, P4, objs) {
+    const g = (i) => i < 0 ? P4 : objs[i];
     const a = c.a;
     if (c.t === "on") {
       const X = objs[a[0]];
-      if (X.kind === "line") return cross(unit(X.d), sub(P2, X.p));
-      return dist(P2, X.c) - X.r;
+      if (X.kind === "line") return cross(unit(X.d), sub(P4, X.p));
+      return dist(P4, X.c) - X.r;
     }
     if (c.t === "len") return dist(g(a[0]), g(a[1])) - dist(g(a[2]), g(a[3]));
     if (c.t === "ang") return condAngle(g(a[0]), g(a[1]), g(a[2])) - condAngle(g(a[3]), g(a[4]), g(a[5]));
@@ -950,14 +950,14 @@
       args: ["obj", "point"],
       params: { angle: 90 },
       label: "Ph\xE9p quay",
-      compute: ([X, O], p) => mapObject(X, (P2) => rotatePoint(P2, O, p.angle))
+      compute: ([X, O], p) => mapObject(X, (P4) => rotatePoint(P4, O, p.angle))
     },
     homothety: {
       kind: "same",
       args: ["obj", "point"],
       params: { k: 2 },
       label: "Ph\xE9p v\u1ECB t\u1EF1",
-      compute: ([X, O], p) => mapObject(X, (P2) => homothetyPoint(P2, O, p.k)),
+      compute: ([X, O], p) => mapObject(X, (P4) => homothetyPoint(P4, O, p.k)),
       facts: (s, kinds2) => kinds2[0] === "point" ? [{ col: [s.args[1], s.args[0], s.id] }] : []
     },
     translate: {
@@ -965,13 +965,13 @@
       kind: "same",
       args: ["obj", "point", "point"],
       label: "Ph\xE9p t\u1ECBnh ti\u1EBFn",
-      compute: ([X, P2, Q]) => mapObject(X, (Z) => translatePoint(Z, P2, Q))
+      compute: ([X, P4, Q]) => mapObject(X, (Z) => translatePoint(Z, P4, Q))
     },
     invert: {
       kind: "point",
       args: ["point", "circle"],
       label: "Ph\xE9p ngh\u1ECBch \u0111\u1EA3o",
-      compute: ([P2, c]) => invertPoint(P2, c)
+      compute: ([P4, c]) => invertPoint(P4, c)
     },
     invert_line: {
       // Ảnh của đường thẳng/đường tròn đi qua tâm nghịch đảo (bản 1.2).
@@ -994,7 +994,7 @@
       label: "Ph\xE9p quay theo g\xF3c tr\xEAn h\xECnh",
       compute: ([X, O, A, B, C2]) => {
         const a = directedAngle(A, B, C2);
-        return a == null ? null : mapObject(X, (P2) => rotatePoint(P2, O, a));
+        return a == null ? null : mapObject(X, (P4) => rotatePoint(P4, O, a));
       }
     },
     homothety_by: {
@@ -1007,7 +1007,7 @@
         const cd = dist(C2, D2);
         if (cd < EPS) return null;
         const k = (p.negative ? -1 : 1) * dist(A, B) / cd;
-        return mapObject(X, (P2) => homothetyPoint(P2, O, k));
+        return mapObject(X, (P4) => homothetyPoint(P4, O, k));
       },
       facts: (s, kinds2) => kinds2[0] === "point" ? [{ col: [s.args[1], s.args[0], s.id] }] : []
     },
@@ -1016,13 +1016,13 @@
       kind: "same",
       args: ["obj", "point", "point", "point"],
       label: "Ph\xE9p \u0111\u1ED3ng d\u1EA1ng t\xE2m O bi\u1EBFn A th\xE0nh B",
-      compute: ([X, O, A, B]) => dist(A, O) < EPS ? null : mapObject(X, (P2) => spiralPoint(P2, O, A, B))
+      compute: ([X, O, A, B]) => dist(A, O) < EPS ? null : mapObject(X, (P4) => spiralPoint(P4, O, A, B))
     },
     tangent_at: {
       kind: "line",
       args: ["circle", "point"],
       label: "Ti\u1EBFp tuy\u1EBFn t\u1EA1i m\u1ED9t \u0111i\u1EC3m",
-      compute: ([c, P2]) => tangentAt(c, P2),
+      compute: ([c, P4]) => tangentAt(c, P4),
       facts: (s) => [{ on: [s.args[1], s.id] }, { tan: [s.id, s.args[0]] }]
     },
     tangent_point: {
@@ -1031,7 +1031,7 @@
       args: ["circle", "point"],
       params: { which: 0 },
       label: "Ti\u1EBFp \u0111i\u1EC3m",
-      compute: ([c, P2], p) => tangentPoints(c, P2)[p.which] || null,
+      compute: ([c, P4], p) => tangentPoints(c, P4)[p.which] || null,
       facts: (s) => [{ on: [s.id, s.args[0]] }, { tan: [{ L: [s.args[1], s.id] }, s.args[0]] }]
     },
     common_tangent: {
@@ -1087,7 +1087,7 @@
       kind: "point",
       args: ["point", "point", "point", "point"],
       label: "\u0110i\u1EC3m li\xEAn h\u1EE3p \u0111\u1EB3ng gi\xE1c",
-      compute: ([P2, A, B, C2]) => isogonalConjugate(P2, A, B, C2)
+      compute: ([P4, A, B, C2]) => isogonalConjugate(P4, A, B, C2)
     },
     lemoine: {
       kind: "point",
@@ -1115,10 +1115,10 @@
       kind: "point",
       args: ["point", "point", "point", "point"],
       label: "Ch\xE2n \u0111\u01B0\u1EDDng Cevian",
-      compute: ([P2, A, B, C2]) => dist(A, P2) < EPS || dist(B, C2) < EPS ? null : intersectLL(lineThrough(A, P2), lineThrough(B, C2)),
+      compute: ([P4, A, B, C2]) => dist(A, P4) < EPS || dist(B, C2) < EPS ? null : intersectLL(lineThrough(A, P4), lineThrough(B, C2)),
       facts: (s) => {
-        const [P2, A, B, C2] = s.args;
-        return [{ col: [B, s.id, C2] }, { col: [A, P2, s.id] }];
+        const [P4, A, B, C2] = s.args;
+        return [{ col: [B, s.id, C2] }, { col: [A, P4, s.id] }];
       }
     },
     isogonal_line: {
@@ -1126,7 +1126,7 @@
       kind: "line",
       args: ["point", "point", "point", "point"],
       label: "\u0110\u01B0\u1EDDng \u0111\u1EB3ng gi\xE1c",
-      compute: ([B, A, C2, P2]) => isogonalLine(B, A, C2, P2),
+      compute: ([B, A, C2, P4]) => isogonalLine(B, A, C2, P4),
       facts: (s) => [{ on: [s.args[1], s.id] }]
     },
     circle_tangent_at: {
@@ -1426,7 +1426,7 @@
     }
     return [];
   }
-  var distTo = (P2, X) => X.kind === "line" ? distPointLine(P2, X) : Math.abs(dist(P2, X.c) - X.r);
+  var distTo = (P4, X) => X.kind === "line" ? distPointLine(P4, X) : Math.abs(dist(P4, X.c) - X.r);
   var SAMPLERS = {
     /** Điểm cố định của họ X (đường thẳng/đường tròn) khi M thay đổi. */
     fixed_point(s, [X], p, vals, doc2, overrides) {
@@ -1698,32 +1698,32 @@
     const out = /* @__PURE__ */ new Map();
     for (const s of pts) {
       if (s.style && s.style.labelOffset) continue;
-      const P2 = values.get(s.id);
+      const P4 = values.get(s.id);
       const blocked = [];
       for (const c of curves) {
         const v = values.get(c.id);
-        if (distToObject(v, P2) > 1e-6 * scale) continue;
+        if (distToObject(v, P4) > 1e-6 * scale) continue;
         if (v.kind === "line") {
           const a = Math.atan2(v.d.y, v.d.x);
-          const t2 = lineParam(P2, v);
+          const t2 = lineParam(P4, v);
           const sub4 = c.type === "segment" ? "segment" : c.type === "ray" ? "ray" : v.sub;
           const fwd = sub4 === "line" || (sub4 === "ray" ? true : t2 < 1 - 1e-9);
           const back = sub4 === "line" || t2 > 1e-9;
           if (fwd) blocked.push([a, 1]);
           if (back) blocked.push([a + Math.PI, 1]);
         } else {
-          const a = Math.atan2(P2.y - v.c.y, P2.x - v.c.x);
+          const a = Math.atan2(P4.y - v.c.y, P4.x - v.c.x);
           blocked.push([a + Math.PI / 2, 1], [a - Math.PI / 2, 1], [a + Math.PI, 0.4]);
         }
       }
       for (const o of pts) {
         if (o === s) continue;
         const Q = values.get(o.id);
-        const d = dist(P2, Q);
-        if (d > 1e-9 && d < near) blocked.push([Math.atan2(Q.y - P2.y, Q.x - P2.x), 0.8]);
+        const d = dist(P4, Q);
+        if (d > 1e-9 && d < near) blocked.push([Math.atan2(Q.y - P4.y, Q.x - P4.x), 0.8]);
       }
-      const away = Math.atan2(P2.y - cy, P2.x - cx);
-      const hasAway = Math.hypot(P2.x - cx, P2.y - cy) > 0.02 * scale;
+      const away = Math.atan2(P4.y - cy, P4.x - cx);
+      const hasAway = Math.hypot(P4.x - cx, P4.y - cy) > 0.02 * scale;
       let best = Math.PI / 4, bestScore = -Infinity;
       for (let i = 0; i < N_DIR; i++) {
         const th = 2 * Math.PI * i / N_DIR;
@@ -1752,7 +1752,7 @@
     const placed = fixed.map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
     const crowd = pts.map((p) => {
       let c = 0;
-      for (const cv of curves) if (distToCurve(cv, p.x, p.y) < 2) c += 1;
+      for (const cv2 of curves) if (distToCurve(cv2, p.x, p.y) < 2) c += 1;
       for (const q of pts) if (q !== p && Math.hypot(q.x - p.x, q.y - p.y) < 3 * (p.w + p.h)) c += 0.7;
       return c;
     });
@@ -1773,7 +1773,7 @@
           const box = { x: cx - p.w / 2, y: cy - p.h / 2, w: p.w, h: p.h };
           let cost = ring * 1.2;
           const inner2 = shrink(box, 1);
-          for (const cv of curves) if (curveHitsBox(cv, inner2)) cost += 8;
+          for (const cv2 of curves) if (curveHitsBox(cv2, inner2)) cost += 8;
           for (const q of pts) if (q !== p && q.x > box.x - q.r - 1 && q.x < box.x + box.w + q.r + 1 && q.y > box.y - q.r - 1 && q.y < box.y + box.h + q.r + 1) cost += 12;
           for (const b of placed) {
             const a = overlapArea(box, b);
@@ -1805,22 +1805,22 @@
     const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
     return ix > 0 && iy > 0 ? ix * iy : 0;
   }
-  function distToCurve(cv, x, y) {
-    if (cv.kind === "circle") return Math.abs(Math.hypot(x - cv.cx, y - cv.cy) - cv.r);
-    const dx = cv.x2 - cv.x1, dy = cv.y2 - cv.y1, L2 = dx * dx + dy * dy;
-    const t2 = L2 > 0 ? Math.max(0, Math.min(1, ((x - cv.x1) * dx + (y - cv.y1) * dy) / L2)) : 0;
-    return Math.hypot(x - cv.x1 - t2 * dx, y - cv.y1 - t2 * dy);
+  function distToCurve(cv2, x, y) {
+    if (cv2.kind === "circle") return Math.abs(Math.hypot(x - cv2.cx, y - cv2.cy) - cv2.r);
+    const dx = cv2.x2 - cv2.x1, dy = cv2.y2 - cv2.y1, L2 = dx * dx + dy * dy;
+    const t2 = L2 > 0 ? Math.max(0, Math.min(1, ((x - cv2.x1) * dx + (y - cv2.y1) * dy) / L2)) : 0;
+    return Math.hypot(x - cv2.x1 - t2 * dx, y - cv2.y1 - t2 * dy);
   }
-  function curveHitsBox(cv, b) {
-    if (cv.kind === "circle") {
-      const nx = Math.max(b.x, Math.min(cv.cx, b.x + b.w)), ny = Math.max(b.y, Math.min(cv.cy, b.y + b.h));
-      const dmin = Math.hypot(nx - cv.cx, ny - cv.cy);
-      const dmax = Math.max(Math.hypot(b.x - cv.cx, b.y - cv.cy), Math.hypot(b.x + b.w - cv.cx, b.y - cv.cy), Math.hypot(b.x - cv.cx, b.y + b.h - cv.cy), Math.hypot(b.x + b.w - cv.cx, b.y + b.h - cv.cy));
-      return dmin < cv.r && cv.r < dmax;
+  function curveHitsBox(cv2, b) {
+    if (cv2.kind === "circle") {
+      const nx = Math.max(b.x, Math.min(cv2.cx, b.x + b.w)), ny = Math.max(b.y, Math.min(cv2.cy, b.y + b.h));
+      const dmin = Math.hypot(nx - cv2.cx, ny - cv2.cy);
+      const dmax = Math.max(Math.hypot(b.x - cv2.cx, b.y - cv2.cy), Math.hypot(b.x + b.w - cv2.cx, b.y - cv2.cy), Math.hypot(b.x - cv2.cx, b.y + b.h - cv2.cy), Math.hypot(b.x + b.w - cv2.cx, b.y + b.h - cv2.cy));
+      return dmin < cv2.r && cv2.r < dmax;
     }
     let t0 = 0, t1 = 1;
-    const dx = cv.x2 - cv.x1, dy = cv.y2 - cv.y1;
-    for (const [p, d, lo, hi] of [[cv.x1, dx, b.x, b.x + b.w], [cv.y1, dy, b.y, b.y + b.h]]) {
+    const dx = cv2.x2 - cv2.x1, dy = cv2.y2 - cv2.y1;
+    for (const [p, d, lo, hi] of [[cv2.x1, dx, b.x, b.x + b.w], [cv2.y1, dy, b.y, b.y + b.h]]) {
       if (Math.abs(d) < 1e-12) {
         if (p < lo || p > hi) return false;
         continue;
@@ -2391,18 +2391,18 @@
     return { x: x0 - 2, y: cy - fontPx * 0.6, w: m.w + 4, h: fontPx * 1.25 };
   }
   function drawExtra(ctx, view, e, sc) {
-    const P2 = e.pts.map((f) => f());
-    if (P2.some((p) => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return;
+    const P4 = e.pts.map((f) => f());
+    if (P4.some((p) => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return;
     const st = { color: "#9ca3af", width: 1.5, dash: true, ...e.style || {} };
     const w = st.width * sc;
     if (e.type === "segment" || e.type === "line" || e.type === "ray") {
-      const d = { x: P2[1].x - P2[0].x, y: P2[1].y - P2[0].y };
+      const d = { x: P4[1].x - P4[0].x, y: P4[1].y - P4[0].y };
       if (Math.hypot(d.x, d.y) < 1e-12) return;
-      strokeLine(ctx, view, { p: P2[0], d }, e.type, st.color, w, st.dash);
+      strokeLine(ctx, view, { p: P4[0], d }, e.type, st.color, w, st.dash);
     } else if (e.type === "circle") {
-      strokeCircle(ctx, view.toScreen(P2[0]), Math.hypot(P2[1].x - P2[0].x, P2[1].y - P2[0].y) * view.scale, st.color, w, st.dash);
+      strokeCircle(ctx, view.toScreen(P4[0]), Math.hypot(P4[1].x - P4[0].x, P4[1].y - P4[0].y) * view.scale, st.color, w, st.dash);
     } else if (e.type === "circle3") {
-      const [A, B, C2] = P2;
+      const [A, B, C2] = P4;
       const d = 2 * (A.x * (B.y - C2.y) + B.x * (C2.y - A.y) + C2.x * (A.y - B.y));
       if (Math.abs(d) < 1e-12) return;
       const a2 = A.x * A.x + A.y * A.y, b2 = B.x * B.x + B.y * B.y, c2 = C2.x * C2.x + C2.y * C2.y;
@@ -2411,14 +2411,14 @@
     } else if (e.type === "polyline") {
       setStroke(ctx, st.color, w, st.dash);
       ctx.beginPath();
-      P2.forEach((p, i) => {
+      P4.forEach((p, i) => {
         const q = view.toScreen(p);
         if (i) ctx.lineTo(q.x, q.y);
         else ctx.moveTo(q.x, q.y);
       });
       ctx.stroke();
     } else if (e.type === "point") {
-      drawPoint(ctx, view.toScreen(P2[0]), (st.size || 7) * sc, st.color, st.fill || "#fde68a", sc);
+      drawPoint(ctx, view.toScreen(P4[0]), (st.size || 7) * sc, st.color, st.fill || "#fde68a", sc);
     }
   }
   function angleMarkPath(v, st, px, sc = 1) {
@@ -2512,8 +2512,8 @@
     viewChanged() {
       for (const fn of this.listeners) fn(this);
     }
-    toScreen(P2) {
-      return { x: this.W / 2 + (P2.x - this.cx) * this.scale, y: this.H / 2 - (P2.y - this.cy) * this.scale };
+    toScreen(P4) {
+      return { x: this.W / 2 + (P4.x - this.cx) * this.scale, y: this.H / 2 - (P4.y - this.cy) * this.scale };
     }
     toUser(sx, sy) {
       return { x: this.cx + (sx - this.W / 2) / this.scale, y: this.cy - (sy - this.H / 2) / this.scale };
@@ -2539,10 +2539,10 @@
       this.viewChanged();
     }
     zoomAt(sx, sy, factor) {
-      const P2 = this.toUser(sx, sy);
+      const P4 = this.toUser(sx, sy);
       this.scale = Math.min(1e5, Math.max(0.02, this.scale * factor));
-      this.cx = P2.x - (sx - this.W / 2) / this.scale;
-      this.cy = P2.y + (sy - this.H / 2) / this.scale;
+      this.cx = P4.x - (sx - this.W / 2) / this.scale;
+      this.cy = P4.y + (sy - this.H / 2) / this.scale;
       this.requestDraw();
       this.viewChanged();
     }
@@ -2805,10 +2805,10 @@
       "Tam gi\xE1c Cevian",
       ["point", "point", "point", "point"],
       TRI_P,
-      run((S2, [A, B, C2, P2]) => {
-        const D2 = S2.add("cevian_foot", [P2, A, B, C2]);
-        const E = S2.add("cevian_foot", [P2, B, C2, A]);
-        const F = S2.add("cevian_foot", [P2, C2, A, B]);
+      run((S2, [A, B, C2, P4]) => {
+        const D2 = S2.add("cevian_foot", [P4, A, B, C2]);
+        const E = S2.add("cevian_foot", [P4, B, C2, A]);
+        const F = S2.add("cevian_foot", [P4, C2, A, B]);
         S2.seg(A, D2);
         S2.seg(B, E);
         S2.seg(C2, F);
@@ -2833,8 +2833,8 @@
       ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C (D tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n, k\xE9o \u0111\u01B0\u1EE3c)"],
       run((S2, [A, B, C2], ctx) => {
         const w = S2.circleWithCenter("circle_3pts", [A, B, C2]);
-        const cv = S2.vals.get(w), bv = ctx.values.get(B);
-        const t2 = cv && bv ? Math.atan2(cv.c.y - bv.y, cv.c.x - bv.x) : 0;
+        const cv2 = S2.vals.get(w), bv = ctx.values.get(B);
+        const t2 = cv2 && bv ? Math.atan2(cv2.c.y - bv.y, cv2.c.x - bv.x) : 0;
         const D2 = S2.add("point_on", [w], { params: { t: t2 } });
         poly(S2, [A, B, C2, D2]);
       }),
@@ -2880,7 +2880,7 @@
       "\u0110\u01B0\u1EDDng \u0111\u1EB3ng gi\xE1c",
       ["point", "point", "point", "point"],
       ["Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 nh\u1EA5t", "Ch\u1ECDn \u0110\u1EC8NH g\xF3c", "Ch\u1ECDn \u0111i\u1EC3m tr\xEAn c\u1EA1nh th\u1EE9 hai", "Ch\u1ECDn \u0111i\u1EC3m P (d\u1EF1ng \u0111\u01B0\u1EDDng \u0111\u1EB3ng gi\xE1c c\u1EE7a \u0111\u1EC9nh\u2013P)"],
-      run((S2, [B, A, C2, P2]) => S2.add("isogonal_line", [B, A, C2, P2])),
+      run((S2, [B, A, C2, P4]) => S2.add("isogonal_line", [B, A, C2, P4])),
       { icon: "\u2221" }
     ),
     T(
@@ -2922,7 +2922,7 @@
       "Ti\u1EBFp tuy\u1EBFn t\u1EA1i m\u1ED9t \u0111i\u1EC3m",
       ["circle", "point"],
       ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n v\xE0 m\u1ED9t \u0111i\u1EC3m tr\xEAn n\xF3 (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"],
-      run((S2, [c, P2]) => S2.add("tangent_at", [c, P2])),
+      run((S2, [c, P4]) => S2.add("tangent_at", [c, P4])),
       { icon: "\u27C2", anyOrder: true }
     ),
     T(
@@ -2931,8 +2931,8 @@
       "Giao \u0111i\u1EC3m c\u1EE7a hai ti\u1EBFp tuy\u1EBFn",
       ["circle", "point", "point"],
       ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n", "Ch\u1ECDn ti\u1EBFp \u0111i\u1EC3m th\u1EE9 nh\u1EA5t", "Ch\u1ECDn ti\u1EBFp \u0111i\u1EC3m th\u1EE9 hai"],
-      run((S2, [c, P2, Q]) => {
-        const a = S2.add("tangent_at", [c, P2]), b = S2.add("tangent_at", [c, Q]);
+      run((S2, [c, P4, Q]) => {
+        const a = S2.add("tangent_at", [c, P4]), b = S2.add("tangent_at", [c, Q]);
         S2.add("intersection", [a, b]);
       }),
       { icon: "\u22CF" }
@@ -2943,10 +2943,10 @@
       "Ti\u1EBFp tuy\u1EBFn k\u1EBB t\u1EEB m\u1ED9t \u0111i\u1EC3m",
       ["circle", "point"],
       ["Ch\u1ECDn \u0111\u01B0\u1EDDng tr\xF2n v\xE0 m\u1ED9t \u0111i\u1EC3m n\u1EB1m ngo\xE0i (th\u1EE9 t\u1EF1 b\u1EA5t k\u1EF3)", "Ch\u1ECDn n\u1ED1t \u0111\u1ED1i t\u01B0\u1EE3ng c\xF2n l\u1EA1i"],
-      run((S2, [c, P2]) => {
+      run((S2, [c, P4]) => {
         for (const which of [0, 1]) {
-          const T0 = S2.add("tangent_point", [c, P2], { params: { which } });
-          S2.add("line", [P2, T0]);
+          const T0 = S2.add("tangent_point", [c, P4], { params: { which } });
+          S2.add("line", [P4, T0]);
         }
       }),
       { icon: "\u22CE", anyOrder: true }
@@ -2986,9 +2986,9 @@
       "\u0110\u01B0\u1EDDng th\u1EB3ng Simson",
       ["point", "point", "point", "point"],
       ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C", "Ch\u1ECDn \u0111i\u1EC3m P (th\u01B0\u1EDDng l\u1EA5y tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp)"],
-      run((S2, [A, B, C2, P2]) => {
-        const D2 = S2.point("foot", [P2, B, C2]), E = S2.point("foot", [P2, C2, A]);
-        S2.point("foot", [P2, A, B]);
+      run((S2, [A, B, C2, P4]) => {
+        const D2 = S2.point("foot", [P4, B, C2]), E = S2.point("foot", [P4, C2, A]);
+        S2.point("foot", [P4, A, B]);
         S2.add("line", [D2, E]);
       }),
       { icon: "s" }
@@ -2999,9 +2999,9 @@
       "\u0110\u01B0\u1EDDng th\u1EB3ng Steiner",
       ["point", "point", "point", "point"],
       ["Ch\u1ECDn \u0111\u1EC9nh A", "Ch\u1ECDn \u0111\u1EC9nh B", "Ch\u1ECDn \u0111\u1EC9nh C", "Ch\u1ECDn \u0111i\u1EC3m P (th\u01B0\u1EDDng l\u1EA5y tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp)"],
-      run((S2, [A, B, C2, P2]) => {
-        const X = S2.add("reflect_pts", [P2, B, C2]), Y = S2.add("reflect_pts", [P2, C2, A]);
-        S2.add("reflect_pts", [P2, A, B]);
+      run((S2, [A, B, C2, P4]) => {
+        const X = S2.add("reflect_pts", [P4, B, C2]), Y = S2.add("reflect_pts", [P4, C2, A]);
+        S2.add("reflect_pts", [P4, A, B]);
         S2.add("line", [X, Y]);
       }),
       { icon: "\u2113" }
@@ -3014,8 +3014,8 @@
       "\u0110\u01B0\u1EDDng tr\xF2n Pedal",
       ["point", "point", "point", "point"],
       TRI_P,
-      run((S2, [A, B, C2, P2]) => {
-        const f = [S2.aux("foot", [P2, B, C2], false), S2.aux("foot", [P2, C2, A], false), S2.aux("foot", [P2, A, B], false)];
+      run((S2, [A, B, C2, P4]) => {
+        const f = [S2.aux("foot", [P4, B, C2], false), S2.aux("foot", [P4, C2, A], false), S2.aux("foot", [P4, A, B], false)];
         S2.circleWithCenter("circle_3pts", f);
       }),
       { icon: "(P)" }
@@ -3026,9 +3026,9 @@
       "\u0110\u01B0\u1EDDng tr\xF2n Pedal chi ti\u1EBFt",
       ["point", "point", "point", "point"],
       TRI_P,
-      run((S2, [A, B, C2, P2]) => {
-        const f = [S2.point("foot", [P2, B, C2]), S2.point("foot", [P2, C2, A]), S2.point("foot", [P2, A, B])];
-        for (const X of f) S2.seg(P2, X, AUX_STYLE);
+      run((S2, [A, B, C2, P4]) => {
+        const f = [S2.point("foot", [P4, B, C2]), S2.point("foot", [P4, C2, A]), S2.point("foot", [P4, A, B])];
+        for (const X of f) S2.seg(P4, X, AUX_STYLE);
         S2.circleWithCenter("circle_3pts", f);
       }),
       { icon: "(P)" }
@@ -3122,7 +3122,7 @@
       "\u0110i\u1EC3m li\xEAn h\u1EE3p \u0111\u1EB3ng gi\xE1c",
       ["point", "point", "point", "point"],
       TRI_P,
-      run((S2, [A, B, C2, P2], ctx) => S2.point("isogonal_conjugate", [P2, A, B, C2], { name: ctx.name(P2) ? ctx.name(P2) + "*" : void 0 })),
+      run((S2, [A, B, C2, P4], ctx) => S2.point("isogonal_conjugate", [P4, A, B, C2], { name: ctx.name(P4) ? ctx.name(P4) + "*" : void 0 })),
       { icon: "P*" }
     ),
     T(M4, "lemoine", "\u0110i\u1EC3m Lemoine", P3, TRI, run((S2, p) => S2.point("lemoine", p, { name: "K" })), { icon: "K" }),
@@ -3132,8 +3132,8 @@
       "Ch\xE2n \u0111\u01B0\u1EDDng vu\xF4ng g\xF3c h\u1EA1 xu\u1ED1ng ba c\u1EA1nh",
       ["point", "point", "point", "point"],
       TRI_P,
-      run((S2, [A, B, C2, P2]) => {
-        for (const [X, Y] of [[B, C2], [C2, A], [A, B]]) S2.seg(P2, S2.point("foot", [P2, X, Y]), AUX_STYLE);
+      run((S2, [A, B, C2, P4]) => {
+        for (const [X, Y] of [[B, C2], [C2, A], [A, B]]) S2.seg(P4, S2.point("foot", [P4, X, Y]), AUX_STYLE);
       }),
       { icon: "\u22BE" }
     ),
@@ -3796,10 +3796,10 @@
     }
     addFact(f) {
       if (f.on) {
-        const P2 = this.rep(f.on[0]);
+        const P4 = this.rep(f.on[0]);
         const c = this.curveOf(f.on[1]);
         if (!c || c.i < 0) return;
-        (c.t === "L" ? this.lines : this.circles)[c.i].pts.add(P2);
+        (c.t === "L" ? this.lines : this.circles)[c.i].pts.add(P4);
       } else if (f.col) {
         const ps = [...new Set(f.col.map(this.rep))];
         if (ps.length < 2) return;
@@ -3883,13 +3883,13 @@
       }
     }
     // ---------- truy vấn ----------
-    pointOnLineObj(P2, lineId) {
+    pointOnLineObj(P4, lineId) {
       const i = this.lineOf(lineId);
-      return i >= 0 && this.lines[i].pts.has(this.rep(P2));
+      return i >= 0 && this.lines[i].pts.has(this.rep(P4));
     }
-    pointOnCircleObj(P2, cId) {
+    pointOnCircleObj(P4, cId) {
       const i = this.circleOf(cId);
-      return i >= 0 && this.circles[i].pts.has(this.rep(P2));
+      return i >= 0 && this.circles[i].pts.has(this.rep(P4));
     }
     collinear(ps) {
       const r = ps.map(this.rep);
@@ -4055,7 +4055,7 @@
       }
     }
     const sinMin = Math.sin(opts.minAngle * Math.PI / 180);
-    const ang = (P2, Q, R) => Math.abs(cross(sub(Q, P2), sub(R, P2))) / (dist(P2, Q) * dist(P2, R) + 1e-300);
+    const ang = (P4, Q, R) => Math.abs(cross(sub(Q, P4), sub(R, P4))) / (dist(P4, Q) * dist(P4, R) + 1e-300);
     for (const t2 of triangles) {
       const [A, B, C2] = t2.map((a) => vals.get(a));
       if (Math.min(ang(A, B, C2), ang(B, C2, A), ang(C2, A, B)) < sinMin) return "tam gi\xE1c d\u1EB9t";
@@ -4081,8 +4081,8 @@
     }
     return null;
   }
-  var insideSegment = (P2, l) => {
-    const t2 = lineParam(P2, l);
+  var insideSegment = (P4, l) => {
+    const t2 = lineParam(P4, l);
     return t2 > -1e-9 && t2 < 1 + 1e-9;
   };
   function pointsOnSegments(doc2, base2) {
@@ -4090,23 +4090,23 @@
     const typeOf = new Map(doc2.steps.map((s) => [s.id, s.type]));
     for (const s of doc2.steps) {
       if (s.type !== "intersection" && s.type !== "intersection_other") continue;
-      const P2 = base2.get(s.id);
-      if (!P2) continue;
-      for (const a of s.args.slice(0, 2)) if (typeOf.get(a) === "segment" && base2.get(a) && insideSegment(P2, base2.get(a))) out.push([s.id, a]);
+      const P4 = base2.get(s.id);
+      if (!P4) continue;
+      for (const a of s.args.slice(0, 2)) if (typeOf.get(a) === "segment" && base2.get(a) && insideSegment(P4, base2.get(a))) out.push([s.id, a]);
     }
     return out;
   }
   function triShape([A, B, C2]) {
     const area = cross(sub(B, A), sub(C2, A));
-    const cosAt = (P2, Q, R) => dot(sub(Q, P2), sub(R, P2)) / (dist(P2, Q) * dist(P2, R) + 1e-300);
+    const cosAt = (P4, Q, R) => dot(sub(Q, P4), sub(R, P4)) / (dist(P4, Q) * dist(P4, R) + 1e-300);
     const sg = (c) => Math.abs(c) < 0.05 ? 0 : Math.sign(c);
     return [Math.sign(area), sg(cosAt(A, B, C2)), sg(cosAt(B, C2, A)), sg(cosAt(C2, A, B))];
   }
   var T3 = {
-    coincide: (P2, Q, e) => dist(P2, Q) < e,
-    onLine: (P2, l, e) => distPointLine(P2, l) < e,
-    onCircle: (P2, c, e) => Math.abs(dist(P2, c.c) - c.r) < e,
-    collinear: (P2, Q, R, e) => distPointLine(R, lineThrough(P2, Q)) < e,
+    coincide: (P4, Q, e) => dist(P4, Q) < e,
+    onLine: (P4, l, e) => distPointLine(P4, l) < e,
+    onCircle: (P4, c, e) => Math.abs(dist(P4, c.c) - c.r) < e,
+    collinear: (P4, Q, R, e) => distPointLine(R, lineThrough(P4, Q)) < e,
     parallel: (l1, l2, e, s) => Math.abs(cross(unit(l1.d), unit(l2.d))) < e / s,
     perpendicular: (l1, l2, e, s) => Math.abs(dot(unit(l1.d), unit(l2.d))) < e / s,
     sameLine: (l1, l2, e, s) => T3.parallel(l1, l2, e, s) && distPointLine(l2.p, l1) < e,
@@ -4237,16 +4237,16 @@
     const v0 = base2, e0 = opts.tol * scale0;
     const onLineSets = /* @__PURE__ */ new Map();
     for (const l of lines) {
-      const on = reps.filter((P2) => T3.onLine(v0.get(P2), v0.get(l), e0) && all((v, e) => T3.onLine(v.get(P2), v.get(l), e)));
+      const on = reps.filter((P4) => T3.onLine(v0.get(P4), v0.get(l), e0) && all((v, e) => T3.onLine(v.get(P4), v.get(l), e)));
       onLineSets.set(l, on);
-      const fresh = on.filter((P2) => !lineIdsSameAs(l, lineIds, lineRep).some((ll) => know.pointOnLineObj(P2, ll)));
+      const fresh = on.filter((P4) => !lineIdsSameAs(l, lineIds, lineRep).some((ll) => know.pointOnLineObj(P4, ll)));
       if (fresh.length) rel2.push({ type: "on_line", ids: [l, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(l)}` });
     }
     const onCircleSets = /* @__PURE__ */ new Map();
     for (const c of circles) {
-      const on = reps.filter((P2) => T3.onCircle(v0.get(P2), v0.get(c), e0) && all((v, e) => T3.onCircle(v.get(P2), v.get(c), e)));
+      const on = reps.filter((P4) => T3.onCircle(v0.get(P4), v0.get(c), e0) && all((v, e) => T3.onCircle(v.get(P4), v.get(c), e)));
       onCircleSets.set(c, on);
-      const fresh = on.filter((P2) => !lineIdsSameAs(c, circleIds, circRep).some((cc) => know.pointOnCircleObj(P2, cc)));
+      const fresh = on.filter((P4) => !lineIdsSameAs(c, circleIds, circRep).some((cc) => know.pointOnCircleObj(P4, cc)));
       if (fresh.length) rel2.push({ type: "on_circle", ids: [c, ...fresh], text: `${list(fresh)} n\u1EB1m tr\xEAn ${desc(c)}` });
     }
     const seenCol = /* @__PURE__ */ new Set();
@@ -4265,7 +4265,7 @@
         const key = [...verified].sort().join(",");
         if (seenCol.has(key)) continue;
         seenCol.add(key);
-        if ([...onLineSets.values()].some((on) => verified.every((P2) => on.includes(P2)))) continue;
+        if ([...onLineSets.values()].some((on) => verified.every((P4) => on.includes(P4)))) continue;
         if (know.collinear(verified)) continue;
         rel2.push({ type: "collinear", ids: sortByDoc(doc2, verified), text: `${list(sortByDoc(doc2, verified))} th\u1EB3ng h\xE0ng` });
       }
@@ -4282,16 +4282,16 @@
           if (set.length < 4) continue;
           const key0 = set.join(",");
           if (seenCyc.has("raw:" + key0)) continue;
-          const full = reps.filter((P2) => T3.onCircle(v0.get(P2), circ, e0));
-          const ok = full.filter((P2, idx) => idx < 3 || all((v, e) => {
+          const full = reps.filter((P4) => T3.onCircle(v0.get(P4), circ, e0));
+          const ok = full.filter((P4, idx) => idx < 3 || all((v, e) => {
             const c = circleThrough(v.get(full[0]), v.get(full[1]), v.get(full[2]));
-            return c && T3.onCircle(v.get(P2), c, e);
+            return c && T3.onCircle(v.get(P4), c, e);
           }));
           const key = [...ok].sort().join(",");
           seenCyc.add("raw:" + key0);
           if (ok.length < 4 || seenCyc.has(key)) continue;
           seenCyc.add(key);
-          if ([...onCircleSets.values()].some((on) => ok.every((P2) => on.includes(P2)))) continue;
+          if ([...onCircleSets.values()].some((on) => ok.every((P4) => on.includes(P4)))) continue;
           if (know.concyclic(ok)) continue;
           const ids = sortByDoc(doc2, ok);
           rel2.push({ type: "concyclic", ids, text: `${list(ids)} \u0111\u1ED3ng vi\xEAn` });
@@ -4320,7 +4320,7 @@
       for (let j = i + 1; j < curves.length; j++) {
         const a = curves[i], b = curves[j];
         for (const X of intersect(v0.get(a), v0.get(b))) {
-          if (dist(X, { x: 0, y: 0 }) > 1e6 || reps.some((P2) => dist(v0.get(P2), X) < 1e3 * e0)) continue;
+          if (dist(X, { x: 0, y: 0 }) > 1e6 || reps.some((P4) => dist(v0.get(P4), X) < 1e3 * e0)) continue;
           if (pointIds.length && minDistToPoints(X, v0, pointIds) > 20 * scale0) continue;
           const through = curves.filter((c) => c !== a && c !== b && onCurve(X, v0.get(c), e0));
           if (!through.length) continue;
@@ -4358,8 +4358,8 @@
   function lineIdsSameAs(id, ids, repMap) {
     return ids.filter((x) => repMap.get(x) === id);
   }
-  function onCurve(P2, c, e) {
-    return c.kind === "line" ? T3.onLine(P2, c, e) : T3.onCircle(P2, c, e);
+  function onCurve(P4, c, e) {
+    return c.kind === "line" ? T3.onLine(P4, c, e) : T3.onCircle(P4, c, e);
   }
   function minDistToPoints(X, vals, ids) {
     let m = Infinity;
@@ -4404,13 +4404,13 @@
         ["N", 2, "t\xE2m \u0111\u01B0\u1EDDng tr\xF2n Euler", ninePointCenter]
       ];
       for (const [, w, label, f] of PTS)
-        for (const P2 of reps) {
-          if (out.has(P2) && out.get(P2).weight >= w) continue;
+        for (const P4 of reps) {
+          if (out.has(P4) && out.get(P4).weight >= w) continue;
           if (samples.every(({ vals, scale }) => {
             const X = f(...at(vals));
-            return X && dist(X, vals.get(P2)) < opts.tol * scale;
+            return X && dist(X, vals.get(P4)) < opts.tol * scale;
           }))
-            out.set(P2, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
+            out.set(P4, { weight: w, label: `${label} tam gi\xE1c ${triName}` });
         }
       const CIRC = [
         [3, "\u0111\u01B0\u1EDDng tr\xF2n ngo\u1EA1i ti\u1EBFp", (a, b, c) => circleThrough(a, b, c)],
@@ -4444,7 +4444,7 @@
       out.push({ key, label, about, patch });
     };
     const free = (id) => stepById(doc2, id)?.type === "free_point";
-    const xy3 = (P2) => ({ x: round(P2.x), y: round(P2.y) });
+    const xy3 = (P4) => ({ x: round(P4.x), y: round(P4.y) });
     const tris = [...findTriangles(doc2, kindOf, { strict: true }), ...findTriangles(doc2, kindOf, { drawn: true })];
     for (const t2 of tris) {
       const V = t2.map((id) => values.get(id));
@@ -4474,8 +4474,8 @@
       }
     }
     for (const s of doc2.steps) {
-      const P2 = values.get(s.id);
-      if (!P2) continue;
+      const P4 = values.get(s.id);
+      if (!P4) continue;
       if (s.type === "point_on") {
         const host = values.get(s.args[0]);
         const hs = stepById(doc2, s.args[0]);
@@ -4524,9 +4524,9 @@
   function caseOverrides(doc2, sc) {
     return new Map(Object.entries(sc.patch).map(([id, p]) => [id, { ...paramsOf(stepById(doc2, id)), ...p }]));
   }
-  function proj(P2, l) {
+  function proj(P4, l) {
     const u = unit(l.d);
-    return add(l.p, mul(u, dot(sub(P2, l.p), u)));
+    return add(l.p, mul(u, dot(sub(P4, l.p), u)));
   }
   var round = (v) => Math.round(v * 1e9) / 1e9;
 
@@ -4538,20 +4538,20 @@
     return a == null ? null : Math.abs(a);
   };
   var CLAIMS = {
-    coincide: { title: "Tr\xF9ng nhau", text: (n) => `${n[0]} tr\xF9ng ${n[1]}`, res: ([P2, Q], s) => dist(P2, Q) / s },
+    coincide: { title: "Tr\xF9ng nhau", text: (n) => `${n[0]} tr\xF9ng ${n[1]}`, res: ([P4, Q], s) => dist(P4, Q) / s },
     collinear: {
       title: "Th\u1EB3ng h\xE0ng",
       text: (n) => `${n.join(", ")} th\u1EB3ng h\xE0ng`,
-      res: ([P2, Q, R], s) => {
-        const L = Math.max(dist(P2, Q), dist(Q, R), dist(R, P2));
-        return L < 1e-9 * s ? null : Math.abs(cross(sub(Q, P2), sub(R, P2))) / (L * L);
+      res: ([P4, Q, R], s) => {
+        const L = Math.max(dist(P4, Q), dist(Q, R), dist(R, P4));
+        return L < 1e-9 * s ? null : Math.abs(cross(sub(Q, P4), sub(R, P4))) / (L * L);
       }
     },
     concyclic: {
       title: "C\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n",
       text: (n) => `${n.join(", ")} c\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n`,
-      res: ([P2, Q, R, S2], s) => {
-        const c = circle3(P2, Q, R);
+      res: ([P4, Q, R, S2], s) => {
+        const c = circle3(P4, Q, R);
         if (!c || c.r > 1e3 * s) return null;
         return Math.abs(dist(S2, c.c) - c.r) / s;
       }
@@ -4566,8 +4566,18 @@
         return a == null || b == null ? null : Math.abs(a - b) / 180;
       }
     },
-    on_line: { title: "\u0110i\u1EC3m thu\u1ED9c \u0111\u01B0\u1EDDng th\u1EB3ng", text: (n, d) => `${n[0]} n\u1EB1m tr\xEAn ${d[1]}`, res: ([P2, l], s) => distPointLine(P2, l) / s },
-    on_circle: { title: "\u0110i\u1EC3m thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n", text: (n, d) => `${n[0]} n\u1EB1m tr\xEAn ${d[1]}`, res: ([P2, c], s) => Math.abs(dist(P2, c.c) - c.r) / s },
+    sup_angle: {
+      title: "Hai g\xF3c b\xF9 nhau",
+      text: (n) => `\u2220${n[0]}${n[1]}${n[2]} + \u2220${n[3]}${n[4]}${n[5]} = 180\xB0`,
+      res: ([A, B, C2, D2, E, F]) => {
+        const a = angleAt(A, B, C2), b = angleAt(D2, E, F);
+        return a == null || b == null ? null : Math.abs(a + b - 180) / 180;
+      }
+    },
+    same_line: { title: "Tr\xF9ng nhau", text: (n, d) => `${d[0]} tr\xF9ng ${d[1]}`, res: ([l1, l2], s) => Math.abs(cross(unit(l1.d), unit(l2.d))) + distPointLine(l2.p, l1) / s },
+    same_circle: { title: "Tr\xF9ng nhau", text: (n, d) => `${d[0]} tr\xF9ng ${d[1]}`, res: ([c1, c2], s) => (dist(c1.c, c2.c) + Math.abs(c1.r - c2.r)) / s },
+    on_line: { title: "\u0110i\u1EC3m thu\u1ED9c \u0111\u01B0\u1EDDng th\u1EB3ng", text: (n, d) => `${n[0]} n\u1EB1m tr\xEAn ${d[1]}`, res: ([P4, l], s) => distPointLine(P4, l) / s },
+    on_circle: { title: "\u0110i\u1EC3m thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n", text: (n, d) => `${n[0]} n\u1EB1m tr\xEAn ${d[1]}`, res: ([P4, c], s) => Math.abs(dist(P4, c.c) - c.r) / s },
     perpendicular: { title: "Vu\xF4ng g\xF3c", text: (n, d) => `${d[0]} \u22A5 ${d[1]}`, res: ([l1, l2]) => Math.abs(dot(unit(l1.d), unit(l2.d))) },
     parallel: { title: "Song song", text: (n, d) => `${d[0]} \u2225 ${d[1]}`, res: ([l1, l2]) => Math.abs(cross(unit(l1.d), unit(l2.d))) },
     concurrent: {
@@ -4640,7 +4650,7 @@
     const t0 = Date.now();
     const sub4 = subDoc(doc2, claim.ids);
     const S2 = makeSampler(sub4, {});
-    const scaleOf = (vals) => figureScale(vals, S2.pointIds);
+    const scaleOf2 = (vals) => figureScale(vals, S2.pointIds);
     const r0 = residual(claim, S2.base, S2.scale0);
     const rand = rng(seed);
     let tested = 0, ok = 0, bad = 0, undef = 0, attempts = 0;
@@ -4654,7 +4664,7 @@
         continue;
       }
       tested++;
-      const r = residual(claim, vals, scaleOf(vals));
+      const r = residual(claim, vals, scaleOf2(vals));
       if (r == null) undef++;
       else if (r < TOL) ok++;
       else {
@@ -4667,7 +4677,7 @@
     for (const sc of specialCases(doc2)) {
       if (!Object.keys(sc.patch).every((id) => inSub.has(id))) continue;
       const vals = evaluate(sub4, caseOverrides(sub4, sc));
-      const r = residual(claim, vals, scaleOf(vals));
+      const r = residual(claim, vals, scaleOf2(vals));
       special.push({ key: sc.key, label: sc.label, status: r == null ? "undef" : r < TOL ? "true" : "false", patch: sc.patch, about: sc.about });
     }
     let verdict;
@@ -4945,8 +4955,8 @@
       const v = app.values.get(id);
       if (!v) return false;
       const pts = v.kind === "point" ? [v] : v.kind === "circle" ? [v.c, { x: v.c.x + v.r, y: v.c.y }, { x: v.c.x - v.r, y: v.c.y }, { x: v.c.x, y: v.c.y + v.r }] : v.kind === "line" ? [v.p, { x: v.p.x + v.d.x, y: v.p.y + v.d.y }] : [];
-      return pts.some((P2) => {
-        const q = app.toScreen(P2);
+      return pts.some((P4) => {
+        const q = app.toScreen(P4);
         return q.x > box.x && q.x < box.x + box.w && q.y > box.y && q.y < box.y + box.h;
       });
     });
@@ -20365,14 +20375,14 @@ ${tk.v}
     line(tok) {
       const named = this.byName(tok, "line");
       if (named) return named;
-      const [P2, Q] = this.pointIds(tok, 2);
-      const own = this.doc.steps.find((s) => ["segment", "line", "ray"].includes(s.type) && (s.args[0] === P2 && s.args[1] === Q || s.args[0] === Q && s.args[1] === P2));
+      const [P4, Q] = this.pointIds(tok, 2);
+      const own = this.doc.steps.find((s) => ["segment", "line", "ray"].includes(s.type) && (s.args[0] === P4 && s.args[1] === Q || s.args[0] === Q && s.args[1] === P4));
       if (own) return own.id;
-      const p = this.vals.get(P2), q = this.vals.get(Q);
+      const p = this.vals.get(P4), q = this.vals.get(Q);
       const tol = 1e-9 * (1 + dist(p, q));
-      const any = this.doc.steps.find((s) => this.k.get(s.id) === "line" && this.vals.get(s.id) && distPointLine(p, this.vals.get(s.id)) < tol && distPointLine(q, this.vals.get(s.id)) < tol);
+      const any = !this.strict && this.doc.steps.find((s) => this.k.get(s.id) === "line" && this.vals.get(s.id) && distPointLine(p, this.vals.get(s.id)) < tol && distPointLine(q, this.vals.get(s.id)) < tol);
       if (any) return any.id;
-      return this.add("line", [P2, Q], { aux: true });
+      return this.add("line", [P4, Q], { aux: true });
     }
     /** Đường tròn: tên (ω1), (O) – tâm O, (ABC) – qua A, B, C (chưa có thì dựng đường tròn ngoại tiếp). */
     circle(tok) {
@@ -20391,7 +20401,7 @@ ${tk.v}
       if (pts.length !== 3) fail(`\u0110\u01B0\u1EDDng tr\xF2n (${m[1]}): c\u1EA7n t\xE2m (1 \u0111i\u1EC3m) ho\u1EB7c 3 \u0111i\u1EC3m`);
       const ids = pts.map((x) => this.byName(x, "point"));
       const V = ids.map((id) => this.vals.get(id));
-      const c = circles.find((s) => V.every((P2) => Math.abs(dist(P2, this.vals.get(s.id).c) - this.vals.get(s.id).r) < 1e-9 * (1 + this.vals.get(s.id).r)));
+      const c = circles.find((s) => V.every((P4) => Math.abs(dist(P4, this.vals.get(s.id).c) - this.vals.get(s.id).r) < 1e-9 * (1 + this.vals.get(s.id).r)));
       if (c) return c.id;
       return this.add("circumcircle", ids);
     }
@@ -20436,11 +20446,11 @@ ${tk.v}
     [/^(?:duong )?trung truc (?:cua )?(?:doan )?(.+)$/, (m, c) => c.add("perp_bisector", c.pointIds(m[1], 2), { aux: true })],
     [/^(?:duong )?phan giac (trong |ngoai )?(?:cua )?(?:goc )?(.+)$/, (m, c) => c.add("angle_bisector", c.pointIds(m[2], 3), { aux: true, params: m[1] === "ngoai " ? { external: true } : void 0 })],
     [/^(?:chan duong cao|chan duong vuong goc|hinh chieu) (?:ke )?(?:tu |cua )?(\S+) (?:xuong|len|tren) (\S+)$/, (m, c) => {
-      const P2 = c.pointIds(m[1], 1)[0];
+      const P4 = c.pointIds(m[1], 1)[0];
       const named = c.byName(m[2], "line");
-      if (named) return c.add("projection", [P2, named]);
+      if (named) return c.add("projection", [P4, named]);
       const [A, B] = c.pointIds(m[2], 2);
-      return c.add("foot", [P2, A, B]);
+      return c.add("foot", [P4, A, B]);
     }],
     [/^doi xung (?:cua )?(\S+) qua (\S+)$/, (m, c) => {
       const X = c.obj(m[1]);
@@ -20548,15 +20558,20 @@ ${tk.v}
     [/^(.+) thang hang$/, (m, c) => ({ type: "collinear", ids: c.pointIds(m[1], 3) })],
     [/^(.+) (?:dong vien|cung thuoc (?:mot )?duong tron)$/, (m, c) => ({ type: "concyclic", ids: c.pointIds(m[1], 4) })],
     [/^goc (\S+) = goc (\S+)$/, (m, c) => ({ type: "equal_angle", ids: [...c.pointIds(m[1], 3), ...c.pointIds(m[2], 3)] })],
+    [/^goc (\S+) \+ goc (\S+) = 180(?: ?(?:do|°))?$/, (m, c) => ({ type: "sup_angle", ids: [...c.pointIds(m[1], 3), ...c.pointIds(m[2], 3)] })],
     [/^(\S+) (?:vuong goc|⊥)(?: voi)? (\S+)$/, (m, c) => ({ type: "perpendicular", ids: [c.line(m[1]), c.line(m[2])] })],
     [/^(\S+) song song(?: voi)? (\S+)$/, (m, c) => ({ type: "parallel", ids: [c.line(m[1]), c.line(m[2])] })],
     [/^(\S+) , (\S+) , (\S+) dong quy$/, (m, c) => ({ type: "concurrent", ids: [c.line(m[1]), c.line(m[2]), c.line(m[3])] })],
     [/^(\S+) tiep xuc(?: voi)? (\S+)$/, (m, c) => ({ type: "tangent", ids: [c.curve(m[1]), c.circle(m[2])] })],
     [/^(\S+) (?:thuoc|nam tren) (\S+)$/, (m, c) => {
-      const P2 = c.pointIds(m[1], 1)[0], X = c.curve(m[2]);
-      return { type: c.k.get(X) === "circle" ? "on_circle" : "on_line", ids: [P2, X] };
+      const P4 = c.pointIds(m[1], 1)[0], X = c.curve(m[2]);
+      return { type: c.k.get(X) === "circle" ? "on_circle" : "on_line", ids: [P4, X] };
     }],
-    [/^(\S+) trung(?: voi)? (\S+)$/, (m, c) => ({ type: "coincide", ids: [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]] })],
+    [/^(\S+) trung(?: voi)? (\S+)$/, (m, c) => {
+      if (c.byName(m[1], "point")) return { type: "coincide", ids: [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]] };
+      const a = c.curve(m[1]), b = c.curve(m[2]);
+      return { type: c.k.get(a) === "circle" ? "same_circle" : "same_line", ids: [a, b] };
+    }],
     [/^(\S+) = (\S+)$/, (m, c) => ({ type: "equal_len", ids: [...c.pointIds(m[1], 2), ...c.pointIds(m[2], 2)] })]
   ];
   function parseCommand(doc2, text2, ctx = {}) {
@@ -20566,6 +20581,7 @@ ${tk.v}
       const c = new Ctx(d, ctx);
       const chk = /^kiem tra (.+?)\??$/.exec(t2);
       if (chk) {
+        c.strict = true;
         const r = CHECK_RULES.find(([re]) => re.test(chk[1]));
         if (!r) fail("Ki\u1EC3m tra: th\u1EB3ng h\xE0ng, \u0111\u1ED3ng vi\xEAn, AB = CD, g\xF3c ABC = g\xF3c DEF, d1 vu\xF4ng g\xF3c d2, song song, \u0111\u1ED3ng quy, ti\u1EBFp x\xFAc, thu\u1ED9c, tr\xF9ng");
         return { kind: "check", claim: r[1](r[0].exec(chk[1]), c) };
@@ -21095,14 +21111,14 @@ ${tk.v}
       this.drag = { kind: "image", id };
       const move = (ev) => {
         const { sx, sy } = this.eventPos(ev);
-        const P2 = this.toUser(sx, sy);
+        const P4 = this.toUser(sx, sy);
         if (resize) {
-          const w = Math.max(20 / this.view.scale, o.w + (P2.x - P0.x));
+          const w = Math.max(20 / this.view.scale, o.w + (P4.x - P0.x));
           im.w = w;
           im.h = w * o.h / o.w;
         } else {
-          im.x = o.x + P2.x - P0.x;
-          im.y = o.y + P2.y - P0.y;
+          im.x = o.x + P4.x - P0.x;
+          im.y = o.y + P4.y - P0.y;
         }
         this.view.requestDraw();
       };
@@ -21366,8 +21382,8 @@ ${tk.v}
       this.updatePresentBar();
     }
     // ================= toạ độ & chọn đối tượng =================
-    toScreen(P2) {
-      return this.view.toScreen(P2);
+    toScreen(P4) {
+      return this.view.toScreen(P4);
     }
     toUser(sx, sy) {
       return this.view.toUser(sx, sy);
@@ -21380,7 +21396,7 @@ ${tk.v}
     hitTest(sx, sy) {
       const vis = this.visibleSet();
       const k = kinds(this.doc);
-      const P2 = this.toUser(sx, sy);
+      const P4 = this.toUser(sx, sy);
       const px = 1 / this.view.scale;
       const f = this.projector ? 1.6 : 1;
       const out = [];
@@ -21391,9 +21407,9 @@ ${tk.v}
         const v = this.values.get(s.id);
         const kind = k.get(s.id);
         if (!v || kind === "mark") continue;
-        let d = distToObject(v, P2) / px;
+        let d = distToObject(v, P4) / px;
         const rg = kind === "line" && !this.renderer.ghostLines && this.renderer.lineRanges.get(s.id);
-        if (rg) d = dist(P2, pointOn({ ...v, sub: "line" }, Math.max(rg[0], Math.min(rg[1], lineParam(P2, v))))) / px;
+        if (rg) d = dist(P4, pointOn({ ...v, sub: "line" }, Math.max(rg[0], Math.min(rg[1], lineParam(P4, v))))) / px;
         if (kind === "point" && d <= 11 * f) out.push({ id: s.id, kind, d, pri: 0, order });
         else if ((kind === "line" || kind === "circle") && d <= 7 * f) out.push({ id: s.id, kind, d, pri: 1, order });
       }
@@ -21406,7 +21422,7 @@ ${tk.v}
           if (b && sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) out.push({ id: s.id, kind: "mark", d: 0, pri: -1, measure: true });
           continue;
         }
-        const d = markDistance(v, P2, px * f) / px;
+        const d = markDistance(v, P4, px * f) / px;
         if (d <= 9 * f) out.push({ id: s.id, kind: "mark", d, pri: 2 });
       }
       out.sort((a, b) => a.pri - b.pri || (Math.abs(a.d - b.d) < 0.75 ? (b.order || 0) - (a.order || 0) : a.d - b.d));
@@ -21422,13 +21438,13 @@ ${tk.v}
       return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1e-6);
     }
     /** Điểm đã có trùng (về số) với P. */
-    existingPointAt(P2, tolPx = 0.5) {
+    existingPointAt(P4, tolPx = 0.5) {
       const k = kinds(this.doc);
       const tol = Math.max(1e-9 * this.figureScale(), tolPx / this.view.scale);
       for (const s of this.doc.steps) {
         if (k.get(s.id) !== "point") continue;
         const v = this.values.get(s.id);
-        if (v && dist(v, P2) < tol) return s.id;
+        if (v && dist(v, P4) < tol) return s.id;
       }
       return null;
     }
@@ -21461,14 +21477,14 @@ ${tk.v}
       return out;
     }
     /** Cặp đường cắt nhau gần chỗ bấm nhất (nhiều cặp cùng chỗ: cặp dựng sau cùng). */
-    crossingPair(curves, P2) {
+    crossingPair(curves, P4) {
       const px = 1 / this.view.scale;
       const cs = curves.slice(0, 5);
       let best = null;
       for (let i = 0; i < cs.length; i++)
         for (let j = i + 1; j < cs.length; j++)
           for (const r of intersect(this.values.get(cs[i].id), this.values.get(cs[j].id))) {
-            const d = dist(r, P2) / px, rec = Math.min(cs[i].order || 0, cs[j].order || 0);
+            const d = dist(r, P4) / px, rec = Math.min(cs[i].order || 0, cs[j].order || 0);
             if (!best || d < best.d - 0.75 || Math.abs(d - best.d) <= 0.75 && rec > best.rec) best = { d, rec, ids: [cs[i].id, cs[j].id] };
           }
       return best ? best.ids : [curves[0].id, curves[1].id];
@@ -21482,13 +21498,13 @@ ${tk.v}
       if (hits.some((h) => h.kind === "point" && h.d < radius + 3)) return null;
       const curves = hits.filter((h) => h.kind === "line" || h.kind === "circle").slice(0, 4);
       if (curves.length < 2) return null;
-      const P2 = this.toUser(sx, sy);
+      const P4 = this.toUser(sx, sy);
       const px = 1 / this.view.scale;
       let best = null;
       for (let i = 0; i < curves.length; i++)
         for (let j = i + 1; j < curves.length; j++)
           for (const r of intersect(this.values.get(curves[i].id), this.values.get(curves[j].id))) {
-            const d = dist(r, P2) / px;
+            const d = dist(r, P4) / px;
             const [u, w] = (curves[i].order || 0) <= (curves[j].order || 0) ? [curves[i], curves[j]] : [curves[j], curves[i]];
             if (d < radius && (!best || d < best.d)) best = { d, a: u.id, b: w.id, P: r };
           }
@@ -21503,10 +21519,10 @@ ${tk.v}
       this.clearCrossMark();
       if (!cross2) return;
       this.crossKey = key;
-      const P2 = cross2.P;
-      this.crossMark = this.renderer.addExtra({ type: "point", pts: [() => P2], style: { color: "#3150d6", fill: "#dfe6ff", size: 7 } });
-      const nm2 = (id) => stepById(this.doc, id)?.name || "";
-      this.showHint(`B\u1EA5m \u0111\u1EC3 l\u1EA5y giao \u0111i\u1EC3m c\u1EE7a ${nm2(cross2.a)} v\xE0 ${nm2(cross2.b)}`);
+      const P4 = cross2.P;
+      this.crossMark = this.renderer.addExtra({ type: "point", pts: [() => P4], style: { color: "#3150d6", fill: "#dfe6ff", size: 7 } });
+      const nm3 = (id) => stepById(this.doc, id)?.name || "";
+      this.showHint(`B\u1EA5m \u0111\u1EC3 l\u1EA5y giao \u0111i\u1EC3m c\u1EE7a ${nm3(cross2.a)} v\xE0 ${nm3(cross2.b)}`);
     }
     clearCrossMark() {
       if (!this.crossMark) return;
@@ -21519,45 +21535,45 @@ ${tk.v}
     resolvePoint(sx, sy, hits) {
       const pHit = hits.find((h) => h.kind === "point");
       if (pHit) return pHit.id;
-      const P2 = this.toUser(sx, sy);
+      const P4 = this.toUser(sx, sy);
       const curves = hits.filter((h) => h.kind === "line" || h.kind === "circle").slice(0, 4);
       const px = 1 / this.view.scale;
       let best = null;
       for (let i = 0; i < curves.length; i++)
         for (let j = i + 1; j < curves.length; j++)
           for (const r of intersect(this.values.get(curves[i].id), this.values.get(curves[j].id))) {
-            const d = dist(r, P2) / px;
+            const d = dist(r, P4) / px;
             const rec = Math.min(curves[i].order || 0, curves[j].order || 0);
             if (d < 14 && (!best || d < best.d - 0.75 || Math.abs(d - best.d) <= 0.75 && rec > best.rec)) best = { d, rec, a: curves[i].id, b: curves[j].id };
           }
-      if (best) return this.createIntersections(best.a, best.b, P2)[0] ?? null;
+      if (best) return this.createIntersections(best.a, best.b, P4)[0] ?? null;
       if (curves.length) {
         const c = curves[0].id;
-        const t2 = paramOf(this.values.get(c), P2);
+        const t2 = paramOf(this.values.get(c), P4);
         return this.addSteps([{ type: "point_on", args: [c], params: { t: t2 } }])[0];
       }
       const anchors = this.shiftSnap ? this.pickAnchors() : [];
-      const Q = anchors.length ? this.angleSnap(P2, anchors) : this.snap(P2);
+      const Q = anchors.length ? this.angleSnap(P4, anchors) : this.snap(P4);
       return this.addSteps([{ type: "free_point", args: [], params: { x: Q.x, y: Q.y } }])[0];
     }
     /**
      * Giữ Shift (bản 1.3): bắt hướng từ một điểm mốc tới P về bội số của 15° (0°, 15°, …, 90°…) – đường nằm ngang,
      * thẳng đứng, nghiêng 45°… thật chính xác. Nhiều mốc: lấy mốc làm P dịch ít nhất. Giữ nguyên khoảng cách tới mốc.
      */
-    angleSnap(P2, anchors) {
+    angleSnap(P4, anchors) {
       const step = Math.PI / 12;
       let best = null;
       for (const A of anchors) {
-        const r = Math.hypot(P2.x - A.x, P2.y - A.y);
+        const r = Math.hypot(P4.x - A.x, P4.y - A.y);
         if (r < 1e-9) continue;
-        const a = Math.round(Math.atan2(P2.y - A.y, P2.x - A.x) / step) * step;
+        const a = Math.round(Math.atan2(P4.y - A.y, P4.x - A.x) / step) * step;
         const Q = { x: round6(A.x + r * Math.cos(a)), y: round6(A.y + r * Math.sin(a)) };
         if (Math.abs(Math.sin(a)) < 1e-12) Q.y = A.y;
         if (Math.abs(Math.cos(a)) < 1e-12) Q.x = A.x;
-        const d = Math.hypot(Q.x - P2.x, Q.y - P2.y);
+        const d = Math.hypot(Q.x - P4.x, Q.y - P4.y);
         if (!best || d < best.d) best = { d, Q };
       }
-      return best ? best.Q : this.snap(P2);
+      return best ? best.Q : this.snap(P4);
     }
     /** Các điểm đã chọn trong lần dùng công cụ hiện tại (mốc để căn hướng khi giữ Shift). */
     pickAnchors() {
@@ -21573,9 +21589,9 @@ ${tk.v}
       }
       return out;
     }
-    snap(P2) {
-      if (!this.grid) return { x: round6(P2.x), y: round6(P2.y) };
-      return { x: Math.round(P2.x * 2) / 2, y: Math.round(P2.y * 2) / 2 };
+    snap(P4) {
+      if (!this.grid) return { x: round6(P4.x), y: round6(P4.y) };
+      return { x: Math.round(P4.x * 2) / 2, y: Math.round(P4.y * 2) / 2 };
     }
     // ================= công cụ =================
     setTool(id) {
@@ -21856,9 +21872,9 @@ ${tk.v}
         toast("Kh\xF4ng g\u1EAFn \u0111\u01B0\u1EE3c: \u0111\u01B0\u1EDDng n\xE0y d\u1EF1ng t\u1EEB ch\xEDnh \u0111i\u1EC3m \u0111\xF3");
         return false;
       }
-      const c = this.values.get(curve), P2 = this.values.get(id);
-      if (!c || !P2) return false;
-      const t2 = Math.round(paramOf(c, P2) * 1e9) / 1e9;
+      const c = this.values.get(curve), P4 = this.values.get(id);
+      if (!c || !P4) return false;
+      const t2 = Math.round(paramOf(c, P4) * 1e9) / 1e9;
       this.commit((doc2) => {
         const st = stepById(doc2, id);
         st.type = "point_on";
@@ -21872,17 +21888,17 @@ ${tk.v}
     /** Phía của đường tạo góc theo chỗ chuột (extraPos): cùng phía với chuột so với đường OX. */
     extraFlip(O, X, A, B, C2) {
       const [o, x] = [O, X].map((id) => this.values.get(id));
-      const P2 = this.extraPos || this.mouse;
+      const P4 = this.extraPos || this.mouse;
       const a = directedAngle(...[A, B, C2].map((id) => this.values.get(id)));
       if (!o || !x || a == null) return false;
-      const side = (x.x - o.x) * (P2.y - o.y) - (x.y - o.y) * (P2.x - o.x);
+      const side = (x.x - o.x) * (P4.y - o.y) - (x.y - o.y) * (P4.x - o.x);
       const sn = Math.sin(a * Math.PI / 180);
       return Math.abs(sn) > 1e-12 && Math.sign(side) !== Math.sign(sn);
     }
     /** Toạ độ (u, v) của điểm P trong tam giác (A, B, C là id), kẹp vào trong tam giác: u, v ≥ 0, u + v ≤ 1. */
-    uvInTriangle([A, B, C2], P2) {
+    uvInTriangle([A, B, C2], P4) {
       const [a, b, c] = [A, B, C2].map((id) => this.values.get(id));
-      return clampUV(a, b, c, P2);
+      return clampUV(a, b, c, P4);
     }
     startExtraPreview(tool) {
       this.renderer.clearExtra();
@@ -22223,8 +22239,8 @@ ${tk.v}
       const a = this.eventPos(e);
       let b = a;
       const box = () => ({ x1: Math.min(a.sx, b.sx), x2: Math.max(a.sx, b.sx), y1: Math.min(a.sy, b.sy), y2: Math.max(a.sy, b.sy) });
-      const P2 = (f) => () => this.toUser(f().sx, f().sy);
-      const corners = [P2(() => ({ sx: box().x1, sy: box().y1 })), P2(() => ({ sx: box().x2, sy: box().y1 })), P2(() => ({ sx: box().x2, sy: box().y2 })), P2(() => ({ sx: box().x1, sy: box().y2 }))];
+      const P4 = (f) => () => this.toUser(f().sx, f().sy);
+      const corners = [P4(() => ({ sx: box().x1, sy: box().y1 })), P4(() => ({ sx: box().x2, sy: box().y1 })), P4(() => ({ sx: box().x2, sy: box().y2 })), P4(() => ({ sx: box().x1, sy: box().y2 }))];
       this.renderer.clearExtra();
       this.renderer.addExtra({ type: "polyline", pts: [...corners, corners[0]], style: { color: "#2563eb", width: 1 } });
       const move = (ev) => {
@@ -23065,9 +23081,9 @@ ${tk.v}
   function typeName(t2) {
     return { point: "m\u1ED9t \u0111i\u1EC3m", line: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng", circle: "m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n", curve: "m\u1ED9t \u0111\u01B0\u1EDDng th\u1EB3ng/\u0111\u01B0\u1EDDng tr\xF2n", obj: "m\u1ED9t \u0111\u1ED1i t\u01B0\u1EE3ng", pl: "m\u1ED9t \u0111i\u1EC3m ho\u1EB7c \u0111\u01B0\u1EDDng th\u1EB3ng", "...point": "m\u1ED9t \u0111i\u1EC3m" }[t2] || t2;
   }
-  function clampUV(a, b, c, P2) {
-    if (!a || !b || !c || !P2) return { u: 1 / 3, v: 1 / 3 };
-    const bx = b.x - a.x, by = b.y - a.y, cx = c.x - a.x, cy = c.y - a.y, px = P2.x - a.x, py = P2.y - a.y;
+  function clampUV(a, b, c, P4) {
+    if (!a || !b || !c || !P4) return { u: 1 / 3, v: 1 / 3 };
+    const bx = b.x - a.x, by = b.y - a.y, cx = c.x - a.x, cy = c.y - a.y, px = P4.x - a.x, py = P4.y - a.y;
     const det = bx * cy - by * cx;
     if (Math.abs(det) < 1e-12) return { u: 1 / 3, v: 1 / 3 };
     let u = (px * cy - py * cx) / det, v = (bx * py - by * px) / det;
@@ -23091,25 +23107,25 @@ ${tk.v}
     }
     return out;
   }
-  function markDistance(v, P2, px) {
-    if (v.kind === "angle") return Math.abs(dist(v.B, P2) - 20 * px);
-    if (v.kind === "segmark") return dist(mid(v.A, v.B), P2);
-    if (v.kind === "polygon") return pointInPolygon(P2, v.pts) ? 0 : Infinity;
+  function markDistance(v, P4, px) {
+    if (v.kind === "angle") return Math.abs(dist(v.B, P4) - 20 * px);
+    if (v.kind === "segmark") return dist(mid(v.A, v.B), P4);
+    if (v.kind === "polygon") return pointInPolygon(P4, v.pts) ? 0 : Infinity;
     if (v.kind === "locus") {
       let best = Infinity;
       for (let i = 1; i < v.pts.length; i++) {
         const a = v.pts[i - 1], b = v.pts[i];
-        if (a && b) best = Math.min(best, distToObject({ kind: "line", sub: "segment", p: a, d: { x: b.x - a.x, y: b.y - a.y } }, P2));
+        if (a && b) best = Math.min(best, distToObject({ kind: "line", sub: "segment", p: a, d: { x: b.x - a.x, y: b.y - a.y } }, P4));
       }
       return best;
     }
     return Infinity;
   }
-  function pointInPolygon(P2, pts) {
+  function pointInPolygon(P4, pts) {
     let inside = false;
     for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
       const a = pts[i], b = pts[j];
-      if (a.y > P2.y !== b.y > P2.y && P2.x < (b.x - a.x) * (P2.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+      if (a.y > P4.y !== b.y > P4.y && P4.x < (b.x - a.x) * (P4.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
     }
     return inside;
   }
@@ -23187,10 +23203,10 @@ ${tk.v}
         const A = b.point(-0.6, 3.4, "A"), B = b.point(-3.4, -1.6, "B"), C2 = b.point(3.6, -1.6, "C");
         const a = b.add("line", [B, C2]), bb = b.add("line", [C2, A]), c = b.add("line", [A, B]);
         const w = b.add("circumcircle", [A, B, C2]);
-        const P2 = b.add("point_on", [w], { t: 2.2 }, "P");
-        b.add("projection", [P2, a], {}, "D");
-        b.add("projection", [P2, bb], {}, "E");
-        b.add("projection", [P2, c], {}, "F");
+        const P4 = b.add("point_on", [w], { t: 2.2 }, "P");
+        b.add("projection", [P4, a], {}, "D");
+        b.add("projection", [P4, bb], {}, "E");
+        b.add("projection", [P4, c], {}, "F");
         return b.doc;
       }
     },
@@ -23226,13 +23242,13 @@ ${tk.v}
         const IC = b.add("intersection", [eA, eB], {}, "I_C");
         const TA = b.add("projection", [IA, BC], {}, "T");
         const Q = b.add("projection", [IB, BC], {}, "Q");
-        const P2 = b.add("projection", [IC, BC], {}, "P");
+        const P4 = b.add("projection", [IC, BC], {}, "P");
         b.add("circle", [IA, TA]);
         b.add("circle", [IB, Q]);
-        b.add("circle", [IC, P2]);
+        b.add("circle", [IC, P4]);
         const w = b.add("circumcircle", [A, B, C2]);
         const I = b.add("incenter", [A, B, C2], {}, "I", { hidden: true });
-        for (const [X, Y] of [[IC, IB], [IC, B], [IC, C2], [IB, B], [IB, C2], [IA, B], [IA, C2], [A, IA], [IC, P2], [IB, Q]]) b.add("segment", [X, Y]);
+        for (const [X, Y] of [[IC, IB], [IC, B], [IC, C2], [IB, B], [IB, C2], [IA, B], [IA, C2], [A, IA], [IC, P4], [IB, Q]]) b.add("segment", [X, Y]);
         const lBIB = b.add("line", [B, IB], {}, void 0, { hidden: true });
         const lCIC = b.add("line", [C2, IC], {}, void 0, { hidden: true });
         const U = b.add("intersection_other", [lBIB, w, B], {}, "U");
@@ -23870,7 +23886,7 @@ ${tk.v}
     const s = (Math.round(v * 1e3) / 1e3).toFixed(3).replace(/\.?0+$/, "");
     return s === "-0" ? "0" : s;
   };
-  var xy = (P2) => `(${f3(P2.x)}, ${f3(P2.y)})`;
+  var xy = (P4) => `(${f3(P4.x)}, ${f3(P4.y)})`;
   function coordName(name2, used) {
     let base2 = (name2 || "P").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/'/g, "p").replace(/[^A-Za-z0-9]/g, "");
     if (!base2 || /^\d/.test(base2)) base2 = "P" + base2;
@@ -23928,9 +23944,9 @@ ${tk.v}
         if (NAMED_COLORS[hex] !== "black") colorDefs.set(NAMED_COLORS[hex], hex);
         return NAMED_COLORS[hex];
       }
-      const nm2 = "c" + hex.replace("#", "");
-      colorDefs.set(nm2, hex);
-      return nm2;
+      const nm3 = "c" + hex.replace("#", "");
+      colorDefs.set(nm3, hex);
+      return nm3;
     };
     const col = (s) => hexName(full(s).color || "#000000");
     const baseWidth = styleOf({ type: "line" }, "line", theme2).width;
@@ -23967,8 +23983,8 @@ ${tk.v}
         if (fill > 0) out.fills.push(`\\fill[${col(s)}, fill opacity=${f3(fill)}] ${center} circle (${f3(v.r)});`);
         out.circles.push(`\\draw${lineOpts(s)} ${center} circle (${f3(v.r)}); % ${s.name || ""}`);
         if (st.showLabel && s.name) {
-          const P2 = { x: v.c.x + v.r * Math.cos(Math.PI / 4), y: v.c.y + v.r * Math.sin(Math.PI / 4) };
-          out.labels.push(`\\node[above right, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
+          const P4 = { x: v.c.x + v.r * Math.cos(Math.PI / 4), y: v.c.y + v.r * Math.sin(Math.PI / 4) };
+          out.labels.push(`\\node[above right, ${col(s)}] at ${xy(P4)} {${texLabel(s.name)}};`);
         }
       } else if (kind === "line") {
         const sub4 = s.type === "segment" ? "segment" : s.type === "ray" ? "ray" : v.sub;
@@ -23980,8 +23996,8 @@ ${tk.v}
           const seg = rg ? [add(v.p, mul(v.d, rg[0])), add(v.p, mul(v.d, rg[1]))] : clipLine(v, box, sub4 === "ray" ? 0 : -Infinity);
           if (seg) out.lines.push(`\\draw${lineOpts(s)} ${sub4 === "ray" && s.type === "ray" ? ref(s.args[0]) : xy(seg[0])} -- ${xy(seg[1])}; % ${sub4 === "ray" ? "tia" : "\u0111\u01B0\u1EDDng th\u1EB3ng"} ${desc}`);
           if (seg && st.showLabel && s.name) {
-            const P2 = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
-            out.labels.push(`\\node[above, ${col(s)}] at ${xy(P2)} {${texLabel(s.name)}};`);
+            const P4 = { x: seg[0].x + 0.85 * (seg[1].x - seg[0].x), y: seg[0].y + 0.85 * (seg[1].y - seg[0].y) };
+            out.labels.push(`\\node[above, ${col(s)}] at ${xy(P4)} {${texLabel(s.name)}};`);
           }
         }
       } else if (s.type === "polygon") {
@@ -25082,6 +25098,1546 @@ ${tk.v}
     return { saveCurrent, openBrowser, openBai, connectDialog, ensureKho, flushQueue, saveTabsAsBuoi, importDialog, isConnected: () => !!S2.conf, state: S2 };
   }
 
+  // src/explore/deduce.js
+  var P2 = 67108859;
+  var mod = (a) => {
+    a %= P2;
+    return a < 0 ? a + P2 : a;
+  };
+  var mul2 = (a, b) => a * b % P2;
+  function inv(a) {
+    let [r0, r1, s0, s1] = [P2, mod(a), 0, 1];
+    while (r1) {
+      const q = Math.floor(r0 / r1);
+      [r0, r1] = [r1, r0 - q * r1];
+      [s0, s1] = [s1, s0 - q * s1];
+    }
+    return mod(s0);
+  }
+  var AR = class {
+    constructor() {
+      this.index = /* @__PURE__ */ new Map();
+      this.rows = /* @__PURE__ */ new Map();
+    }
+    v(key) {
+      let i = this.index.get(key);
+      if (i === void 0) {
+        i = this.index.size;
+        this.index.set(key, i);
+      }
+      return i;
+    }
+    vec(obj) {
+      const m = /* @__PURE__ */ new Map();
+      for (const [k, c] of obj) {
+        if (!c) continue;
+        const i = this.v(k);
+        const x = mod((m.get(i) || 0) + c);
+        if (x) m.set(i, x);
+        else m.delete(i);
+      }
+      return m;
+    }
+    reduce(vec, prov) {
+      vec = new Map(vec);
+      prov = new Map(prov);
+      for (; ; ) {
+        let best = Infinity;
+        for (const i of vec.keys()) if (i < best && this.rows.has(i)) best = i;
+        if (best === Infinity) return { vec, prov };
+        const row = this.rows.get(best);
+        const f = vec.get(best);
+        for (const [i, c] of row.vec) {
+          const x = mod((vec.get(i) || 0) - mul2(f, c));
+          if (x) vec.set(i, x);
+          else vec.delete(i);
+        }
+        for (const [j, c] of row.prov) {
+          const x = mod((prov.get(j) || 0) - mul2(f, c));
+          if (x) prov.set(j, x);
+          else prov.delete(j);
+        }
+      }
+    }
+    /** Thêm phương trình (Map khoá → hệ số) với lý do reason. true nếu độc lập (mang thông tin mới). */
+    add(obj, reason) {
+      const { vec, prov } = this.reduce(this.vec(obj), /* @__PURE__ */ new Map([[reason, 1]]));
+      if (!vec.size) return false;
+      const piv = Math.min(...vec.keys());
+      const k = inv(vec.get(piv));
+      const nv = /* @__PURE__ */ new Map(), np = /* @__PURE__ */ new Map();
+      for (const [i, c] of vec) nv.set(i, mul2(c, k));
+      for (const [j, c] of prov) np.set(j, mul2(c, k));
+      this.rows.set(piv, { vec: nv, prov: np });
+      return true;
+    }
+    /** Phương trình có suy ra được không: null, hoặc các lý do đã dùng. */
+    implies(obj) {
+      const { vec, prov } = this.reduce(this.vec(obj), /* @__PURE__ */ new Map());
+      if (vec.size) return null;
+      return [...prov.keys()];
+    }
+  };
+  var pairKey = (a, b) => a < b ? `${a}|${b}` : `${b}|${a}`;
+  var TOL2 = 1e-7;
+  var Deducer = class {
+    constructor(doc2, { values = null, maxRounds = 6 } = {}) {
+      this.doc = doc2;
+      this.vals = values || evaluate(doc2);
+      this.k = kinds(doc2);
+      this.maxRounds = maxRounds;
+      this.facts = [];
+      this.ang = new AR();
+      this.len = new AR();
+      this.lines = [];
+      this.lineOf = /* @__PURE__ */ new Map();
+      this.circles = [];
+      this.circleOf = /* @__PURE__ */ new Map();
+      this.pairVars = /* @__PURE__ */ new Map();
+      this.tangents = [];
+      this.reflections = [];
+      this.pbisectors = [];
+      this.diameters = [];
+      this.midpoints = [];
+      this.factKey = /* @__PURE__ */ new Map();
+      this.pts = doc2.steps.filter((s) => this.k.get(s.id) === "point" && this.vals.get(s.id)).map((s) => s.id);
+      let x1 = Infinity, x2 = -Infinity, y1 = Infinity, y2 = -Infinity;
+      for (const p of this.pts) {
+        const v = this.vals.get(p);
+        x1 = Math.min(x1, v.x);
+        x2 = Math.max(x2, v.x);
+        y1 = Math.min(y1, v.y);
+        y2 = Math.max(y2, v.y);
+      }
+      this.scale = Math.max(Math.hypot(x2 - x1, y2 - y1), 1e-9);
+      this.e = TOL2 * this.scale;
+    }
+    name(id) {
+      return stepById(this.doc, id)?.name || id;
+    }
+    V(id) {
+      return this.vals.get(id);
+    }
+    // ---------- sự kiện ----------
+    fact(kind, text2, rule, uses = [], data = null, key = null) {
+      if (key && this.factKey.has(key)) return this.factKey.get(key);
+      const id = this.facts.length;
+      this.facts.push({ id, kind, text: text2, rule, uses, data });
+      if (key) this.factKey.set(key, id);
+      return id;
+    }
+    // ---------- đường thẳng ----------
+    newLine(pts = [], objs = []) {
+      const i = this.lines.length;
+      this.lines.push({ pts: /* @__PURE__ */ new Set(), objs: new Set(objs), alive: true, rep: i, why: /* @__PURE__ */ new Map() });
+      for (const o of objs) this.lineOf.set("o:" + o, i);
+      for (const p of pts) this.lines[i].pts.add(p);
+      return i;
+    }
+    lineRoot(i) {
+      while (this.lines[i].rep !== i) i = this.lines[i].rep;
+      return i;
+    }
+    /** Nút đường thẳng chứa cả a và b (đã biết), hoặc null. */
+    lineThrough(a, b) {
+      for (let i = 0; i < this.lines.length; i++) {
+        const L = this.lines[i];
+        if (L.alive && L.pts.has(a) && L.pts.has(b)) return i;
+      }
+      return null;
+    }
+    /** Biến hướng cho "đường AB": của nút đường thẳng nếu đã biết, không thì biến riêng của cặp điểm. */
+    dirAB(a, b) {
+      const i = this.lineThrough(a, b);
+      if (i !== null) return "L" + i;
+      const key = pairKey(a, b);
+      this.pairVars.set(key, [a, b]);
+      return "P" + key;
+    }
+    dirLine(i) {
+      return "L" + this.lineRoot(i);
+    }
+    /** Thêm điểm p vào nút đường thẳng i (lý do: sự kiện f). */
+    addToLine(i, p, f) {
+      i = this.lineRoot(i);
+      const L = this.lines[i];
+      if (L.pts.has(p)) return false;
+      for (const q of L.pts) {
+        const key = pairKey(p, q);
+        if (this.pairVars.has(key)) this.ang.add([["P" + key, 1], ["L" + i, -1]], f);
+      }
+      L.pts.add(p);
+      L.why.set(p, f);
+      for (let j = 0; j < this.lines.length; j++) {
+        const M = this.lines[j];
+        if (j === i || !M.alive || M.rep !== j) continue;
+        let common = 0;
+        for (const x of M.pts) if (L.pts.has(x)) common++;
+        if (common >= 2) this.mergeLines(i, j, f);
+      }
+      return true;
+    }
+    mergeLines(i, j, f) {
+      i = this.lineRoot(i);
+      j = this.lineRoot(j);
+      if (i === j) return;
+      this.ang.add([["L" + i, 1], ["L" + j, -1]], f);
+      const A = this.lines[i], B = this.lines[j];
+      B.alive = false;
+      B.rep = i;
+      for (const o of B.objs) {
+        A.objs.add(o);
+        this.lineOf.set("o:" + o, i);
+      }
+      for (const p of B.pts) if (!A.pts.has(p)) this.addToLine(i, p, f);
+    }
+    lineOfObj(id) {
+      const i = this.lineOf.get("o:" + id);
+      return i === void 0 ? null : this.lineRoot(i);
+    }
+    // ---------- đường tròn ----------
+    circleOfObj(id) {
+      const i = this.circleOf.get("o:" + id);
+      return i === void 0 ? null : this.circleRoot(i);
+    }
+    circleRoot(i) {
+      while (this.circles[i].rep !== i) i = this.circles[i].rep;
+      return i;
+    }
+    newCircle(objs = []) {
+      const i = this.circles.length;
+      this.circles.push({ pts: /* @__PURE__ */ new Set(), objs: new Set(objs), center: null, alive: true, rep: i, why: /* @__PURE__ */ new Map() });
+      for (const o of objs) this.circleOf.set("o:" + o, i);
+      return i;
+    }
+    /** Điểm p thuộc đường tròn i: thêm các phương trình góc nội tiếp, bán kính bằng nhau, tiếp tuyến – dây. */
+    addToCircle(i, p, f) {
+      i = this.circleRoot(i);
+      const C2 = this.circles[i];
+      if (C2.pts.has(p)) return false;
+      const old = [...C2.pts];
+      C2.pts.add(p);
+      C2.why.set(p, f);
+      if (old.length >= 3) {
+        for (let x = 0; x < old.length; x++) for (let y = x + 1; y < old.length; y++) {
+          const a = old[x], b = old[y];
+          const q = old.find((t2) => t2 !== a && t2 !== b);
+          const r = this.fact("cyc", `${this.ptsName([p, a, b, q])} c\xF9ng thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n`, "concyclic-angle", [f, ...[a, b, q].map((t2) => C2.why.get(t2)).filter((z) => z !== void 0)]);
+          this.ang.add([[this.dirAB(p, b), 1], [this.dirAB(p, a), -1], [this.dirAB(q, b), -1], [this.dirAB(q, a), 1]], r);
+        }
+        for (let x = 0; x < old.length; x++) for (let y = 0; y < old.length; y++) {
+          if (x === y) continue;
+          const a = old[x], q = old[y];
+          const others = old.filter((t2) => t2 !== a && t2 !== q);
+          if (!others.length) continue;
+          const r0 = others[0];
+          const r = this.fact("cyc", `${this.ptsName([p, a, q, r0])} c\xF9ng thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n`, "concyclic-angle", [f]);
+          this.ang.add([[this.dirAB(q, p), 1], [this.dirAB(q, a), -1], [this.dirAB(r0, p), -1], [this.dirAB(r0, a), 1]], r);
+        }
+      }
+      if (C2.center) this.radius(i, p, f);
+      for (const t2 of this.tangents) if (this.circleRoot(t2.circle) === i) this.tangentChord(t2, f);
+      for (const d of this.diameters) if (this.circleRoot(d.circle) === i) this.thales(d, p, f);
+      for (let j = 0; j < this.circles.length; j++) {
+        const M = this.circles[j];
+        if (j === i || !M.alive || M.rep !== j) continue;
+        let common = 0;
+        for (const x of M.pts) if (C2.pts.has(x)) common++;
+        if (common >= 3) this.mergeCircles(i, j, f);
+      }
+      return true;
+    }
+    mergeCircles(i, j, f) {
+      i = this.circleRoot(i);
+      j = this.circleRoot(j);
+      if (i === j) return;
+      const A = this.circles[i], B = this.circles[j];
+      B.alive = false;
+      B.rep = i;
+      for (const o of B.objs) {
+        A.objs.add(o);
+        this.circleOf.set("o:" + o, i);
+      }
+      if (B.center && !A.center) this.setCenter(i, B.center, f);
+      for (const p of B.pts) this.addToCircle(i, p, f);
+    }
+    setCenter(i, O, f) {
+      i = this.circleRoot(i);
+      const C2 = this.circles[i];
+      if (C2.center) return;
+      C2.center = O;
+      C2.centerWhy = f;
+      for (const p of C2.pts) this.radius(i, p, f);
+      for (const t2 of this.tangents) if (this.circleRoot(t2.circle) === i) this.tangentRadius(t2, f);
+    }
+    /** Toạ độ đường tròn của nút (từ đối tượng dựng, tâm, hoặc 3 điểm). */
+    circleValue(i) {
+      const C2 = this.circles[i];
+      for (const o of C2.objs) {
+        const v = this.V(o);
+        if (v && v.kind === "circle") return v;
+      }
+      const ps = [...C2.pts];
+      if (C2.center && ps.length) return { c: this.V(C2.center), r: dist(this.V(C2.center), this.V(ps[0])) };
+      if (ps.length >= 3) return circleThrough(this.V(ps[0]), this.V(ps[1]), this.V(ps[2]));
+      return null;
+    }
+    circleName(i) {
+      const C2 = this.circles[i];
+      for (const o of C2.objs) {
+        const n = stepById(this.doc, o)?.name;
+        if (n) return n;
+      }
+      if (C2.center) return `(${this.name(C2.center)})`;
+      return `(${[...C2.pts].slice(0, 3).map((p) => this.name(p)).join("")})`;
+    }
+    /** Bán kính: OA = OP với A là điểm đầu tiên trên đường tròn. */
+    radius(i, p, f) {
+      const C2 = this.circles[i];
+      const O = C2.center;
+      const a = [...C2.pts].find((x) => x !== p);
+      if (!a || a === O || p === O) return;
+      const r = this.fact("len", `${this.name(O)}${this.name(a)} = ${this.name(O)}${this.name(p)} (b\xE1n k\xEDnh)`, "radius", [f, C2.centerWhy ?? f].filter((z) => z !== void 0));
+      this.len.add([["S" + pairKey(O, a), 1], ["S" + pairKey(O, p), -1]], r);
+      for (const q of [...C2.pts].filter((x) => x !== p && x !== a && x !== O).slice(0, 3)) {
+        const g = this.fact("ang", `G\xF3c \u1EDF t\xE2m ${this.name(a)}${this.name(O)}${this.name(p)} = 2 l\u1EA7n g\xF3c n\u1ED9i ti\u1EBFp ${this.name(a)}${this.name(q)}${this.name(p)}`, "central-angle", [r]);
+        this.ang.add([[this.dirAB(O, p), 1], [this.dirAB(O, a), -1], [this.dirAB(q, p), -2], [this.dirAB(q, a), 2]], g);
+      }
+    }
+    ptsName(ids) {
+      return ids.map((x) => this.name(x)).join(", ");
+    }
+    // ---------- tiếp tuyến ----------
+    tangentChord(t2, f) {
+      const C2 = this.circles[this.circleRoot(t2.circle)];
+      const others = [...C2.pts].filter((x) => x !== t2.point);
+      if (others.length < 2) return;
+      const T5 = t2.point;
+      for (let x = 0; x < Math.min(others.length, 4); x++) for (let y = 0; y < Math.min(others.length, 4); y++) {
+        if (x === y) continue;
+        const A = others[x], B = others[y];
+        const r = this.fact("tan", `G\xF3c t\u1EA1o b\u1EDFi ti\u1EBFp tuy\u1EBFn t\u1EA1i ${this.name(T5)} v\xE0 d\xE2y ${this.name(T5)}${this.name(A)}`, "tangent-chord", [t2.why, f]);
+        this.ang.add([[this.dirAB(T5, A), 1], [this.dirLine(t2.line), -1], [this.dirAB(B, A), -1], [this.dirAB(B, T5), 1]], r);
+      }
+    }
+    tangentRadius(t2, f) {
+      const C2 = this.circles[this.circleRoot(t2.circle)];
+      if (!C2.center || C2.center === t2.point) return;
+      const r = this.fact("perp", `Ti\u1EBFp tuy\u1EBFn t\u1EA1i ${this.name(t2.point)} \u22A5 b\xE1n k\xEDnh ${this.name(C2.center)}${this.name(t2.point)}`, "tangent-radius", [t2.why, f]);
+      this.ang.add([[this.dirLine(t2.line), 1], [this.dirAB(C2.center, t2.point), -1]], r);
+    }
+    addTangent(line2, circle2, point, why) {
+      const t2 = { line: line2, circle: circle2, point, why };
+      this.tangents.push(t2);
+      this.tangentChord(t2, why);
+      this.tangentRadius(t2, why);
+    }
+    thales(d, p, f) {
+      if (p === d.a || p === d.b) return;
+      const r = this.fact("perp", `${this.name(p)}${this.name(d.a)} \u22A5 ${this.name(p)}${this.name(d.b)} (g\xF3c n\u1ED9i ti\u1EBFp ch\u1EAFn n\u1EEDa \u0111\u01B0\u1EDDng tr\xF2n)`, "thales", [d.why, f]);
+      this.ang.add([[this.dirAB(p, d.a), 1], [this.dirAB(p, d.b), -1]], r);
+    }
+    // ---------- sự kiện cơ bản ----------
+    perp(v1, v2, text2, uses) {
+      const r = this.fact("perp", text2, "premise", uses);
+      this.ang.add([[v1, 1], [v2, -1]], r);
+      return r;
+    }
+    par(v1, v2, text2, uses) {
+      const r = this.fact("par", text2, "premise", uses);
+      this.ang.add([[v1, 1], [v2, -1]], r);
+      return r;
+    }
+    eqLen(a, b, c, d, text2, rule, uses) {
+      const r = this.fact("len", text2, rule, uses);
+      this.len.add([["S" + pairKey(a, b), 1], ["S" + pairKey(c, d), -1]], r);
+      return r;
+    }
+    /** Chọn dấu của đẳng thức góc theo hình: ∠(l1,l2) = ±∠(l3,l4) (góc thường bằng nhau). */
+    angleRow(l1, l2, l3, l4, sign) {
+      return [[l2, 1], [l1, -1], [l4, -sign], [l3, sign]];
+    }
+    signOfEq(a1, a2) {
+      const m = (x) => (x % 180 + 180) % 180;
+      return Math.abs(m(a1) - m(a2)) < 1e-6 || Math.abs(Math.abs(m(a1) - m(a2)) - 180) < 1e-6 ? 1 : -1;
+    }
+    /** Bốn điểm đồng viên: thử ba cách chọn dây cung (dây ab nhìn từ c, d) – lấy cách suy ra được. */
+    impliesCyclic(a, b, c, d) {
+      for (const [x, y, u, v] of [[a, b, c, d], [a, c, b, d], [a, d, b, c], [b, c, a, d], [b, d, a, c], [c, d, a, b]]) {
+        const r = this.ang.implies(this.angleRow(this.dirAB(u, x), this.dirAB(u, y), this.dirAB(v, x), this.dirAB(v, y), 1));
+        if (r) return r;
+      }
+      return null;
+    }
+    /** Đảo phương tích: P = AB ∩ CD (đã biết thẳng hàng) và PA·PB = PC·PD ⇒ A, B, C, D đồng viên. */
+    impliesCyclicPow(a, b, c, d) {
+      for (const [x, y, u, v] of [[a, b, c, d], [a, c, b, d], [a, d, b, c]]) {
+        for (const P4 of this.pts) {
+          if ([x, y, u, v].includes(P4)) continue;
+          const l1 = this.lineThrough(x, y), l2 = this.lineThrough(u, v);
+          if (l1 === null || l2 === null || !this.lines[this.lineRoot(l1)].pts.has(P4) || !this.lines[this.lineRoot(l2)].pts.has(P4)) continue;
+          const r = this.len.implies(this.powRow(P4, x, y, u, v));
+          if (r) return r;
+        }
+      }
+      return null;
+    }
+    powRow(P4, A, B, C2, D2) {
+      return [["S" + pairKey(P4, A), 1], ["S" + pairKey(P4, B), 1], ["S" + pairKey(P4, C2), -1], ["S" + pairKey(P4, D2), -1]];
+    }
+    /** Các cát tuyến từ P tới đường tròn ci: đường thẳng (đã biết) qua P chứa ≥ 2 điểm đã biết của đường tròn. */
+    secants(P4, ci) {
+      const C2 = this.circles[ci];
+      const out = [];
+      for (let i = 0; i < this.lines.length; i++) {
+        const L = this.lines[i];
+        if (!L.alive || L.rep !== i || !L.pts.has(P4)) continue;
+        const on = [...L.pts].filter((q) => q !== P4 && C2.pts.has(q));
+        if (on.length >= 2) out.push({ key: i, pts: on.slice(0, 2), why: [L.why.get(P4), ...on.slice(0, 2).map((q) => C2.why.get(q))].filter((z) => z !== void 0) });
+      }
+      return out;
+    }
+    impliesCollinear(a, b, c) {
+      for (const [x, y, z] of [[a, b, c], [b, a, c], [c, a, b]]) {
+        const r = this.ang.implies([[this.dirAB(x, y), 1], [this.dirAB(x, z), -1]]);
+        if (r) return r;
+      }
+      return null;
+    }
+    dang(A, B, C2) {
+      const a = directedAngle(this.V(A), this.V(B), this.V(C2));
+      return a == null ? 0 : a;
+    }
+    // ---------- rút sự kiện từ cách dựng ----------
+    premises() {
+      const nm3 = (x) => this.name(x);
+      for (const s of this.doc.steps) {
+        const v = this.V(s.id);
+        if (!v) continue;
+        const a = s.args;
+        const kind = this.k.get(s.id);
+        const P4 = (t2) => this.fact("premise", t2, "premise", [], { step: s.id });
+        switch (s.type) {
+          case "line":
+          case "segment":
+          case "ray": {
+            const f = P4(`${nm3(a[0])}, ${nm3(a[1])} thu\u1ED9c ${s.name || "\u0111\u01B0\u1EDDng"} (d\u1EF1ng)`);
+            const i = this.newLine([], [s.id]);
+            this.addToLine(i, a[0], f);
+            this.addToLine(i, a[1], f);
+            break;
+          }
+          case "perpendicular":
+          case "parallel": {
+            const f = P4(s.type === "perpendicular" ? `${s.name} qua ${nm3(a[0])} vu\xF4ng g\xF3c ${this.descLine(a[1])}` : `${s.name} qua ${nm3(a[0])} song song ${this.descLine(a[1])}`);
+            const i = this.newLine([], [s.id]);
+            this.addToLine(i, a[0], f);
+            const j = this.lineOfObj(a[1]);
+            if (j !== null) this.ang.add([[this.dirLine(i), 1], [this.dirLine(j), -1]], f);
+            break;
+          }
+          case "perp_bisector": {
+            const f = P4(`${s.name} l\xE0 trung tr\u1EF1c ${nm3(a[0])}${nm3(a[1])}`);
+            const i = this.newLine([], [s.id]);
+            this.ang.add([[this.dirLine(i), 1], [this.dirAB(a[0], a[1]), -1]], f);
+            this.pbisectors.push({ line: i, a: a[0], b: a[1], why: f });
+            break;
+          }
+          case "angle_bisector": {
+            const f = P4(`${s.name} l\xE0 ph\xE2n gi\xE1c g\xF3c ${nm3(a[0])}${nm3(a[1])}${nm3(a[2])}`);
+            const i = this.newLine([], [s.id]);
+            this.addToLine(i, a[1], f);
+            this.ang.add([[this.dirLine(i), 2], [this.dirAB(a[1], a[0]), -1], [this.dirAB(a[1], a[2]), -1]], f);
+            break;
+          }
+          case "isogonal_line": {
+            const f = P4(`${s.name} \u0111\u1EB3ng gi\xE1c v\u1EDBi ${nm3(a[1])}${nm3(a[3])} trong g\xF3c ${nm3(a[0])}${nm3(a[1])}${nm3(a[2])}`);
+            const i = this.newLine([], [s.id]);
+            this.addToLine(i, a[1], f);
+            this.ang.add([[this.dirLine(i), 1], [this.dirAB(a[1], a[2]), -1], [this.dirAB(a[1], a[0]), -1], [this.dirAB(a[1], a[3]), 1]], f);
+            break;
+          }
+          case "angle_line": {
+            const f = P4(`${s.name} t\u1EA1o v\u1EDBi ${nm3(a[0])}${nm3(a[1])} g\xF3c b\u1EB1ng g\xF3c ${nm3(a[2])}${nm3(a[3])}${nm3(a[4])}`);
+            const i = this.newLine([], [s.id]);
+            this.addToLine(i, a[0], f);
+            const sg = s.params && s.params.flip ? -1 : 1;
+            this.ang.add([[this.dirLine(i), 1], [this.dirAB(a[0], a[1]), -1], [this.dirAB(a[3], a[4]), -sg], [this.dirAB(a[3], a[2]), sg]], f);
+            break;
+          }
+          case "tangent_at": {
+            const f = P4(`${s.name} ti\u1EBFp x\xFAc ${this.name(a[0])} t\u1EA1i ${nm3(a[1])}`);
+            const i = this.newLine([], [s.id]);
+            this.addToLine(i, a[1], f);
+            const c = this.circleOfObj(a[0]);
+            if (c !== null) this.addTangent(i, c, a[1], f);
+            break;
+          }
+          case "circle":
+          case "circle_3pts":
+          case "circumcircle":
+          case "circle_diameter":
+          case "circle_tangent_at": {
+            const i = this.newCircle([s.id]);
+            const f = P4(s.type === "circle" ? `${s.name} c\xF3 t\xE2m ${nm3(a[0])}, \u0111i qua ${nm3(a[1])}` : s.type === "circle_diameter" ? `${s.name} c\xF3 \u0111\u01B0\u1EDDng k\xEDnh ${nm3(a[0])}${nm3(a[1])}` : s.type === "circle_tangent_at" ? `${s.name} qua ${nm3(a[0])}, ${nm3(a[2])}, ti\u1EBFp x\xFAc ${nm3(a[0])}${nm3(a[1])} t\u1EA1i ${nm3(a[0])}` : `${s.name} = (${a.map(nm3).join("")})`);
+            if (s.type === "circle") {
+              this.setCenter(i, a[0], f);
+              this.addToCircle(i, a[1], f);
+            } else if (s.type === "circle_diameter") {
+              this.diameters.push({ circle: i, a: a[0], b: a[1], why: f });
+              this.addToCircle(i, a[0], f);
+              this.addToCircle(i, a[1], f);
+            } else if (s.type === "circle_tangent_at") {
+              this.addToCircle(i, a[0], f);
+              this.addToCircle(i, a[2], f);
+              const li = this.lineThrough(a[0], a[1]) ?? this.newLine([], []);
+              this.addToLine(li, a[0], f);
+              this.addToLine(li, a[1], f);
+              this.addTangent(li, i, a[0], f);
+            } else for (const p of a) this.addToCircle(i, p, f);
+            break;
+          }
+          case "incircle":
+          case "excircle":
+          case "nine_point_circle":
+          case "mixtilinear":
+          case "invert_circle":
+          case "circle_radius": {
+            this.newCircle([s.id]);
+            break;
+          }
+          case "center": {
+            const c = this.circleOfObj(a[0]);
+            if (c !== null) this.setCenter(c, s.id, P4(`${s.name} l\xE0 t\xE2m c\u1EE7a ${this.name(a[0])}`));
+            break;
+          }
+          case "circumcenter": {
+            const f = P4(`${s.name} l\xE0 t\xE2m ngo\u1EA1i ti\u1EBFp ${a.map(nm3).join("")}`);
+            const i = this.newCircle([]);
+            for (const p of a) this.addToCircle(i, p, f);
+            this.setCenter(i, s.id, f);
+            break;
+          }
+          case "orthocenter": {
+            const f = P4(`${s.name} l\xE0 tr\u1EF1c t\xE2m ${a.map(nm3).join("")}`);
+            for (let t2 = 0; t2 < 3; t2++) {
+              const [x, y, z] = [a[t2], a[(t2 + 1) % 3], a[(t2 + 2) % 3]];
+              this.ang.add([[this.dirAB(x, s.id), 1], [this.dirAB(y, z), -1]], f);
+            }
+            break;
+          }
+          case "incenter":
+          case "excenter": {
+            const f = P4(`${s.name} l\xE0 t\xE2m ${s.type === "incenter" ? "n\u1ED9i" : "b\xE0ng"} ti\u1EBFp ${a.map(nm3).join("")}`);
+            for (let t2 = 0; t2 < 3; t2++) {
+              const [x, y, z] = [a[t2], a[(t2 + 1) % 3], a[(t2 + 2) % 3]];
+              this.ang.add([[this.dirAB(x, s.id), 2], [this.dirAB(x, y), -1], [this.dirAB(x, z), -1]], f);
+            }
+            break;
+          }
+          case "altitude_foot":
+          case "foot": {
+            const [p, x, y] = a;
+            const f = P4(`${s.name} l\xE0 ch\xE2n \u0111\u01B0\u1EDDng vu\xF4ng g\xF3c t\u1EEB ${nm3(p)} xu\u1ED1ng ${nm3(x)}${nm3(y)}`);
+            const li = this.lineThrough(x, y) ?? this.newLine([], []);
+            this.addToLine(li, x, f);
+            this.addToLine(li, y, f);
+            this.addToLine(li, s.id, f);
+            this.ang.add([[this.dirAB(p, s.id), 1], [this.dirLine(li), -1]], f);
+            break;
+          }
+          case "projection": {
+            const f = P4(`${s.name} l\xE0 h\xECnh chi\u1EBFu c\u1EE7a ${nm3(a[0])} l\xEAn ${this.descLine(a[1])}`);
+            const li = this.lineOfObj(a[1]);
+            if (li !== null) {
+              this.addToLine(li, s.id, f);
+              this.ang.add([[this.dirAB(a[0], s.id), 1], [this.dirLine(li), -1]], f);
+            }
+            break;
+          }
+          case "midpoint": {
+            const f = P4(`${s.name} l\xE0 trung \u0111i\u1EC3m ${nm3(a[0])}${nm3(a[1])}`);
+            const li = this.lineThrough(a[0], a[1]) ?? this.newLine([], []);
+            this.addToLine(li, a[0], f);
+            this.addToLine(li, a[1], f);
+            this.addToLine(li, s.id, f);
+            this.len.add([["S" + pairKey(a[0], s.id), 1], ["S" + pairKey(s.id, a[1]), -1]], f);
+            const ci = this.newCircle([]);
+            this.setCenter(ci, s.id, f);
+            this.addToCircle(ci, a[0], f);
+            this.addToCircle(ci, a[1], f);
+            this.diameters.push({ circle: ci, a: a[0], b: a[1], why: f });
+            this.midpoints.push({ m: s.id, a: a[0], b: a[1], why: f });
+            break;
+          }
+          case "reflect":
+          case "reflect_pts": {
+            if (kind !== "point") break;
+            if (s.type === "reflect_pts" || this.k.get(a[1]) === "line") {
+              const f = P4(`${s.name} \u0111\u1ED1i x\u1EE9ng ${nm3(a[0])} qua ${s.type === "reflect_pts" ? nm3(a[1]) + nm3(a[2]) : this.descLine(a[1])}`);
+              let li = s.type === "reflect_pts" ? this.lineThrough(a[1], a[2]) : this.lineOfObj(a[1]);
+              if (li === null && s.type === "reflect_pts") {
+                li = this.newLine([], []);
+                this.addToLine(li, a[1], f);
+                this.addToLine(li, a[2], f);
+              }
+              if (li === null) break;
+              this.ang.add([[this.dirAB(a[0], s.id), 1], [this.dirLine(li), -1]], f);
+              this.reflections.push({ x: a[0], y: s.id, line: li, why: f });
+            } else {
+              const f = P4(`${s.name} \u0111\u1ED1i x\u1EE9ng ${nm3(a[0])} qua ${nm3(a[1])}`);
+              const li = this.lineThrough(a[0], s.id) ?? this.newLine([], []);
+              this.addToLine(li, a[0], f);
+              this.addToLine(li, a[1], f);
+              this.addToLine(li, s.id, f);
+              this.len.add([["S" + pairKey(a[0], a[1]), 1], ["S" + pairKey(a[1], s.id), -1]], f);
+            }
+            break;
+          }
+          case "rotate":
+          case "rotate_by":
+          case "homothety":
+          case "homothety_by":
+          case "spiral":
+          case "translate": {
+            if (kind !== "point") break;
+            const X = a[0], O = a[1];
+            const S2 = (p, q) => "S" + pairKey(p, q);
+            if (s.type === "translate") {
+              const f2 = P4(`${s.name} l\xE0 \u1EA3nh c\u1EE7a ${nm3(X)} qua ph\xE9p t\u1ECBnh ti\u1EBFn theo ${nm3(a[1])}${nm3(a[2])}`);
+              this.ang.add([[this.dirAB(X, s.id), 1], [this.dirAB(a[1], a[2]), -1]], f2);
+              this.len.add([[S2(X, s.id), 1], [S2(a[1], a[2]), -1]], f2);
+              break;
+            }
+            const f = P4(`${s.name} l\xE0 \u1EA3nh c\u1EE7a ${nm3(X)} qua ph\xE9p ${s.type.startsWith("rotate") ? "quay" : s.type.startsWith("homothety") ? "v\u1ECB t\u1EF1" : "\u0111\u1ED3ng d\u1EA1ng"} t\xE2m ${nm3(O)}`);
+            if (s.type === "rotate" || s.type === "rotate_by") {
+              this.len.add([[S2(O, X), 1], [S2(O, s.id), -1]], f);
+              if (s.type === "rotate_by") this.ang.add([[this.dirAB(O, s.id), 1], [this.dirAB(O, X), -1], [this.dirAB(a[3], a[4]), -1], [this.dirAB(a[3], a[2]), 1]], f);
+              else this.ang.add([[this.dirAB(O, s.id), 1], [this.dirAB(O, X), -1]], f);
+            } else if (s.type === "homothety" || s.type === "homothety_by") {
+              const li = this.lineThrough(O, X) ?? this.newLine([], []);
+              this.addToLine(li, O, f);
+              this.addToLine(li, X, f);
+              this.addToLine(li, s.id, f);
+              if (s.type === "homothety_by") this.len.add([[S2(O, s.id), 1], [S2(O, X), -1], [S2(a[2], a[3]), -1], [S2(a[4], a[5]), 1]], f);
+              else this.len.add([[S2(O, s.id), 1], [S2(O, X), -1]], f);
+            } else {
+              this.ang.add([[this.dirAB(O, s.id), 1], [this.dirAB(O, X), -1], [this.dirAB(O, a[3]), -1], [this.dirAB(O, a[2]), 1]], f);
+              this.len.add([[S2(O, s.id), 1], [S2(O, X), -1], [S2(O, a[3]), -1], [S2(O, a[2]), 1]], f);
+            }
+            break;
+          }
+          case "point_on":
+          case "fixed_point":
+          case "intersection":
+          case "intersection_other":
+          case "tangent_point":
+          case "angle_point":
+          case "incircle_touch":
+          case "arc_midpoint":
+          case "symmedian_foot":
+          case "cevian_foot":
+          case "solve_point":
+            this.pointFacts(s);
+            break;
+          default:
+            break;
+        }
+      }
+    }
+    descLine(id) {
+      return stepById(this.doc, id)?.name || id;
+    }
+    /** Điểm thuộc đường thẳng / đường tròn theo cách dựng (và vài sự kiện góc kèm theo). */
+    pointFacts(s) {
+      const nm3 = (x) => this.name(x);
+      const a = s.args;
+      const onObj = (obj, f) => {
+        const li = this.lineOfObj(obj);
+        if (li !== null) return this.addToLine(li, s.id, f);
+        const ci = this.circleOfObj(obj);
+        if (ci !== null) return this.addToCircle(ci, s.id, f);
+        return false;
+      };
+      const P4 = (t2) => this.fact("premise", t2, "premise", [], { step: s.id });
+      if (s.type === "point_on" || s.type === "fixed_point") onObj(a[0], P4(`${s.name} thu\u1ED9c ${this.descLine(a[0])}`));
+      else if (s.type === "intersection" || s.type === "intersection_other") {
+        const f = P4(`${s.name} l\xE0 giao \u0111i\u1EC3m c\u1EE7a ${this.descLine(a[0])} v\xE0 ${this.descLine(a[1])}`);
+        onObj(a[0], f);
+        onObj(a[1], f);
+      } else if (s.type === "tangent_point") {
+        const f = P4(`${s.name} l\xE0 ti\u1EBFp \u0111i\u1EC3m c\u1EE7a ti\u1EBFp tuy\u1EBFn k\u1EBB t\u1EEB ${nm3(a[1])} t\u1EDBi ${this.descLine(a[0])}`);
+        onObj(a[0], f);
+        const ci = this.circleOfObj(a[0]);
+        if (ci !== null) {
+          const li = this.newLine([], []);
+          this.addToLine(li, a[1], f);
+          this.addToLine(li, s.id, f);
+          this.addTangent(li, ci, s.id, f);
+        }
+      } else if (s.type === "angle_point") {
+        const f = P4(`${s.name} thu\u1ED9c ${this.descLine(a[5])}, \u2220(${nm3(a[0])}${nm3(a[1])}, ${nm3(a[0])}${s.name}) = \u2220${nm3(a[2])}${nm3(a[3])}${nm3(a[4])}`);
+        onObj(a[5], f);
+        const sg = s.params && s.params.flip ? -1 : 1;
+        this.ang.add([[this.dirAB(a[0], s.id), 1], [this.dirAB(a[0], a[1]), -1], [this.dirAB(a[3], a[4]), -sg], [this.dirAB(a[3], a[2]), sg]], f);
+      } else if (s.type === "incircle_touch") {
+        const f = P4(`${s.name} l\xE0 ti\u1EBFp \u0111i\u1EC3m c\u1EE7a \u0111\u01B0\u1EDDng tr\xF2n n\u1ED9i ti\u1EBFp tr\xEAn ${nm3(a[1])}${nm3(a[2])}`);
+        const li = this.lineThrough(a[1], a[2]) ?? this.newLine([], []);
+        this.addToLine(li, a[1], f);
+        this.addToLine(li, a[2], f);
+        this.addToLine(li, s.id, f);
+        const I = this.doc.steps.find((x) => x.type === "incenter" && x.args.join() === a.join())?.id || this.centerOfType("incircle", a);
+        if (I) this.ang.add([[this.dirAB(I, s.id), 1], [this.dirLine(li), -1]], f);
+      } else if (s.type === "arc_midpoint") {
+        const f = P4(`${s.name} l\xE0 \u0111i\u1EC3m ch\xEDnh gi\u1EEFa cung ${nm3(a[1])}${nm3(a[2])}${s.params && s.params.contains ? " ch\u1EE9a" : " kh\xF4ng ch\u1EE9a"} ${nm3(a[0])}`);
+        let ci = this.circles.findIndex((C2) => C2.alive && a.every((p) => C2.pts.has(p)));
+        if (ci < 0) {
+          ci = this.newCircle([]);
+          for (const p of a) this.addToCircle(ci, p, f);
+        }
+        this.addToCircle(ci, s.id, f);
+        this.len.add([["S" + pairKey(s.id, a[1]), 1], ["S" + pairKey(s.id, a[2]), -1]], f);
+      } else if (s.type === "symmedian_foot" || s.type === "cevian_foot") {
+        const f = P4(`${s.name} thu\u1ED9c ${nm3(a[a.length - 2])}${nm3(a[a.length - 1])}`);
+        const [x, y] = a.slice(-2);
+        const li = this.lineThrough(x, y) ?? this.newLine([], []);
+        this.addToLine(li, x, f);
+        this.addToLine(li, y, f);
+        this.addToLine(li, s.id, f);
+      } else if (s.type === "solve_point") {
+        const conds = s.params && s.params.conds || [];
+        const g = (i) => i < 0 ? s.id : a[i];
+        for (const c of conds) {
+          if (c.t === "on") onObj(a[c.a[0]], P4(`${s.name} thu\u1ED9c ${this.descLine(a[c.a[0]])}`));
+          else if (c.t === "len") this.eqLen(g(c.a[0]), g(c.a[1]), g(c.a[2]), g(c.a[3]), `${nm3(g(c.a[0]))}${nm3(g(c.a[1]))} = ${nm3(g(c.a[2]))}${nm3(g(c.a[3]))} (\u0111i\u1EC1u ki\u1EC7n)`, "premise", []);
+          else if (c.t === "ang") {
+            const [p1, p2, p3, q1, q2, q3] = c.a.map(g);
+            const f = P4(`\u2220${nm3(p1)}${nm3(p2)}${nm3(p3)} = \u2220${nm3(q1)}${nm3(q2)}${nm3(q3)} (\u0111i\u1EC1u ki\u1EC7n)`);
+            const sg = this.signOfEq(this.dang(p1, p2, p3), this.dang(q1, q2, q3));
+            this.ang.add(this.angleRow(this.dirAB(p2, p1), this.dirAB(p2, p3), this.dirAB(q2, q1), this.dirAB(q2, q3), sg), f);
+          } else if (c.t === "angv") {
+            const [p1, p2, p3] = c.a.map(g);
+            const f = P4(`\u2220${nm3(p1)}${nm3(p2)}${nm3(p3)} = ${c.v}\xB0 (\u0111i\u1EC1u ki\u1EC7n)`);
+            this.ang.add([[this.dirAB(p2, p3), 1], [this.dirAB(p2, p1), -1]], f);
+          }
+        }
+      }
+    }
+    centerOfType(type, args) {
+      const c = this.doc.steps.find((x) => x.type === type && x.args.join() === args.join());
+      if (!c) return null;
+      return this.doc.steps.find((x) => x.type === "center" && x.args[0] === c.id)?.id || null;
+    }
+    // ---------- vòng suy luận có số dẫn đường ----------
+    numericCandidates() {
+      const V = (p) => this.V(p);
+      const e = this.e;
+      const pts = this.pts;
+      const lines = /* @__PURE__ */ new Map();
+      for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+        const A = V(pts[i]), B = V(pts[j]);
+        if (dist(A, B) < e) continue;
+        const set = [pts[i], pts[j]];
+        for (let k = j + 1; k < pts.length; k++) {
+          const C2 = V(pts[k]);
+          if (Math.abs(cross(sub(B, A), sub(C2, A))) / dist(A, B) < e && dist(C2, A) > e && dist(C2, B) > e) set.push(pts[k]);
+        }
+        if (set.length >= 3) {
+          const key = [...set].sort().join(",");
+          if (!lines.has(key)) lines.set(key, set);
+        }
+      }
+      const circles = /* @__PURE__ */ new Map();
+      const lim = Math.min(pts.length, 40);
+      for (let i = 0; i < lim; i++) for (let j = i + 1; j < lim; j++) for (let k = j + 1; k < lim; k++) {
+        const c = circleThrough(V(pts[i]), V(pts[j]), V(pts[k]));
+        if (!c || c.r > 50 * this.scale) continue;
+        const set = [pts[i], pts[j], pts[k]];
+        for (let m = k + 1; m < lim; m++) if (Math.abs(dist(V(pts[m]), c.c) - c.r) < e && ![pts[i], pts[j], pts[k]].some((q) => dist(V(q), V(pts[m])) < e)) set.push(pts[m]);
+        if (set.length >= 4) {
+          const key = [...set].sort().join(",");
+          if (![...circles.keys()].some((kk) => set.every((x) => kk.split(",").includes(x)))) circles.set(key, set);
+        }
+      }
+      const iso = [];
+      for (const X of pts) {
+        const d = pts.filter((p) => p !== X).map((p) => [p, dist(V(p), V(X))]).filter(([, r]) => r > e).sort((x, y) => x[1] - y[1]);
+        for (let i = 0; i + 1 < d.length; i++) for (let j = i + 1; j < d.length && d[j][1] - d[i][1] < e; j++) iso.push([X, d[i][0], d[j][0]]);
+      }
+      const similar = [], simSign = /* @__PURE__ */ new Map();
+      const tris = [];
+      const lim2 = Math.min(pts.length, 24);
+      for (let i = 0; i < lim2; i++) for (let j = 0; j < lim2; j++) for (let k = 0; k < lim2; k++) {
+        if (i === j || j === k || i === k) continue;
+        const [A, B, C2] = [pts[i], pts[j], pts[k]].map(V);
+        const area = cross(sub(B, A), sub(C2, A));
+        if (Math.abs(area) < 1e-6 * this.scale * this.scale) continue;
+        const ga = directedAngle(B, A, C2), gb = directedAngle(A, B, C2);
+        tris.push({ t: [pts[i], pts[j], pts[k]], key: `${Math.round(Math.abs(ga) * 1e5)}|${Math.round(Math.abs(gb) * 1e5)}`, s: Math.sign(area) });
+      }
+      const byKey = /* @__PURE__ */ new Map();
+      for (const T5 of tris) {
+        if (!byKey.has(T5.key)) byKey.set(T5.key, []);
+        byKey.get(T5.key).push(T5);
+      }
+      for (const list of byKey.values()) {
+        if (list.length < 2 || list.length > 12) continue;
+        for (let x = 0; x < list.length; x++) for (let y = x + 1; y < list.length; y++) {
+          const T1 = list[x].t, T22 = list[y].t;
+          if (T1.every((p) => T22.includes(p))) continue;
+          const key = `sim:${T1.join()}:${T22.join()}`;
+          simSign.set(key, list[x].s === list[y].s ? 1 : -1);
+          similar.push([T1, T22]);
+        }
+      }
+      return { lines: [...lines.values()], circles: [...circles.values()], iso, similar: similar.slice(0, 400), simSign };
+    }
+    run() {
+      this.premises();
+      const cand = this.numericCandidates();
+      for (let round4 = 0; round4 < this.maxRounds; round4++) {
+        let changed = false;
+        for (const R of this.reflections) for (const X of this.lines[this.lineRoot(R.line)].pts) {
+          const key = `refl:${X}:${R.x}:${R.y}`;
+          if (this.factKey.has(key)) continue;
+          const f = this.fact("len", `${this.name(X)}${this.name(R.x)} = ${this.name(X)}${this.name(R.y)} (\u0111\u1ED1i x\u1EE9ng)`, "reflect-len", [R.why], null, key);
+          this.len.add([["S" + pairKey(X, R.x), 1], ["S" + pairKey(X, R.y), -1]], f);
+          changed = true;
+        }
+        for (const B of this.pbisectors) for (const X of this.lines[this.lineRoot(B.line)].pts) {
+          const key = `pb:${X}:${B.a}:${B.b}`;
+          if (this.factKey.has(key)) continue;
+          const f = this.fact("len", `${this.name(X)}${this.name(B.a)} = ${this.name(X)}${this.name(B.b)} (${this.name(X)} thu\u1ED9c trung tr\u1EF1c)`, "pbisector-len", [B.why], null, key);
+          this.len.add([["S" + pairKey(X, B.a), 1], ["S" + pairKey(X, B.b), -1]], f);
+          changed = true;
+        }
+        for (let ci = 0; ci < this.circles.length; ci++) {
+          const C2 = this.circles[ci];
+          if (!C2.alive || C2.rep !== ci || C2.pts.size < 1) continue;
+          const cv2 = this.circleValue(ci);
+          if (!cv2) continue;
+          for (const X of this.pts) {
+            if (C2.pts.has(X) || X === C2.center || Math.abs(dist(this.V(X), cv2.c) - cv2.r) > this.e) continue;
+            let uses = null, how = "";
+            if (C2.center) {
+              const A = [...C2.pts][0];
+              uses = this.len.implies([["S" + pairKey(C2.center, X), 1], ["S" + pairKey(C2.center, A), -1]]);
+              how = `${this.name(C2.center)}${this.name(X)} = ${this.name(C2.center)}${this.name(A)}`;
+            }
+            if (!uses) for (const d of this.diameters) {
+              if (this.circleRoot(d.circle) !== ci || X === d.a || X === d.b) continue;
+              uses = this.ang.implies([[this.dirAB(X, d.a), 1], [this.dirAB(X, d.b), -1]]);
+              if (uses) {
+                uses = [...uses, d.why];
+                how = `\u2220${this.name(d.a)}${this.name(X)}${this.name(d.b)} = 90\xB0`;
+                break;
+              }
+            }
+            if (!uses) continue;
+            const f = this.fact("cyc", `${this.name(X)} thu\u1ED9c \u0111\u01B0\u1EDDng tr\xF2n ${this.circleName(ci)} (v\xEC ${how})`, "radius-circle", uses);
+            this.addToCircle(ci, X, f);
+            changed = true;
+          }
+        }
+        for (let ci = 0; ci < this.circles.length; ci++) {
+          const C2 = this.circles[ci];
+          if (!C2.alive || C2.rep !== ci || !C2.center) continue;
+          const ps = [...C2.pts];
+          for (let x = 0; x < ps.length; x++) for (let y = x + 1; y < ps.length; y++) {
+            const li = this.lineThrough(ps[x], C2.center);
+            if (li === null || !this.lines[this.lineRoot(li)].pts.has(ps[y])) continue;
+            if (this.diameters.some((d2) => this.circleRoot(d2.circle) === ci && (/* @__PURE__ */ new Set([d2.a, d2.b, ps[x], ps[y]])).size === 2)) continue;
+            const f = this.fact("diam", `${this.name(ps[x])}${this.name(ps[y])} l\xE0 \u0111\u01B0\u1EDDng k\xEDnh c\u1EE7a ${this.circleName(ci)}`, "diameter", [C2.why.get(ps[x]), C2.why.get(ps[y]), this.lines[this.lineRoot(li)].why.get(ps[y])].filter((z) => z !== void 0));
+            const d = { circle: ci, a: ps[x], b: ps[y], why: f };
+            this.diameters.push(d);
+            for (const q of ps) this.thales(d, q, f);
+            changed = true;
+          }
+        }
+        for (const [T1, T22] of cand.similar) {
+          const key = `sim:${T1.join()}:${T22.join()}`;
+          if (this.factKey.has(key)) continue;
+          const [a, b, c] = T1, [x, y, z] = T22;
+          const sg = cand.simSign.get(key);
+          const u1 = this.ang.implies(this.angleRow(this.dirAB(a, b), this.dirAB(a, c), this.dirAB(x, y), this.dirAB(x, z), sg));
+          const u2 = u1 && this.ang.implies(this.angleRow(this.dirAB(b, a), this.dirAB(b, c), this.dirAB(y, x), this.dirAB(y, z), sg));
+          if (!u2) continue;
+          const nm3 = (t2) => t2.map((q) => this.name(q)).join("");
+          const f = this.fact("sim", `Tam gi\xE1c ${nm3(T1)} \u0111\u1ED3ng d\u1EA1ng tam gi\xE1c ${nm3(T22)} (g\xF3c \u2013 g\xF3c)`, "similar-aa", [...u1, ...u2], null, key);
+          const S2 = (p, q) => "S" + pairKey(p, q);
+          this.len.add([[S2(a, b), 1], [S2(x, y), -1], [S2(b, c), -1], [S2(y, z), 1]], f);
+          this.len.add([[S2(a, b), 1], [S2(x, y), -1], [S2(a, c), -1], [S2(x, z), 1]], f);
+          changed = true;
+        }
+        for (const m of this.midpoints) for (const X of this.pts) {
+          if (X === m.m || X === m.a || X === m.b) continue;
+          const key = `mperp:${X}:${m.m}`;
+          if (this.factKey.has(key) || Math.abs(dist(this.V(X), this.V(m.a)) - dist(this.V(X), this.V(m.b))) > this.e) continue;
+          const u = this.len.implies([["S" + pairKey(X, m.a), 1], ["S" + pairKey(X, m.b), -1]]);
+          if (!u) continue;
+          const f = this.fact("perp", `${this.name(X)} c\xE1ch \u0111\u1EC1u ${this.name(m.a)}, ${this.name(m.b)} n\xEAn ${this.name(X)}${this.name(m.m)} \u22A5 ${this.name(m.a)}${this.name(m.b)}`, "equidistant-perp", [...u, m.why], null, key);
+          this.ang.add([[this.dirAB(X, m.m), 1], [this.dirAB(m.a, m.b), -1]], f);
+          changed = true;
+        }
+        for (let ci = 0; ci < this.circles.length; ci++) {
+          const C2 = this.circles[ci];
+          if (!C2.alive || C2.rep !== ci || C2.pts.size < 3) continue;
+          for (const P4 of this.pts) {
+            if (C2.pts.has(P4)) continue;
+            const sec = this.secants(P4, ci);
+            for (let x = 1; x < sec.length; x++) {
+              const key = `pow:${ci}:${P4}:${sec[0].key}:${sec[x].key}`;
+              if (this.factKey.has(key)) continue;
+              const [A, B] = sec[0].pts, [Cc, D2] = sec[x].pts;
+              const f = this.fact("pow", `${this.name(P4)}${this.name(A)}\xB7${this.name(P4)}${this.name(B)} = ${this.name(P4)}${this.name(Cc)}\xB7${this.name(P4)}${this.name(D2)} (ph\u01B0\u01A1ng t\xEDch c\u1EE7a ${this.name(P4)} v\u1EDBi ${this.circleName(ci)})`, "power", [...sec[0].why, ...sec[x].why], null, key);
+              this.len.add(this.powRow(P4, A, B, Cc, D2), f);
+              changed = true;
+            }
+          }
+        }
+        for (const set of cand.lines) for (const P4 of set) {
+          for (let i = 0; i < this.circles.length; i++) for (let j = i + 1; j < this.circles.length; j++) {
+            const C1 = this.circles[i], C2 = this.circles[j];
+            if (!C1.alive || C1.rep !== i || !C2.alive || C2.rep !== j || C1.pts.has(P4) || C2.pts.has(P4)) continue;
+            const common = set.filter((q) => q !== P4 && C1.pts.has(q) && C2.pts.has(q));
+            if (common.length < 2) continue;
+            const [W, Z] = common;
+            const li = this.lineThrough(W, Z);
+            if (li !== null && this.lines[this.lineRoot(li)].pts.has(P4)) continue;
+            const s1 = this.secants(P4, i), s2 = this.secants(P4, j);
+            let uses = null;
+            for (const a of s1) {
+              for (const b of s2) {
+                uses = this.len.implies(this.powRow(P4, a.pts[0], a.pts[1], b.pts[0], b.pts[1]));
+                if (uses) break;
+              }
+              if (uses) break;
+            }
+            if (!uses) continue;
+            const f = this.fact("col", `${this.name(P4)} c\xF3 c\xF9ng ph\u01B0\u01A1ng t\xEDch v\u1EDBi ${this.circleName(i)} v\xE0 ${this.circleName(j)} n\xEAn n\u1EB1m tr\xEAn tr\u1EE5c \u0111\u1EB3ng ph\u01B0\u01A1ng ${this.name(W)}${this.name(Z)}`, "radical-axis", uses);
+            let L = this.lineThrough(W, Z);
+            if (L === null) {
+              L = this.newLine([], []);
+              this.addToLine(L, W, f);
+              this.addToLine(L, Z, f);
+            }
+            this.addToLine(L, P4, f);
+            changed = true;
+          }
+        }
+        for (const set of cand.lines) {
+          const [A, B] = set;
+          for (const C2 of set.slice(2)) {
+            if (this.lineThrough(A, B) !== null && this.lineThrough(A, C2) !== null && this.lineRoot(this.lineThrough(A, B)) === this.lineRoot(this.lineThrough(A, C2))) continue;
+            const uses = this.impliesCollinear(A, B, C2);
+            if (!uses) continue;
+            const f = this.fact("col", `${this.ptsName([A, B, C2])} th\u1EB3ng h\xE0ng`, "angle-collinear", uses, { pts: [A, B, C2] });
+            let li = this.lineThrough(A, B);
+            if (li === null) {
+              li = this.newLine([], []);
+              this.addToLine(li, A, f);
+              this.addToLine(li, B, f);
+            }
+            this.addToLine(li, C2, f);
+            changed = true;
+          }
+        }
+        for (const set of cand.circles) {
+          let ci = this.circles.findIndex((C2) => C2.alive && C2.rep === this.circles.indexOf(C2) && set.filter((p) => C2.pts.has(p)).length >= 3);
+          if (ci >= 0 && set.every((p) => this.circles[ci].pts.has(p))) continue;
+          const [A, B, C3] = ci >= 0 ? set.filter((p) => this.circles[ci].pts.has(p)) : set;
+          for (const D2 of set) {
+            if ([A, B, C3].includes(D2) || ci >= 0 && this.circles[ci].pts.has(D2)) continue;
+            const uses = this.impliesCyclic(A, B, C3, D2) || this.impliesCyclicPow(A, B, C3, D2);
+            if (!uses) continue;
+            const f = this.fact("cyc", `${this.ptsName([A, B, C3, D2])} c\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n`, "angle-concyclic", uses, { pts: [A, B, C3, D2], seg: [A, B], at: [C3, D2] });
+            if (ci < 0) {
+              ci = this.newCircle([]);
+              for (const p of [A, B, C3]) this.addToCircle(ci, p, f);
+            }
+            this.addToCircle(ci, D2, f);
+            changed = true;
+          }
+        }
+        for (const [X, A, B] of cand.iso) {
+          const keyL = `isoL:${X}:${pairKey(A, B)}`, keyA = `isoA:${X}:${pairKey(A, B)}`;
+          const lenRow = [["S" + pairKey(X, A), 1], ["S" + pairKey(X, B), -1]];
+          const angRow = [[this.dirAB(A, X), 1], [this.dirAB(B, X), 1], [this.dirAB(A, B), -2]];
+          if (Math.abs(cross(sub(this.V(A), this.V(X)), sub(this.V(B), this.V(X)))) < this.e * this.scale) continue;
+          if (!this.factKey.has(keyA)) {
+            const u = this.len.implies(lenRow);
+            if (u) {
+              const f = this.fact("ang", `Tam gi\xE1c ${this.name(X)}${this.name(A)}${this.name(B)} c\xE2n t\u1EA1i ${this.name(X)} n\xEAn \u2220${this.name(X)}${this.name(A)}${this.name(B)} = \u2220${this.name(X)}${this.name(B)}${this.name(A)}`, "isosceles-angle", u, null, keyA);
+              this.ang.add(angRow, f);
+              changed = true;
+            }
+          }
+          if (!this.factKey.has(keyL) && !this.factKey.has(keyA)) {
+            const u = this.ang.implies(angRow);
+            if (u) {
+              const f = this.fact("len", `\u2220${this.name(X)}${this.name(A)}${this.name(B)} = \u2220${this.name(X)}${this.name(B)}${this.name(A)} n\xEAn ${this.name(X)}${this.name(A)} = ${this.name(X)}${this.name(B)}`, "angle-isosceles", u, null, keyL);
+              this.len.add(lenRow, f);
+              changed = true;
+            }
+          }
+        }
+        if (!changed) break;
+      }
+      return this;
+    }
+    // ---------- chứng minh một nhận định (check.js) ----------
+    prove(claim) {
+      const ids = claim.ids;
+      const ex = (uses) => uses ? { status: "proved", uses } : { status: "unproved" };
+      const lineVar = (id) => {
+        const i = this.lineOfObj(id);
+        return i === null ? null : this.dirLine(i);
+      };
+      switch (claim.type) {
+        case "collinear": {
+          const [A, B, C2] = ids;
+          const i = this.lineThrough(A, B);
+          if (i !== null && this.lines[this.lineRoot(i)].pts.has(C2)) {
+            const L = this.lines[this.lineRoot(i)];
+            return { status: "proved", uses: [A, B, C2].map((p) => L.why.get(p)).filter((x) => x !== void 0), known: true };
+          }
+          return ex(this.impliesCollinear(A, B, C2));
+        }
+        case "concyclic": {
+          const [A, B, C2, D2] = ids;
+          const K0 = this.circles.find((K) => K.alive && ids.every((p) => K.pts.has(p)));
+          if (K0) return { status: "proved", uses: ids.map((p) => K0.why.get(p)).filter((x) => x !== void 0), known: true };
+          return ex(this.impliesCyclic(A, B, C2, D2));
+        }
+        case "on_line": {
+          const [X, l] = ids;
+          const li = this.lineOfObj(l);
+          if (li === null) return { status: "unsupported" };
+          const L = this.lines[li];
+          if (L.pts.has(X)) return { status: "proved", uses: [L.why.get(X)].filter((x) => x !== void 0), known: true };
+          for (const Q of [...L.pts].filter((p) => p !== X)) {
+            const u = this.ang.implies([[this.dirAB(X, Q), 1], [this.dirLine(li), -1]]);
+            if (u) return { status: "proved", uses: u };
+          }
+          return { status: "unproved" };
+        }
+        case "on_circle": {
+          const [X, c] = ids;
+          const ci = this.circleOfObj(c);
+          if (ci === null) return { status: "unsupported" };
+          const K = this.circles[ci];
+          if (K.pts.has(X)) return { status: "proved", uses: [K.why.get(X)].filter((x) => x !== void 0), known: true };
+          const pts = [...K.pts].filter((p) => p !== X);
+          for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) for (let m = j + 1; m < pts.length; m++) {
+            const u = this.impliesCyclic(pts[i], pts[j], pts[m], X);
+            if (u) return { status: "proved", uses: u };
+          }
+          if (K.center && pts.length) return ex(this.len.implies([["S" + pairKey(K.center, X), 1], ["S" + pairKey(K.center, pts[0]), -1]]));
+          return { status: "unproved" };
+        }
+        case "parallel":
+        case "perpendicular": {
+          const [a, b] = ids.map(lineVar);
+          if (!a || !b) return { status: "unsupported" };
+          return ex(this.ang.implies([[a, 1], [b, -1]]));
+        }
+        case "equal_angle":
+        case "sup_angle": {
+          const [p1, p2, p3, q1, q2, q3] = ids;
+          const sg = this.signOfEq(this.dang(p1, p2, p3), this.dang(q1, q2, q3));
+          return ex(this.ang.implies(this.angleRow(this.dirAB(p2, p1), this.dirAB(p2, p3), this.dirAB(q2, q1), this.dirAB(q2, q3), sg)));
+        }
+        case "equal_len": {
+          const [A, B, C2, D2] = ids;
+          return ex(this.len.implies([["S" + pairKey(A, B), 1], ["S" + pairKey(C2, D2), -1]]));
+        }
+        case "tangent": {
+          const [l, c] = ids;
+          const li = this.lineOfObj(l), ci = this.circleOfObj(c);
+          if (li === null || ci === null || this.k.get(l) !== "line") return { status: "unsupported" };
+          const K = this.circles[ci];
+          const T5 = [...this.lines[li].pts].find((p) => K.pts.has(p));
+          if (!T5) return { status: "unsupported" };
+          const others = [...K.pts].filter((p) => p !== T5);
+          if (others.length < 2) return { status: "unsupported" };
+          const [A, B] = others;
+          return ex(this.ang.implies([[this.dirAB(T5, A), 1], [this.dirLine(li), -1], [this.dirAB(B, A), -1], [this.dirAB(B, T5), 1]]));
+        }
+        default:
+          return { status: "unsupported" };
+      }
+    }
+    /** Các bước chứng minh (sự kiện suy ra, theo thứ tự dùng) từ danh sách lý do – để hiển thị. */
+    explain(uses, maxSteps = 40) {
+      const seen = /* @__PURE__ */ new Set(), order = [];
+      const visit = (id) => {
+        if (seen.has(id) || order.length > maxSteps) return;
+        seen.add(id);
+        const f = this.facts[id];
+        for (const u of f.uses) visit(u);
+        order.push(f);
+      };
+      for (const u of uses) visit(u);
+      const premises = order.filter((f) => f.rule === "premise");
+      const derived = order.filter((f) => f.rule !== "premise" && f.rule !== "concyclic-angle");
+      const uniq = (arr) => arr.filter((x, i) => arr.findIndex((y) => y.text === x.text) === i);
+      return { premises: [...new Set(premises.map((f) => f.text))], steps: uniq(derived).map((f) => ({ text: f.text, rule: f.rule })) };
+    }
+  };
+
+  // src/explore/match.js
+  var TOL3 = 1e-7;
+  function scaleOf(vals) {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const v of vals.values()) if (v && v.kind === "point") {
+      x1 = Math.min(x1, v.x);
+      x2 = Math.max(x2, v.x);
+      y1 = Math.min(y1, v.y);
+      y2 = Math.max(y2, v.y);
+    }
+    const s = Math.hypot(x2 - x1, y2 - y1);
+    return Number.isFinite(s) && s > 0 ? s : 1;
+  }
+  function onCurve2(P4, c, e) {
+    if (!P4 || !c) return false;
+    if (c.kind === "line") return distPointLine(P4, c) < e;
+    if (c.kind === "circle") return Math.abs(dist(P4, c.c) - c.r) < e;
+    return false;
+  }
+  function sameCurve(a, b, e) {
+    if (!a || !b || a.kind !== b.kind) return false;
+    if (a.kind === "line") return Math.abs(cross(unit(a.d), unit(b.d))) < e && distPointLine(b.p, a) < e;
+    return dist(a.c, b.c) < e && Math.abs(a.r - b.r) < e;
+  }
+  function matchContext(doc2, vals) {
+    const k = kinds(doc2);
+    const pts = doc2.steps.filter((s) => k.get(s.id) === "point" && vals.get(s.id)).map((s) => s.id);
+    const scale = scaleOf(vals);
+    const e = TOL3 * scale;
+    const ptsOn = (cid) => pts.filter((p) => onCurve2(vals.get(p), vals.get(cid), e));
+    return { doc: doc2, vals, k, pts, e, ptsOn };
+  }
+  function assertionsOf(ctx, rel2) {
+    const { k } = ctx;
+    const t2 = rel2.type;
+    if (t2 === "collinear") return [{ on: "line", pts: new Set(rel2.ids) }];
+    if (t2 === "concyclic") return [{ on: "circle", pts: new Set(rel2.ids) }];
+    if (t2 === "on_line" || t2 === "on_circle") return [{ on: t2 === "on_line" ? "line" : "circle", pts: /* @__PURE__ */ new Set([...rel2.ids.slice(1), ...ctx.ptsOn(rel2.ids[0])]), curve: rel2.ids[0] }];
+    if (t2 === "coincide") return [{ same: new Set(rel2.ids) }];
+    if (t2 === "concurrent" && rel2.ids.every((id) => k.get(id))) return [{ curves: "concurrent", ids: rel2.ids }];
+    if (["parallel", "perpendicular", "tangent", "same_line", "same_circle"].includes(t2)) return [{ curves: t2, ids: rel2.ids }];
+    if (t2 === "equal_len") return [{ segs: rel2.segs }];
+    if (t2 === "equal_angle") return [{ angles: rel2.angles }];
+    return [];
+  }
+  var segKey = ([a, b]) => a < b ? a + "|" + b : b + "|" + a;
+  function relationImplies(ctx, rel2, claim) {
+    const { vals, e } = ctx;
+    const ids = claim.ids;
+    const V = (id) => vals.get(id);
+    const curveIn = (cid, list) => list.some((x) => sameCurve(V(cid), V(x), e));
+    for (const a of assertionsOf(ctx, rel2)) {
+      switch (claim.type) {
+        case "collinear":
+          if (a.on === "line" && ids.every((p) => a.pts.has(p))) return true;
+          break;
+        case "concyclic":
+          if (a.on === "circle" && ids.every((p) => a.pts.has(p))) return true;
+          break;
+        case "on_line":
+        case "on_circle": {
+          const want = claim.type === "on_line" ? "line" : "circle";
+          if (a.on !== want || !a.pts.has(ids[0])) break;
+          const onC = [...a.pts].filter((p) => p !== ids[0] && onCurve2(V(p), V(ids[1]), e));
+          if (onC.length >= (want === "line" ? 2 : 3) || a.curve && sameCurve(V(a.curve), V(ids[1]), e)) return true;
+          break;
+        }
+        case "coincide":
+          if (a.same && ids.every((p) => a.same.has(p))) return true;
+          break;
+        case "parallel":
+        case "perpendicular":
+        case "tangent":
+        case "same_line":
+        case "same_circle":
+          if (a.curves === claim.type && ids.every((id) => curveIn(id, a.ids))) return true;
+          break;
+        case "concurrent":
+          if (a.curves === "concurrent" && ids.every((id) => curveIn(id, a.ids))) return true;
+          break;
+        case "equal_len": {
+          if (!a.segs) break;
+          const keys = new Set(a.segs.map(segKey));
+          if (keys.has(segKey([ids[0], ids[1]])) && keys.has(segKey([ids[2], ids[3]]))) return true;
+          break;
+        }
+        case "equal_angle":
+        case "sup_angle": {
+          if (!a.angles) break;
+          const has = (A, B, C2) => a.angles.some(([x, y, z]) => y === B && (x === A && z === C2 || x === C2 && z === A));
+          if (has(ids[0], ids[1], ids[2]) && has(ids[3], ids[4], ids[5])) return true;
+          break;
+        }
+        default:
+          break;
+      }
+    }
+    return false;
+  }
+
+  // src/explore/discover.js
+  var BASE = { tangent: 6, concurrent: 5, concyclic: 5, on_circle: 5, collinear: 5, on_line: 3.5, perpendicular: 3, parallel: 3, coincide: 3, same_line: 3, same_circle: 3, equal_len: 3.5, equal_angle: 3 };
+  function claimsOf(ctx, rel2) {
+    const t2 = rel2.type;
+    if (t2 === "collinear") return rel2.ids.slice(2).map((x) => ({ type: "collinear", ids: [rel2.ids[0], rel2.ids[1], x] }));
+    if (t2 === "concyclic") return rel2.ids.slice(3).map((x) => ({ type: "concyclic", ids: [rel2.ids[0], rel2.ids[1], rel2.ids[2], x] }));
+    if (t2 === "on_line" || t2 === "on_circle") return rel2.ids.slice(1).map((x) => ({ type: t2, ids: [x, rel2.ids[0]] }));
+    if (t2 === "parallel" || t2 === "perpendicular") return [{ type: t2, ids: rel2.ids }];
+    if (t2 === "tangent" && ctx.k.get(rel2.ids[0]) === "line") return [{ type: "tangent", ids: rel2.ids }];
+    if (t2 === "equal_len") return rel2.segs.slice(1).map((s) => ({ type: "equal_len", ids: [...rel2.segs[0], ...s] }));
+    if (t2 === "equal_angle") return rel2.angles.slice(1).map((a) => ({ type: "equal_angle", ids: [...rel2.angles[0], ...a] }));
+    return [];
+  }
+  function quantities(doc2, samples, pts, D0, { maxLen = 10, maxAng = 10, repOf = (x) => x } = {}) {
+    const nm3 = (id) => stepById(doc2, id)?.name || "?";
+    pts = [...new Set(pts.map(repOf))];
+    const out = [];
+    const scales = samples.map((v) => figureScale(v, pts));
+    const segs = [];
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) segs.push([pts[i], pts[j]]);
+    const byLen = /* @__PURE__ */ new Map();
+    for (const s of segs) {
+      const key = samples.map((v, t2) => {
+        const a = v.get(s[0]), b = v.get(s[1]);
+        return a && b ? Math.round(dist(a, b) / scales[t2] * 1e6) : "x";
+      }).join(",");
+      if (key.includes("x") || key.split(",").some((x) => +x < 10)) continue;
+      if (!byLen.has(key)) byLen.set(key, []);
+      byLen.get(key).push(s);
+    }
+    let nLen = 0;
+    for (const cls of byLen.values()) {
+      if (cls.length < 2 || cls.length > 8) continue;
+      const fresh = cls.filter((s, i) => i === 0 || !D0.len.implies([["S" + key2(cls[0]), 1], ["S" + key2(s), -1]]));
+      if (fresh.length < 2) continue;
+      const common = cls.every((s2) => s2.includes(cls[0][0])) ? cls[0][0] : cls.every((s2) => s2.includes(cls[0][1])) ? cls[0][1] : null;
+      const text2 = common && cls.length >= 3 ? `${nm3(common)} c\xE1ch \u0111\u1EC1u ${cls.map((s2) => nm3(s2[0] === common ? s2[1] : s2[0])).join(", ")} (${nm3(common)} l\xE0 t\xE2m \u0111\u01B0\u1EDDng tr\xF2n qua c\xE1c \u0111i\u1EC3m \u0111\xF3)` : cls.map(([a, b]) => nm3(a) + nm3(b)).join(" = ");
+      out.push({ type: "equal_len", segs: cls, ids: [...new Set(cls.flat())], text: text2, center: common && cls.length >= 3 ? common : null });
+      if (++nLen >= maxLen) break;
+    }
+    const angs = [];
+    const lim = Math.min(pts.length, 22);
+    for (let b = 0; b < lim; b++) for (let a = 0; a < lim; a++) for (let c = a + 1; c < lim; c++) {
+      if (a === b || c === b) continue;
+      angs.push([pts[a], pts[b], pts[c]]);
+    }
+    const byAng = /* @__PURE__ */ new Map();
+    for (const A of angs) {
+      let bad = false;
+      const vals = samples.map((v) => {
+        const x = directedAngle(v.get(A[0]), v.get(A[1]), v.get(A[2]));
+        if (x == null) {
+          bad = true;
+          return 0;
+        }
+        return Math.abs(x);
+      });
+      if (bad || vals.some((x) => x < 2 || x > 178 || Math.abs(x - 90) < 0.5 || Math.abs(x - 60) < 1e-6)) continue;
+      const key = vals.map((x) => Math.round(x * 1e5)).join(",");
+      if (!byAng.has(key)) byAng.set(key, []);
+      byAng.get(key).push(A);
+    }
+    let nAng = 0;
+    const classes = [...byAng.values()].filter((c) => c.length >= 2 && c.length <= 10);
+    for (const cls of classes) {
+      const reps = [];
+      const rayKey = (A) => {
+        const v0 = samples[0];
+        const dir = (P4) => Math.round(Math.atan2(v0.get(P4).y - v0.get(A[1]).y, v0.get(P4).x - v0.get(A[1]).x) * 180 / Math.PI * 1e4);
+        return A[1] + ":" + [dir(A[0]), dir(A[2])].sort().join(",");
+      };
+      const seenRay = /* @__PURE__ */ new Set();
+      for (const A of cls) {
+        const rk = rayKey(A);
+        if (seenRay.has(rk)) continue;
+        seenRay.add(rk);
+        const same = reps.find((R) => D0.prove({ type: "equal_angle", ids: [...R, ...A] }).status === "proved");
+        if (!same) reps.push(A);
+      }
+      if (reps.length < 2) continue;
+      out.push({ type: "equal_angle", angles: reps, ids: [...new Set(reps.flat())], text: reps.map((A) => "\u2220" + A.map(nm3).join("")).join(" = ") });
+      if (++nAng >= maxAng) break;
+    }
+    return out;
+  }
+  var key2 = ([a, b]) => a < b ? `${a}|${b}` : `${b}|${a}`;
+  function restate(doc2, ctx, rel2) {
+    const nm3 = (id) => stepById(doc2, id)?.name || "?";
+    if (rel2.type !== "on_line" && rel2.type !== "on_circle") return rel2;
+    const cid = rel2.ids[0];
+    const all = [.../* @__PURE__ */ new Set([...ctx.ptsOn(cid), ...rel2.ids.slice(1)])].sort((a, b) => doc2.steps.findIndex((s) => s.id === a) - doc2.steps.findIndex((s) => s.id === b));
+    const cname = stepById(doc2, cid)?.name;
+    if (rel2.type === "on_circle" && all.length >= 4) return { ...rel2, text: `${all.map(nm3).join(", ")} c\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n${cname ? ` (${cname})` : ""}`, allPts: all };
+    if (rel2.type === "on_line" && all.length >= 3) return { ...rel2, text: `${all.map(nm3).join(", ")} th\u1EB3ng h\xE0ng${cname ? ` (c\xF9ng n\u1EB1m tr\xEAn ${describe(doc2, cid)})` : ""}`, allPts: all };
+    return rel2;
+  }
+  function discover(doc2, { goal = null, explore: run3 = explore, maxRounds = 6 } = {}) {
+    const t0 = Date.now();
+    const vals = evaluate(doc2);
+    const k = kinds(doc2);
+    const base2 = run3(doc2);
+    const ctx = matchContext(doc2, vals);
+    const D0 = new Deducer(doc2, { values: vals, maxRounds: 0 }).run();
+    const D2 = new Deducer(doc2, { values: vals, maxRounds }).run();
+    const pts = doc2.steps.filter((s) => k.get(s.id) === "point" && vals.get(s.id) && !s.hidden).map((s) => s.id).slice(0, 40);
+    const S2 = makeSampler(doc2, {});
+    const rand = rng(4242);
+    const samples = [vals];
+    for (let t2 = 0; t2 < 40 && samples.length < 8; t2++) {
+      const smp = S2.sample(rand);
+      if (!smp.why) samples.push(smp.vals);
+    }
+    const repMap = /* @__PURE__ */ new Map();
+    for (const r of base2.relations) if (r.type === "coincide") for (const id of r.ids.slice(1)) repMap.set(id, r.ids[0]);
+    const rels = [...base2.relations.map((r) => restate(doc2, ctx, r)), ...quantities(doc2, samples, pts, D0, { repOf: (x) => repMap.get(x) || x })];
+    const order = new Map(doc2.steps.map((s2, i) => [s2.id, i / Math.max(1, doc2.steps.length - 1)]));
+    const near = /* @__PURE__ */ new Set();
+    if (goal) for (const id of goal.ids) {
+      near.add(id);
+      for (const a of stepById(doc2, id)?.args || []) near.add(a);
+    }
+    for (const r of rels) {
+      const cl = claimsOf(ctx, r);
+      let status = cl.length ? "trivial" : "unknown";
+      let uses = [];
+      for (const c of cl) {
+        if (D0.prove(c).status === "proved") continue;
+        const p = D2.prove(c);
+        if (p.status === "proved") {
+          if (status === "trivial") status = "proved";
+          uses.push(...p.uses || []);
+        } else {
+          status = "deep";
+        }
+      }
+      r.status = status;
+      r.proof = status === "proved" ? D2.explain([...new Set(uses)]) : null;
+      r.isGoal = goal ? relationImplies(ctx, r, goal) : false;
+      r.near = goal ? (r.ids || []).filter((id) => near.has(id)).length : 0;
+      const b = BASE[r.type] ?? 3;
+      const minPts = { collinear: 3, concyclic: 4, on_line: 2, on_circle: 2 }[r.type];
+      const npts = r.allPts ? r.allPts.length : r.ids.length;
+      const size = minPts ? Math.max(0, npts - (r.type.startsWith("on_") ? minPts + 1 : minPts)) * 0.8 : 0;
+      const late = Math.max(...(r.ids || []).map((id) => order.get(id) ?? 0));
+      r.score = b * (status === "trivial" ? 0.3 : status === "deep" ? 1.2 : 1) + size + late * 2.5 + (r.isGoal ? 50 : 0) + r.near * 2;
+    }
+    rels.sort((a, b) => b.score - a.score);
+    let goalInfo = null;
+    if (goal) {
+      const chk = checkClaim(doc2, goal, { samples: 40 });
+      const p = D2.prove(goal);
+      goalInfo = {
+        claim: goal,
+        text: claimText(doc2, goal),
+        verdict: chk.verdict,
+        check: chk,
+        proved: p.status === "proved",
+        proof: p.status === "proved" ? D2.explain(p.uses || []) : null,
+        status: p.status
+      };
+    }
+    return { relations: rels, goal: goalInfo, stats: { ...base2.stats, ms: Date.now() - t0, quantities: rels.filter((r) => r.type === "equal_len" || r.type === "equal_angle").length } };
+  }
+
+  // src/explore/aux.js
+  var nm2 = (doc2, id) => stepById(doc2, id)?.name || "?";
+  var cv = (doc2, id) => {
+    const d = describe(doc2, id);
+    return d && d !== id ? d : nm2(doc2, id);
+  };
+  function focusPoints(doc2, ids, k) {
+    const out = /* @__PURE__ */ new Set();
+    const add2 = (id, depth) => {
+      const s = stepById(doc2, id);
+      if (!s) return;
+      if (k.get(id) === "point") out.add(id);
+      if (depth > 0) for (const a of s.args) add2(a, depth - 1);
+    };
+    for (const id of ids) add2(id, 2);
+    return [...out];
+  }
+  function auxCandidates(doc2, focusIds = []) {
+    const k = kinds(doc2);
+    const vals = evaluate(doc2);
+    const pts = doc2.steps.filter((s) => k.get(s.id) === "point" && vals.get(s.id)).map((s) => s.id);
+    const lines = doc2.steps.filter((s) => k.get(s.id) === "line" && vals.get(s.id) && !s.hidden).map((s) => s.id);
+    const circles = doc2.steps.filter((s) => k.get(s.id) === "circle" && vals.get(s.id) && !s.hidden).map((s) => s.id);
+    const xs = pts.map((p) => vals.get(p));
+    const scale = Math.max(1e-9, Math.hypot(Math.max(...xs.map((p) => p.x)) - Math.min(...xs.map((p) => p.x)), Math.max(...xs.map((p) => p.y)) - Math.min(...xs.map((p) => p.y))));
+    const e = 1e-6 * scale;
+    const exists = (P4) => P4 && pts.some((q) => dist(vals.get(q), P4) < e);
+    const near = (P4) => P4 && Math.hypot(P4.x - xs[0].x, P4.y - xs[0].y) < 6 * scale;
+    const focus = focusPoints(doc2, focusIds, k);
+    const fset = new Set(focus);
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    const push = (label, specs, P4, prio = 0) => {
+      if (P4 && (exists(P4) || !near(P4))) return;
+      const key = P4 ? `${Math.round(P4.x / e)}:${Math.round(P4.y / e)}` : label;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ label, specs, prio });
+    };
+    const touches = (ids) => ids.filter((id) => fset.has(id) || focusIds.includes(id)).length;
+    const curves = [...lines, ...circles];
+    for (let i = 0; i < curves.length; i++) for (let j = i + 1; j < curves.length; j++) {
+      const a = curves[i], b = curves[j];
+      const roots = intersect(vals.get(a), vals.get(b));
+      roots.forEach((R, w) => {
+        if (exists(R)) return;
+        const other = roots.length === 2 ? pts.find((q) => dist(vals.get(q), roots[1 - w]) < e) : null;
+        const specs = other ? [{ type: "intersection_other", args: [a, b, other] }] : [{ type: "intersection", args: [a, b], params: { which: w } }];
+        push(`giao \u0111i\u1EC3m ${roots.length === 2 && other ? "th\u1EE9 hai " : ""}c\u1EE7a ${cv(doc2, a)} v\xE0 ${cv(doc2, b)}`, specs, R, 3 + touches([a, b]));
+      });
+    }
+    const F = focus.length ? focus : pts.slice(0, 8);
+    for (let i = 0; i < F.length; i++) for (let j = i + 1; j < F.length; j++) {
+      const M = mid(vals.get(F[i]), vals.get(F[j]));
+      push(`trung \u0111i\u1EC3m ${nm2(doc2, F[i])}${nm2(doc2, F[j])}`, [{ type: "midpoint", args: [F[i], F[j]] }], M, 2);
+    }
+    for (const p of F) for (const l of lines) {
+      const L = vals.get(l), P4 = vals.get(p);
+      if (distPointLine(P4, L) < e) continue;
+      const u = unit(L.d);
+      const Fp = add(L.p, mul(u, dot(sub(P4, L.p), u)));
+      push(`ch\xE2n \u0111\u01B0\u1EDDng vu\xF4ng g\xF3c t\u1EEB ${nm2(doc2, p)} xu\u1ED1ng ${cv(doc2, l)}`, [{ type: "projection", args: [p, l] }], Fp, 2);
+    }
+    for (const c of circles) {
+      const C2 = vals.get(c);
+      const center = pts.find((q) => dist(vals.get(q), C2.c) < e);
+      if (!center) continue;
+      for (const p of pts) {
+        const P4 = vals.get(p);
+        if (Math.abs(dist(P4, C2.c) - C2.r) > e || !(fset.has(p) || !focus.length)) continue;
+        push(`\u0111i\u1EC3m \u0111\u1ED1i t\xE2m c\u1EE7a ${nm2(doc2, p)} tr\xEAn ${cv(doc2, c)}`, [{ type: "reflect", args: [p, center] }], sub(mul(C2.c, 2), P4), 2);
+      }
+    }
+    for (let i = 0; i < F.length; i++) for (let j = i + 1; j < F.length; j++) for (let m = j + 1; m < F.length; m++) {
+      const T5 = [F[i], F[j], F[m]];
+      const [A, B, C2] = T5.map((x) => vals.get(x));
+      if (!triangleOK(A, B, C2)) continue;
+      const tn = T5.map((x) => nm2(doc2, x)).join("");
+      const cc = circleThrough(A, B, C2);
+      const direct = T5.filter((x) => focusIds.includes(x)).length;
+      if (cc && cc.r < 5 * scale) {
+        push(`t\xE2m \u0111\u01B0\u1EDDng tr\xF2n (${tn})`, [{ type: "circumcenter", args: T5 }], cc.c, 1);
+        if (direct >= 2) for (const c of circles) {
+          const roots = intersect(cc, vals.get(c));
+          roots.forEach((R, w) => {
+            if (exists(R)) return;
+            const other = roots.length === 2 ? pts.find((q) => dist(vals.get(q), roots[1 - w]) < e) : null;
+            const specs = [{ type: "circumcircle", args: T5, hidden: true }, other ? { type: "intersection_other", args: ["$0", c, other] } : { type: "intersection", args: ["$0", c], params: { which: w } }];
+            push(`giao \u0111i\u1EC3m c\u1EE7a (${tn}) v\u1EDBi ${cv(doc2, c)}`, specs, R, 1);
+          });
+        }
+      }
+      push(`tr\u1EF1c t\xE2m tam gi\xE1c ${tn}`, [{ type: "orthocenter", args: T5 }], null, 0);
+    }
+    for (let i = 0; i + 3 < Math.min(F.length, 7); i++) {
+      const [A, B, C2, D2] = F.slice(i, i + 4);
+      const l1 = lineThrough(vals.get(A), vals.get(C2)), l2 = lineThrough(vals.get(B), vals.get(D2));
+      const X = intersectLL(l1, l2);
+      if (!X) continue;
+      push(`t\xE2m \u0111\u1ED3ng d\u1EA1ng quay bi\u1EBFn ${nm2(doc2, A)}${nm2(doc2, B)} th\xE0nh ${nm2(doc2, C2)}${nm2(doc2, D2)}`, [
+        { type: "line", args: [A, C2], hidden: true },
+        { type: "line", args: [B, D2], hidden: true },
+        { type: "intersection", args: ["$0", "$1"], hidden: true },
+        { type: "circumcircle", args: ["$2", A, B], hidden: true },
+        { type: "circumcircle", args: ["$2", C2, D2], hidden: true },
+        { type: "intersection_other", args: ["$3", "$4", "$2"] }
+      ], null, 0);
+    }
+    out.sort((a, b) => b.prio - a.prio);
+    return out;
+  }
+  function auxRelations(doc2, X, focus, samples) {
+    const notes = [];
+    const P0 = new Deducer(doc2, { values: samples[0], maxRounds: 0 }).run();
+    const trivial = (ids, circle2) => (circle2 ? P0.circles : P0.lines).some((N) => N.alive && ids.every((q) => N.pts.has(q)));
+    const k = kinds(doc2);
+    const all = (fn) => samples.every((v) => fn(v));
+    const E = (v) => 1e-7 * figureScale(v, focus);
+    const ptsF = focus.filter((p) => p !== X);
+    for (let i = 0; i < ptsF.length; i++) for (let j = i + 1; j < ptsF.length; j++) {
+      const [a, b] = [ptsF[i], ptsF[j]];
+      if (all((v) => {
+        const L = v.get(a) && v.get(b) && lineThrough(v.get(a), v.get(b));
+        return L && v.get(X) && distPointLine(v.get(X), L) < E(v) && dist(v.get(a), v.get(b)) > E(v);
+      }) && !trivial([X, a, b], false)) notes.push(`${nm2(doc2, X)}, ${nm2(doc2, a)}, ${nm2(doc2, b)} th\u1EB3ng h\xE0ng`);
+      for (let m = j + 1; m < ptsF.length; m++) {
+        const c = ptsF[m];
+        if (all((v) => {
+          const C2 = v.get(a) && v.get(b) && v.get(c) && v.get(X) && circleThrough(v.get(a), v.get(b), v.get(c));
+          return C2 && Math.abs(dist(v.get(X), C2.c) - C2.r) < E(v);
+        }) && !trivial([X, a, b, c], true)) notes.push(`${nm2(doc2, X)}, ${nm2(doc2, a)}, ${nm2(doc2, b)}, ${nm2(doc2, c)} \u0111\u1ED3ng vi\xEAn`);
+      }
+    }
+    for (const s of doc2.steps) {
+      if (s.id === X || k.get(s.id) === "point" || k.get(s.id) === "mark" || s.hidden) continue;
+      if (stepById(doc2, X).args.includes(s.id)) continue;
+      if (all((v) => {
+        const c = v.get(s.id), P4 = v.get(X);
+        if (!c || !P4) return false;
+        return c.kind === "line" ? distPointLine(P4, c) < E(v) : Math.abs(dist(P4, c.c) - c.r) < E(v);
+      })) notes.push(`${nm2(doc2, X)} n\u1EB1m tr\xEAn ${s.name || "\u0111\u01B0\u1EDDng"}`);
+    }
+    return notes;
+  }
+  function rankAux(doc2, claim, { budgetMs = 4e3, max = 60, onProgress = null } = {}) {
+    const t0 = Date.now();
+    const cands = auxCandidates(doc2, claim ? claim.ids : []).slice(0, max);
+    const k = kinds(doc2);
+    const focus = focusPoints(doc2, claim ? claim.ids : [], k);
+    const results = [];
+    let i = 0;
+    for (const c of cands) {
+      if (Date.now() - t0 > budgetMs) break;
+      i++;
+      const d = clone(doc2);
+      let ids;
+      try {
+        ids = addSpecs(d, c.specs.map((sp) => ({ ...sp })));
+      } catch {
+        continue;
+      }
+      const main2 = ids[ids.length - 1];
+      const vals = evaluate(d);
+      if (!vals.get(main2)) continue;
+      const st = stepById(d, main2);
+      let proved = false, explain = null;
+      if (claim) {
+        const D2 = new Deducer(d, { values: vals }).run();
+        const r = D2.prove(claim);
+        if (r.status === "proved") {
+          proved = true;
+          explain = D2.explain(r.uses || []);
+        }
+      }
+      const S2 = makeSampler(d, {});
+      const rand = rng(77);
+      const samples = [vals];
+      for (let t2 = 0; t2 < 30 && samples.length < 6; t2++) {
+        const smp = S2.sample(rand);
+        if (!smp.why) samples.push(smp.vals);
+      }
+      const notes = k.get(main2) === "point" || kinds(d).get(main2) === "point" ? auxRelations(d, main2, focus, samples) : [];
+      results.push({ label: c.label, specs: c.specs, name: st.name, proved, explain, notes, score: (proved ? 100 : 0) + notes.length * 3 + c.prio });
+      if (onProgress) onProgress(i, cands.length);
+    }
+    results.sort((a, b) => b.score - a.score);
+    return { results, tried: i, total: cands.length, ms: Date.now() - t0 };
+  }
+
   // src/ui/explorePanel.js
   init_dialog();
   var TYPE_LABEL = {
@@ -25091,78 +26647,321 @@ ${tk.v}
     parallel: "Song song",
     perpendicular: "Vu\xF4ng g\xF3c",
     tangent: "Ti\u1EBFp x\xFAc",
-    on_circle: "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng tr\xF2n",
-    on_line: "\u0110i\u1EC3m tr\xEAn \u0111\u01B0\u1EDDng th\u1EB3ng",
+    on_circle: "\u0110\u1ED3ng vi\xEAn",
+    on_line: "Th\u1EB3ng h\xE0ng",
     coincide: "Tr\xF9ng nhau",
     same_line: "Tr\xF9ng nhau",
-    same_circle: "Tr\xF9ng nhau"
+    same_circle: "Tr\xF9ng nhau",
+    equal_len: "\u0110o\u1EA1n b\u1EB1ng nhau",
+    equal_angle: "G\xF3c b\u1EB1ng nhau"
   };
-  var esc7 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  var STATUS2 = {
+    deep: ["s\xE2u", 'Ch\u01B0a ch\u1EE9ng minh \u0111\u01B0\u1EE3c b\u1EB1ng bi\u1EBFn \u0111\u1ED5i g\xF3c / \u0111\u1ED9 d\xE0i / ph\u01B0\u01A1ng t\xEDch \u2013 quan h\u1EC7 "s\xE2u", \u0111\xE1ng ch\xFA \xFD'],
+    proved: ["ch\u1EE9ng minh \u0111\u01B0\u1EE3c", 'B\u1ED9 m\xE1y suy lu\u1EADn ch\u1EE9ng minh \u0111\u01B0\u1EE3c (b\u1EA5m "V\xEC sao?")'],
+    trivial: ["hi\u1EC3n nhi\xEAn", "Suy ra ngay t\u1EEB c\xE1ch d\u1EF1ng"],
+    unknown: ["", ""]
+  };
+  var esc7 = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  var fmt2 = (s) => esc7(s).replace(/([A-Za-zα-ω]'*)_\{([^}]+)\}/g, "$1<sub>$2</sub>").replace(/([A-Za-zα-ω]'*)_([A-Za-z0-9])/g, "$1<sub>$2</sub>");
   function setupExplore(app) {
     const pane = document.getElementById("tab-explore");
-    let result = null;
-    let stale = false;
-    let active = -1;
+    let result = null, stale = false, active = -1, busy = false;
+    let goal = null;
+    let goalInput = "";
+    let aux = null;
+    let showTrivial = false;
+    const openWhy = /* @__PURE__ */ new Set();
+    let auto = null;
+    const proofHTML = (p) => !p ? "" : `<div class="kp-proof">${p.premises.length ? `<div class="kp-prem"><b>T\u1EEB gi\u1EA3 thi\u1EBFt:</b> ${p.premises.map(fmt2).join("; ")}</div>` : ""}<ol>${p.steps.map((s) => `<li>${fmt2(s.text)}</li>`).join("")}</ol></div>`;
     const render3 = () => {
+      const rels = result ? result.relations.filter((r) => showTrivial || r.status !== "trivial" || r.isGoal) : [];
       let html = `<div class="explore-head">
-      <button id="btn-run-explore" class="primary">\u{1F50D} Kh\xE1m ph\xE1 h\xECnh n\xE0y</button>
-      <div class="note">X\xEA d\u1ECBch ng\u1EABu nhi\xEAn c\xE1c \u0111i\u1EC3m t\u1EF1 do nhi\u1EC1u l\u1EA7n, ch\u1EC9 gi\u1EEF quan h\u1EC7 \u0111\xFAng tr\xEAn <b>m\u1ECDi</b> m\u1EABu, b\u1ECF quan h\u1EC7 hi\u1EC3n nhi\xEAn t\u1EEB c\xE1ch d\u1EF1ng.</div>
+      <div class="kp-goal-row"><input id="kp-goal" type="text" placeholder="M\u1EE5c ti\xEAu (tu\u1EF3 ch\u1ECDn), vd: X, Y, H th\u1EB3ng h\xE0ng" value="${esc7(goalInput)}" spellcheck="false">
+        <button id="kp-goal-set" class="mini" title="\u0110\u1EB7t m\u1EE5c ti\xEAu">\u0110\u1EB7t</button></div>
+      <div class="kp-goal-help">G\xF5 nh\u01B0 l\u1EC7nh ki\u1EC3m tra: <i>A, B, C th\u1EB3ng h\xE0ng</i> \xB7 <i>A, B, C, D \u0111\u1ED3ng vi\xEAn</i> \xB7 <i>AB = CD</i> \xB7 <i>g\xF3c ABC = g\xF3c DEF</i> \xB7 <i>d1 vu\xF4ng g\xF3c d2</i>\u2026 ho\u1EB7c ch\u1ECDn \u0111\u1ED1i t\u01B0\u1EE3ng tr\xEAn h\xECnh r\u1ED3i b\u1EA5m <button id="kp-goal-sel" class="linkish">l\u1EA5y t\u1EEB \u0111\u1ED1i t\u01B0\u1EE3ng \u0111ang ch\u1ECDn</button>.</div>
+      <button id="btn-run-explore" class="primary">${busy ? "\u0110ang kh\xE1m ph\xE1\u2026" : goal ? "\u{1F50D} Kh\xE1m ph\xE1 theo m\u1EE5c ti\xEAu" : "\u{1F50D} Kh\xE1m ph\xE1 h\xECnh n\xE0y"}</button>
     </div>`;
+      if (goal && result && result.goal) {
+        const g = result.goal;
+        const ok = g.verdict === "always";
+        html += `<div class="kp-goal ${ok ? "ok" : "bad"}">
+        <div class="kp-goal-title">M\u1EE5c ti\xEAu: <b>${fmt2(g.text)}</b> <button id="kp-goal-clear" class="linkish">b\u1ECF</button></div>
+        <div>${ok ? "\u2713 \u0110\xFAng tr\xEAn m\u1ECDi h\xECnh th\u1EED" : g.verdict === "false" ? "\u2717 Sai tr\xEAn h\xECnh n\xE0y" : g.verdict === "not_always" ? "\u2717 Kh\xF4ng lu\xF4n \u0111\xFAng" : "Kh\xF4ng x\xE1c \u0111\u1ECBnh"}</div>
+        ${ok ? g.proved ? `<div class="kp-proved">\u2713 Ch\u1EE9ng minh \u0111\u01B0\u1EE3c (bi\u1EBFn \u0111\u1ED5i g\xF3c / \u0111\u1ED9 d\xE0i / ph\u01B0\u01A1ng t\xEDch) <button class="mini" id="kp-goal-why">${openWhy.has("goal") ? "\u1EA8n c\xE1c b\u01B0\u1EDBc" : "Xem c\xE1c b\u01B0\u1EDBc"}</button> <button class="mini" id="kp-goal-ins">Ch\xE8n v\xE0o l\u1EDDi gi\u1EA3i</button></div>${openWhy.has("goal") ? proofHTML(g.proof) : ""}` : `<div class="kp-unproved">Ch\u01B0a ch\u1EE9ng minh \u0111\u01B0\u1EE3c t\u1EEB h\xECnh hi\u1EC7n t\u1EA1i. <button class="mini primary" id="kp-aux">${aux && aux.running ? "\u0110ang th\u1EED \u0111i\u1EC3m ph\u1EE5\u2026" : "T\xECm \u0111i\u1EC3m ph\u1EE5"}</button></div>` : ""}
+      </div>`;
+      }
+      if (aux && aux.results) {
+        html += `<div class="kp-aux"><div class="kp-sub">\u0110i\u1EC3m ph\u1EE5 g\u1EE3i \xFD <span class="muted">(${aux.tried}/${aux.total} c\xE1ch, ${aux.ms} ms)</span></div>` + (aux.results.length ? aux.results.slice(0, 8).map((x, i) => `<div class="kp-aux-row" data-aux="${i}">
+          <div><b>${fmt2((x.name ? x.name + " = " : "") + x.label)}</b>${x.proved ? ' <span class="badge ok">\u2192 ch\u1EE9ng minh \u0111\u01B0\u1EE3c m\u1EE5c ti\xEAu</span>' : ""}</div>
+          ${x.notes.length ? `<div class="kp-notes">${x.notes.slice(0, 4).map(fmt2).join(" \xB7 ")}</div>` : ""}
+          <div class="kp-acts"><button class="mini" data-aux-add="${i}">D\u1EF1ng</button>${x.proved ? ` <button class="mini" data-aux-why="${i}">${openWhy.has("aux" + i) ? "\u1EA8n c\xE1c b\u01B0\u1EDBc" : "Xem c\xE1c b\u01B0\u1EDBc"}</button>` : ""}</div>
+          ${openWhy.has("aux" + i) ? proofHTML(x.explain) : ""}
+        </div>`).join("") : '<div class="note">Kh\xF4ng t\xECm \u0111\u01B0\u1EE3c \u0111i\u1EC3m ph\u1EE5 n\xE0o c\xF3 \xEDch.</div>') + "</div>";
+      }
       if (result) {
         const st = result.stats;
-        html += `<div class="explore-stats">${result.relations.length} quan h\u1EC7 \xB7 ${st.samples} m\u1EABu ng\u1EABu nhi\xEAn (${st.attempts} l\u1EA7n th\u1EED) \xB7 ${st.ms} ms${stale ? ' \xB7 <b class="stale">h\xECnh \u0111\xE3 thay \u0111\u1ED5i, h\xE3y kh\xE1m ph\xE1 l\u1EA1i</b>' : ""}</div>`;
-        if (st.samples < 5) html += `<div class="note warn">\xCDt m\u1EABu h\u1EE3p l\u1EC7 \u2013 h\xECnh c\xF3 th\u1EC3 g\u1EA7n suy bi\u1EBFn; k\u1EBFt qu\u1EA3 k\xE9m tin c\u1EADy.</div>`;
-        if (!result.relations.length) html += '<div class="empty">Kh\xF4ng t\xECm th\u1EA5y quan h\u1EC7 n\xE0o ngo\xE0i c\xE1c quan h\u1EC7 hi\u1EC3n nhi\xEAn.</div>';
-        html += '<div class="rel-list">' + result.relations.map((r, i) => `<div class="rel ${i === active ? "active" : ""}" data-i="${i}">
-          <span class="rel-score" title="\u0110i\u1EC3m x\u1EBFp h\u1EA1ng">${r.score}</span>
-          <div class="rel-body"><div class="rel-type">${TYPE_LABEL[r.type] || r.type}</div><div class="rel-text">${esc7(r.text)}</div>${r.note ? `<div class="rel-note">${esc7(r.note)}</div>` : ""}</div>
-        </div>`).join("") + "</div>";
+        const nTriv = result.relations.filter((r) => r.status === "trivial").length;
+        html += `<div class="explore-stats">${rels.length} quan h\u1EC7 \xB7 ${st.samples} m\u1EABu \xB7 ${st.ms} ms${stale ? ' \xB7 <b class="stale">h\xECnh \u0111\xE3 \u0111\u1ED5i, \u0111ang kh\xE1m ph\xE1 l\u1EA1i\u2026</b>' : ""}
+        ${nTriv ? ` \xB7 <label class="kp-triv"><input type="checkbox" id="kp-show-triv" ${showTrivial ? "checked" : ""}> hi\u1EC7n ${nTriv} quan h\u1EC7 hi\u1EC3n nhi\xEAn</label>` : ""}</div>`;
+        if (!rels.length) html += '<div class="empty">Kh\xF4ng t\xECm th\u1EA5y quan h\u1EC7 n\xE0o ngo\xE0i c\xE1c quan h\u1EC7 hi\u1EC3n nhi\xEAn.</div>';
+        html += '<div class="rel-list">' + rels.map((r) => {
+          const i = result.relations.indexOf(r);
+          const [sl, stip] = STATUS2[r.status] || STATUS2.unknown;
+          return `<div class="rel ${i === active ? "active" : ""} ${r.isGoal ? "is-goal" : ""}" data-i="${i}">
+          <div class="rel-body"><div class="rel-type">${TYPE_LABEL[r.type] || r.type}${r.isGoal ? ' <span class="badge goal">m\u1EE5c ti\xEAu</span>' : ""}${sl ? ` <span class="badge st-${r.status}" title="${esc7(stip)}">${sl}</span>` : ""}</div>
+          <div class="rel-text">${fmt2(r.text)}</div>${r.note ? `<div class="rel-note">${esc7(r.note)}</div>` : ""}
+          ${i === active ? `<div class="kp-acts">${r.proof ? `<button class="mini" data-why="${i}">${openWhy.has(i) ? "\u1EA8n" : "V\xEC sao?"}</button>` : ""}<button class="mini" data-goal="${i}">\u0110\u1EB7t l\xE0m m\u1EE5c ti\xEAu</button><button class="mini" data-ins="${i}">Ch\xE8n v\xE0o l\u1EDDi gi\u1EA3i</button></div>` : ""}
+          ${i === active && openWhy.has(i) ? proofHTML(r.proof) : ""}</div>
+        </div>`;
+        }).join("") + "</div>";
       }
       pane.innerHTML = html;
-      pane.querySelector("#btn-run-explore").onclick = run3;
-      pane.querySelectorAll(".rel").forEach((el) => el.onclick = () => select(+el.dataset.i));
+      const q = (s) => pane.querySelector(s);
+      q("#btn-run-explore").onclick = () => run3();
+      const gi = q("#kp-goal");
+      gi.oninput = () => {
+        goalInput = gi.value;
+      };
+      gi.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          setGoalText(gi.value);
+        }
+      };
+      q("#kp-goal-set").onclick = () => setGoalText(gi.value);
+      q("#kp-goal-sel").onclick = goalFromSelection;
+      if (q("#kp-goal-clear")) q("#kp-goal-clear").onclick = () => {
+        goal = null;
+        goalInput = "";
+        aux = null;
+        run3();
+      };
+      if (q("#kp-goal-why")) q("#kp-goal-why").onclick = () => {
+        toggle("goal");
+      };
+      if (q("#kp-goal-ins")) q("#kp-goal-ins").onclick = () => insertProof(result.goal.text, result.goal.proof);
+      if (q("#kp-aux")) q("#kp-aux").onclick = findAux;
+      if (q("#kp-show-triv")) q("#kp-show-triv").onchange = (e) => {
+        showTrivial = e.target.checked;
+        render3();
+      };
+      pane.querySelectorAll(".rel").forEach((el) => el.onclick = (e) => {
+        if (e.target.closest("button")) return;
+        select(+el.dataset.i);
+      });
+      pane.querySelectorAll("[data-why]").forEach((b) => b.onclick = () => toggle(+b.dataset.why));
+      pane.querySelectorAll("[data-goal]").forEach((b) => b.onclick = () => goalFromRelation(result.relations[+b.dataset.goal]));
+      pane.querySelectorAll("[data-ins]").forEach((b) => b.onclick = () => insertRelation(result.relations[+b.dataset.ins]));
+      pane.querySelectorAll("[data-aux-add]").forEach((b) => b.onclick = () => addAux(aux.results[+b.dataset.auxAdd]));
+      pane.querySelectorAll("[data-aux-why]").forEach((b) => b.onclick = () => toggle("aux" + b.dataset.auxWhy));
+      pane.querySelectorAll("[data-aux]").forEach((el) => {
+        el.onmouseenter = () => previewAux(aux.results[+el.dataset.aux]);
+        el.onmouseleave = () => {
+          app.renderer.clearExtra();
+          app.drawRelationOverlay?.();
+        };
+      });
     };
-    const run3 = () => {
-      const btn = pane.querySelector("#btn-run-explore");
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = "\u0110ang kh\xE1m ph\xE1\u2026";
+    const toggle = (k) => {
+      if (openWhy.has(k)) openWhy.delete(k);
+      else openWhy.add(k);
+      render3();
+    };
+    function setGoalText(text2) {
+      text2 = String(text2 || "").trim();
+      if (!text2) {
+        goal = null;
+        aux = null;
+        return run3();
       }
-      app.togglePanel(true);
-      document.querySelector('[data-tab="tab-explore"]').click();
+      const d = clone(app.doc);
+      const r = parseCommand(d, /^ki[eể]m tra/i.test(text2) ? text2 : "ki\u1EC3m tra " + text2);
+      if (!r.ok || r.kind !== "check") return toast(r.error || "Kh\xF4ng hi\u1EC3u m\u1EE5c ti\xEAu \u2013 vd: X, Y, H th\u1EB3ng h\xE0ng");
+      const claim = r.run(d);
+      goal = { claim, doc: d };
+      goalInput = text2.replace(/^ki[eể]m tra\s*/i, "");
+      aux = null;
+      run3();
+    }
+    function goalFromSelection() {
+      const ids = [...app.selection].filter((id) => stepById(app.doc, id));
+      const cl = claimsFor(app.doc, ids);
+      if (!cl.length) return toast("Ch\u1ECDn (theo th\u1EE9 t\u1EF1) c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng c\u1EE7a m\u1EE5c ti\xEAu: 3 \u0111i\u1EC3m (th\u1EB3ng h\xE0ng), 4 \u0111i\u1EC3m (\u0111\u1ED3ng vi\xEAn / AB = CD), 6 \u0111i\u1EC3m (g\xF3c b\u1EB1ng nhau), 2 \u0111\u01B0\u1EDDng (vu\xF4ng g\xF3c / song song)\u2026", 5e3);
+      const c = cl[0];
+      goal = { claim: c, doc: clone(app.doc) };
+      goalInput = claimText(app.doc, c);
+      aux = null;
+      if (cl.length > 1) toast(`\u0110\u1EB7t m\u1EE5c ti\xEAu: ${CLAIMS[c.type].title.toLowerCase()} (c\xE1c \u0111\u1ED1i t\u01B0\u1EE3ng n\xE0y c\xF2n c\xF3 th\u1EC3 l\xE0: ${cl.slice(1).map((x) => CLAIMS[x.type].title.toLowerCase()).join(", ")} \u2013 g\xF5 v\xE0o \xF4 m\u1EE5c ti\xEAu \u0111\u1EC3 \u0111\u1ED5i)`, 5e3);
+      run3();
+    }
+    function goalFromRelation(r) {
+      const cl = relationClaim(r);
+      if (!cl) return toast("Kh\xF4ng \u0111\u1EB7t \u0111\u01B0\u1EE3c quan h\u1EC7 n\xE0y l\xE0m m\u1EE5c ti\xEAu");
+      goal = { claim: cl, doc: clone(app.doc) };
+      goalInput = claimText(app.doc, cl);
+      aux = null;
+      run3();
+    }
+    function run3({ quiet = false } = {}) {
+      if (busy) return;
+      busy = true;
+      if (!quiet) {
+        app.togglePanel(true);
+        document.querySelector('[data-tab="tab-explore"]').click();
+      }
+      render3();
       setTimeout(() => {
         try {
-          result = explore(app.doc);
+          const d = goal ? goal.doc : app.doc;
+          if (goal) syncGoalDoc();
+          result = discover(goal ? goal.doc : d, { goal: goal ? goal.claim : null });
           stale = false;
           active = -1;
           app.setRelation(null);
-          toast(`T\xECm th\u1EA5y ${result.relations.length} quan h\u1EC7`);
+          if (!quiet) toast(`T\xECm th\u1EA5y ${result.relations.filter((r) => r.status !== "trivial").length} quan h\u1EC7${goal ? result.goal.proved ? " \xB7 m\u1EE5c ti\xEAu ch\u1EE9ng minh \u0111\u01B0\u1EE3c" : "" : ""}`);
         } catch (e) {
           console.error(e);
           toast("L\u1ED7i khi kh\xE1m ph\xE1: " + e.message, 5e3);
         }
+        busy = false;
         render3();
       }, 30);
-    };
+    }
+    function syncGoalDoc() {
+      if (!goal) return;
+      const d = clone(app.doc);
+      const r = parseCommand(d, "ki\u1EC3m tra " + goalInput);
+      if (r.ok && r.kind === "check") {
+        goal.claim = r.run(d);
+        goal.doc = d;
+      } else if (goal.claim.ids.every((id) => stepById(app.doc, id))) goal.doc = d;
+    }
+    function findAux() {
+      if (!goal || !result) return;
+      aux = { running: true };
+      render3();
+      setTimeout(() => {
+        try {
+          aux = rankAux(goal.doc, goal.claim, { budgetMs: 6e3 });
+          const good = aux.results.find((x) => x.proved);
+          toast(good ? `D\u1EF1ng th\xEAm ${good.label} th\xEC ch\u1EE9ng minh \u0111\u01B0\u1EE3c m\u1EE5c ti\xEAu` : `\u0110\xE3 th\u1EED ${aux.tried} \u0111i\u1EC3m ph\u1EE5 \u2013 ch\u01B0a c\xE1i n\xE0o gi\xFAp ch\u1EE9ng minh \u0111\u01B0\u1EE3c; xem c\xE1c g\u1EE3i \xFD c\xF3 nhi\u1EC1u quan h\u1EC7 m\u1EDBi`, 4500);
+        } catch (e) {
+          console.error(e);
+          toast("L\u1ED7i khi t\xECm \u0111i\u1EC3m ph\u1EE5: " + e.message);
+          aux = null;
+        }
+        render3();
+      }, 30);
+    }
+    function previewAux(x) {
+      if (!x) return;
+      const d = clone(goal ? goal.doc : app.doc);
+      let ids;
+      try {
+        ids = addSpecs(d, x.specs.map((s) => ({ ...s })));
+      } catch {
+        return;
+      }
+      const v = evaluate(d).get(ids[ids.length - 1]);
+      if (!v || v.kind !== "point") return;
+      app.renderer.addExtra({ type: "point", pts: [() => v], style: { color: "#2563eb", fill: "#bfdbfe", size: 7 } });
+    }
+    function addAux(x) {
+      let ids = [];
+      app.commit((doc2) => {
+        ids = addSpecs(doc2, x.specs.map((s) => ({ ...s })));
+      });
+      const main2 = ids[ids.length - 1];
+      app.selection = new Set(main2 ? [main2] : []);
+      app.refresh();
+      toast(`\u0110\xE3 d\u1EF1ng ${x.label}${main2 ? ` (${stepById(app.doc, main2)?.name})` : ""} \u2013 Ctrl+Z \u0111\u1EC3 b\u1ECF`);
+      aux = null;
+      run3({ quiet: true });
+    }
+    function insertProof(title, proof) {
+      if (!app.textBoxes) return;
+      const lines = [`**${title}.**`];
+      if (proof) {
+        if (proof.premises.length) lines.push(`T\u1EEB gi\u1EA3 thi\u1EBFt: ${proof.premises.join("; ")}.`);
+        for (const s of proof.steps) lines.push(`- ${s.text}`);
+      }
+      app.textBoxes.appendSolution(lines.join("\n"));
+      toast("\u0110\xE3 ch\xE8n v\xE0o khung l\u1EDDi gi\u1EA3i");
+    }
+    function insertRelation(r) {
+      if (!app.textBoxes) return;
+      app.textBoxes.appendSolution(relationLatex(app.doc, r));
+      toast("\u0110\xE3 ch\xE8n v\xE0o khung l\u1EDDi gi\u1EA3i");
+    }
     const select = (i) => {
       active = active === i ? -1 : i;
-      app.setRelation(active >= 0 ? result.relations[active] : null);
+      const r = active >= 0 ? result.relations[active] : null;
+      app.setRelation(r ? { ...r, ids: (r.allPts || r.ids).filter((id) => stepById(app.doc, id)) } : null);
       render3();
     };
     app.on("load", () => {
       result = null;
+      goal = null;
+      goalInput = "";
+      aux = null;
       active = -1;
+      openWhy.clear();
       render3();
     });
     app.on("change", () => {
-      if (result && !stale) {
-        stale = true;
-        render3();
-      }
+      if (!result) return;
+      stale = true;
+      render3();
+      clearTimeout(auto);
+      auto = setTimeout(() => {
+        if (stale && document.getElementById("tab-explore").classList.contains("active") && document.body.classList.contains("panel-open")) run3({ quiet: true });
+      }, 700);
     });
     const top2 = document.getElementById("btn-explore");
-    if (top2) top2.onclick = run3;
+    if (top2) top2.onclick = () => run3();
     render3();
+    return { run: run3, setGoalText };
+  }
+  function relationClaim(r) {
+    const t2 = r.type;
+    if (t2 === "collinear") return { type: "collinear", ids: r.ids.slice(0, 3) };
+    if (t2 === "concyclic") return { type: "concyclic", ids: r.ids.slice(0, 4) };
+    if ((t2 === "on_line" || t2 === "on_circle") && r.ids.length >= 2) return { type: t2, ids: [r.ids[r.ids.length - 1], r.ids[0]] };
+    if (t2 === "parallel" || t2 === "perpendicular" || t2 === "tangent") return { type: t2, ids: r.ids.slice(0, 2) };
+    if (t2 === "equal_len") return { type: "equal_len", ids: [...r.segs[0], ...r.segs[1]] };
+    if (t2 === "equal_angle") return { type: "equal_angle", ids: [...r.angles[0], ...r.angles[1]] };
+    if (t2 === "concurrent") return { type: "concurrent", ids: r.ids.slice(0, 3) };
+    return null;
+  }
+  function relationLatex(doc2, r) {
+    const nm3 = (id) => stepById(doc2, id)?.name || "?";
+    const k = kinds(doc2);
+    const vals = evaluate(doc2);
+    const lineName = (id) => {
+      if (k.get(id) !== "line") return nm3(id);
+      const v = vals.get(id);
+      const on = doc2.steps.filter((s) => k.get(s.id) === "point" && vals.get(s.id) && v && distPointLine(vals.get(s.id), v) < 1e-7).slice(0, 2);
+      return on.length === 2 ? on.map((s) => s.name).join("") : nm3(id);
+    };
+    const list = (ids) => ids.map(nm3).join(", ");
+    switch (r.type) {
+      case "collinear":
+      case "on_line":
+        return `Ta c\xF3 $${list(r.allPts || (r.type === "on_line" ? r.ids.slice(1) : r.ids))}$ th\u1EB3ng h\xE0ng.`;
+      case "concyclic":
+      case "on_circle":
+        return `Ta c\xF3 $${list(r.allPts || (r.type === "on_circle" ? r.ids.slice(1) : r.ids))}$ c\xF9ng thu\u1ED9c m\u1ED9t \u0111\u01B0\u1EDDng tr\xF2n.`;
+      case "equal_len":
+        return `Ta c\xF3 $${r.segs.map(([a, b]) => nm3(a) + nm3(b)).join(" = ")}$.`;
+      case "equal_angle":
+        return `Ta c\xF3 $${r.angles.map((a) => `\\widehat{${a.map(nm3).join("")}}`).join(" = ")}$.`;
+      case "parallel":
+        return `Ta c\xF3 $${lineName(r.ids[0])} \\parallel ${lineName(r.ids[1])}$.`;
+      case "perpendicular":
+        return `Ta c\xF3 $${lineName(r.ids[0])} \\perp ${lineName(r.ids[1])}$.`;
+      default:
+        return `Ta c\xF3 ${r.text}.`;
+    }
   }
   function drawRelationOverlay(app) {
     const r = app.relation;
@@ -25170,19 +26969,23 @@ ${tk.v}
     const R = app.renderer;
     const V = (id) => app.values.get(id);
     const style = { color: "#f59e0b", width: 2.2, dash: true };
-    if (r.type === "collinear") {
-      const ids = r.ids;
-      let best = [ids[0], ids[1]], bd = -1;
-      for (const a of ids) for (const b of ids) {
-        const d = V(a) && V(b) ? dist(V(a), V(b)) : 0;
+    const pts = (r.allPts || r.ids).filter((id) => V(id) && V(id).kind === "point");
+    if (r.type === "collinear" || r.type === "on_line") {
+      let best = [pts[0], pts[1]], bd = -1;
+      for (const a of pts) for (const b of pts) {
+        const d = dist(V(a), V(b));
         if (d > bd) {
           bd = d;
           best = [a, b];
         }
       }
-      R.addExtra({ type: "line", pts: best.map((id) => () => V(id)), style });
-    } else if (r.type === "concyclic") {
-      R.addExtra({ type: "circle3", pts: r.ids.slice(0, 3).map((id) => () => V(id)), style });
+      if (best[0] && best[1]) R.addExtra({ type: "line", pts: best.map((id) => () => V(id)), style });
+    } else if (r.type === "concyclic" || r.type === "on_circle") {
+      if (pts.length >= 3) R.addExtra({ type: "circle3", pts: pts.slice(0, 3).map((id) => () => V(id)), style });
+    } else if (r.type === "equal_len") {
+      for (const [a, b] of r.segs) if (V(a) && V(b)) R.addExtra({ type: "segment", pts: [() => V(a), () => V(b)], style: { color: "#f59e0b", width: 3, dash: false } });
+    } else if (r.type === "equal_angle") {
+      for (const [a, b, c] of r.angles) if (V(a) && V(b) && V(c)) R.addExtra({ type: "polyline", pts: [() => V(a), () => V(b), () => V(c)], style: { color: "#f59e0b", width: 2.4, dash: false } });
     } else if (r.type === "concurrent") {
       const common = () => {
         const [a, b, ...rest] = r.ids.map(V);
@@ -25206,7 +27009,7 @@ ${tk.v}
     const s = (Math.round(v * 1e3) / 1e3).toFixed(3).replace(/\.?0+$/, "");
     return s === "-0" ? "0" : s;
   };
-  var xy2 = (P2) => `(${f32(P2.x)},${f32(P2.y)})`;
+  var xy2 = (P4) => `(${f32(P4.x)},${f32(P4.y)})`;
   var PT_PER_PX2 = 0.4;
   function varName(name2, used) {
     let base2 = (name2 || "P").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[đĐ]/g, "d").replace(/'/g, "p").replace(/[^A-Za-z0-9]/g, "");
@@ -30549,11 +32352,11 @@ ${tk.v}
       const k = MAX_SIDE / Math.max(w, h);
       w = Math.round(w * k);
       h = Math.round(h * k);
-      const cv = document.createElement("canvas");
-      cv.width = w;
-      cv.height = h;
-      cv.getContext("2d").drawImage(img, 0, 0, w, h);
-      src = file.type === "image/png" ? cv.toDataURL("image/png") : cv.toDataURL("image/jpeg", 0.9);
+      const cv2 = document.createElement("canvas");
+      cv2.width = w;
+      cv2.height = h;
+      cv2.getContext("2d").drawImage(img, 0, 0, w, h);
+      src = file.type === "image/png" ? cv2.toDataURL("image/png") : cv2.toDataURL("image/jpeg", 0.9);
     }
     if (as === "box" && app.textBoxes) return app.textBoxes.pasteImage(src, w);
     return insertImageData(app, src, w, h, at);
@@ -34159,7 +35962,7 @@ ${tk.v}
       let pos = 0, j = 0;
       let changed = false;
       for (let i = 0; i < modules.length; i++) {
-        let mod = modules[i], index = this.modules.indexOf(mod);
+        let mod2 = modules[i], index = this.modules.indexOf(mod2);
         if (index < j && index > -1) {
           this.modules.splice(index, 1);
           changed = true;
@@ -34167,13 +35970,13 @@ ${tk.v}
           index = -1;
         }
         if (index == -1) {
-          this.modules.splice(j++, 0, mod);
+          this.modules.splice(j++, 0, mod2);
           changed = true;
-          if (sheet) for (let k = 0; k < mod.rules.length; k++)
-            sheet.insertRule(mod.rules[k], pos++);
+          if (sheet) for (let k = 0; k < mod2.rules.length; k++)
+            sheet.insertRule(mod2.rules[k], pos++);
         } else {
           while (j < index) pos += this.modules[j++].rules.length;
-          pos += mod.rules.length;
+          pos += mod2.rules.length;
           j++;
         }
       }
@@ -37587,8 +39390,8 @@ ${tk.v}
       return null;
     if (view.state.doc.sliceString(found.from, found.to) != text2)
       return null;
-    let inv = changes.invertedDesc;
-    return { range: new ChangedRange(inv.mapPos(from), inv.mapPos(to), from, to), text: textNode };
+    let inv2 = changes.invertedDesc;
+    return { range: new ChangedRange(inv2.mapPos(from), inv2.mapPos(to), from, to), text: textNode };
   }
   function nextToUneditable(node, offset) {
     if (!isElt(node))
@@ -41139,14 +42942,14 @@ ${tk.v}
       var _a2;
       if (!this.delayedAndroidKey) {
         let flush = () => {
-          let key2 = this.delayedAndroidKey;
-          if (key2) {
+          let key3 = this.delayedAndroidKey;
+          if (key3) {
             this.clearDelayedAndroidKey();
-            this.view.inputState.lastKeyCode = key2.keyCode;
+            this.view.inputState.lastKeyCode = key3.keyCode;
             this.view.inputState.lastKeyTime = Date.now();
             let flushed = this.flush();
-            if (!flushed && key2.force)
-              dispatchKey(this.dom, key2.key, key2.keyCode);
+            if (!flushed && key3.force)
+              dispatchKey(this.dom, key3.key, key3.keyCode);
           }
         };
         this.flushingAndroidKey = this.view.win.requestAnimationFrame(flush);
@@ -42559,22 +44362,22 @@ ${tk.v}
       result = " ";
     let alt, ctrl, shift2, meta2;
     for (let i = 0; i < parts.length - 1; ++i) {
-      const mod = parts[i];
-      if (/^(cmd|meta|m)$/i.test(mod))
+      const mod2 = parts[i];
+      if (/^(cmd|meta|m)$/i.test(mod2))
         meta2 = true;
-      else if (/^a(lt)?$/i.test(mod))
+      else if (/^a(lt)?$/i.test(mod2))
         alt = true;
-      else if (/^(c|ctrl|control)$/i.test(mod))
+      else if (/^(c|ctrl|control)$/i.test(mod2))
         ctrl = true;
-      else if (/^s(hift)?$/i.test(mod))
+      else if (/^s(hift)?$/i.test(mod2))
         shift2 = true;
-      else if (/^mod$/i.test(mod)) {
+      else if (/^mod$/i.test(mod2)) {
         if (platform == "mac")
           meta2 = true;
         else
           ctrl = true;
       } else
-        throw new Error("Unrecognized modifier name: " + mod);
+        throw new Error("Unrecognized modifier name: " + mod2);
     }
     if (alt)
       result = "Alt-" + result;
@@ -44870,9 +46673,9 @@ ${tk.v}
     }
     toString() {
       let { name: name2 } = this;
-      for (let mod of this.modified)
-        if (mod.name)
-          name2 = `${mod.name}(${name2})`;
+      for (let mod2 of this.modified)
+        if (mod2.name)
+          name2 = `${mod2.name}(${name2})`;
       return name2;
     }
     static define(nameOrParent, parent) {
@@ -44901,11 +46704,11 @@ ${tk.v}
     `m1(m3(t1)`, and so on.
     */
     static defineModifier(name2) {
-      let mod = new Modifier(name2);
+      let mod2 = new Modifier(name2);
       return (tag) => {
-        if (tag.modified.indexOf(mod) > -1)
+        if (tag.modified.indexOf(mod2) > -1)
           return tag;
-        return Modifier.get(tag.base || tag, tag.modified.concat(mod).sort((a, b) => a.id - b.id));
+        return Modifier.get(tag.base || tag, tag.modified.concat(mod2).sort((a, b) => a.id - b.id));
       };
     }
   };
@@ -50693,9 +52496,9 @@ ${tk.v}
     }
     function placeAt(b, px, py) {
       if (b.anchor === "figure") {
-        const P2 = app.toUser(px, py);
-        b.x = round3(P2.x);
-        b.y = round3(P2.y);
+        const P4 = app.toUser(px, py);
+        b.x = round3(P4.x);
+        b.y = round3(P4.y);
       } else if (b.anchor === "point" && app.values.get(b.pt)) {
         const q = app.toScreen(app.values.get(b.pt));
         b.dx = Math.round(px - q.x);
@@ -51023,6 +52826,17 @@ ${tk.v}
         const id = b ? b.id : newBox("loigiai");
         render3();
         edit(id, { atEnd: true });
+      },
+      /** Thêm một đoạn vào cuối khung lời giải (tạo khung nếu chưa có) – dùng cho "Chèn vào lời giải" của Khám phá. */
+      appendSolution(text2) {
+        let b = boxes().find((x) => x.role === "loigiai");
+        const id = b ? b.id : newBox("loigiai");
+        app.commit((doc2) => {
+          const bb = doc2.boxes.find((x) => x.id === id);
+          bb.text = (bb.text ? bb.text.replace(/\s+$/, "") + "\n\n" : "") + text2;
+        });
+        render3();
+        return id;
       },
       /** Khung trình bày cuối cùng mà chữ cần (để trình bày đi hết các bước lời giải). */
       lastFrame() {

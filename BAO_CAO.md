@@ -1021,3 +1021,67 @@ thêm `smoke10.mjs` (28 kiểm tra: lệnh dựng, mẫu lệnh, báo lỗi, ho�
 * Điểm thoả điều kiện: tối đa hai điều kiện, các loại góc/độ dài/thuộc đường; điều kiện tỉ số, góc có hướng chưa có.
   Gần chỗ hai nghiệm nhập lại, Newton có thể không hội tụ (điểm tạm không xác định, kéo tiếp thì có lại).
 * Lệnh tiếng Việt chỉ hiểu các mẫu đã liệt kê (xem `COMMAND_EXAMPLES` trong `src/core/cmd.js`).
+
+# Bản 1.9 – Khám phá: thước đo, đoạn/góc bằng nhau, mục tiêu, điểm phụ, bộ máy suy luận
+
+Góp ý: "Khám phá" hơi yếu. Phân tích kỹ thì bộ khám phá cũ chỉ *liệt kê* quan hệ đúng về số; với người học Olympic, cái
+thiếu là (1) biết quan hệ nào **đáng chú ý** (không suy ra ngay từ cách dựng), (2) **vì sao** đúng, (3) đi **về phía điều cần
+chứng minh**, và (4) gợi ý **điểm phụ** – chỗ khó nhất của một bài hình. Làm 5 việc, việc đầu là thước đo để biết có tiến bộ thật.
+
+## 1. Đã làm
+
+* **Thước đo** (`tests/kham-pha/`): 23 bài mẫu, 28 kết luận và 8 bổ đề then chốt (có bổ đề kèm điểm phụ của lời giải
+  chính thức), viết bằng lệnh kiểm tra tiếng Việt; mỗi phát biểu tự kiểm bằng số trước khi đo (đã bắt được một bổ đề nhớ sai).
+  Đo: kết luận có được báo không, hạng mấy; bổ đề có được báo không; chứng minh được không (có / cần điểm phụ); điểm phụ của
+  lời giải chính thức có trong 5 gợi ý đầu không. `tests/kham-pha.test.mjs` chặn thụt lùi.
+* **Bộ máy suy luận** (`src/explore/deduce.js`, JS, chạy trong trình duyệt): góc có hướng mod 180° là phương trình tuyến tính
+  trên hướng đường thẳng, độ dài theo log (tỉ số, phương tích PA·PB = PC·PD); khử Gauss modulo một số nguyên tố, mỗi dòng nhớ
+  lý do để dựng lại chứng minh. Giả thiết lấy từ cách dựng (~40 loại bước: vuông góc, song song, phân giác, đẳng giác, tiếp
+  tuyến, tâm các loại, trung điểm, đối xứng, phép quay/vị tự/đồng dạng quay, giao điểm, điểm thoả điều kiện…). Vòng lặp đóng
+  kín: góc nội tiếp, góc ở tâm, tiếp tuyến – dây, Thales, đường kính, tam giác cân hai chiều, tam giác đồng dạng (g.g → tỉ
+  số), phương tích, trục đẳng phương, đảo phương tích; ứng viên thẳng hàng/đồng viên/đồng dạng lấy từ số, chỉ thành sự kiện
+  khi suy ra được. Có cây giải thích (giả thiết → các bước, mỗi bước ghi quy tắc).
+* **Đại lượng**: đoạn bằng nhau (gộp lớp; chung một đầu mút thì báo "X cách đều A, B, C (X là tâm …)"), góc bằng nhau.
+* **Lớp `discover()`** (`src/explore/discover.js`) bọc bộ khám phá cũ (giữ nguyên để đối chiếu với lab Python): gom điểm cùng
+  thuộc một đường tròn/đường thẳng thành một dòng, bỏ trùng; trạng thái *hiển nhiên* / *chứng minh được* / *sâu*; xếp hạng
+  theo độ "lạ", độ lớn, mức xa giả thiết và độ gần mục tiêu.
+* **Mục tiêu** (bước đệm): gõ như lệnh kiểm tra hoặc lấy từ đối tượng đang chọn; thẻ mục tiêu (đúng?/chứng minh được?/vì sao);
+  quan hệ dính tới mục tiêu lên đầu; từ một quan hệ có thể *Đặt làm mục tiêu*, *Chèn vào lời giải*.
+* **Điểm phụ** (`src/explore/aux.js`): dựng thử giao điểm thứ hai của đường với đường tròn, trung điểm, chân đường vuông góc,
+  điểm đối tâm, tâm ngoại tiếp, giao điểm hai đường tròn ngoại tiếp (Miquel), tâm đồng dạng quay; với mỗi điểm chạy lại bộ máy
+  (giới hạn 4 giây), xếp: làm mục tiêu chứng minh được → nhiều quan hệ mới không hiển nhiên. Xem trước khi rê chuột, *Dựng* để
+  thêm.
+* Giao diện thẻ Khám phá viết lại (`src/ui/explorePanel.js`): nhãn trạng thái, "Vì sao?", tự khám phá lại 0,7 s sau khi hình đổi.
+  Lệnh kiểm tra thêm `góc X + góc Y = 180`, "trùng" cho hai đường; trong lệnh kiểm tra "PQ" luôn là đường qua P, Q (trước đây
+  có thể bắt nhầm một đường khác trùng về số).
+
+## 2. Kết quả đo (trước → sau)
+
+| Chỉ số | Bộ khám phá cũ | Bản 1.9 |
+|---|---|---|
+| Kết luận được báo (28) | 23 | **26** |
+| Kết luận trong 3 dòng đầu | 13 | **16** |
+| Kết luận chứng minh được (không điểm phụ) | 0 (không có bộ chứng minh) | **4** |
+| … chứng minh được nhờ điểm phụ tự tìm | 0 | **+3** (IMO 2013/4, IMO 2015/4, VMO 2014/4b) |
+| Bổ đề then chốt được báo (8) | 3 | **5** |
+| Bổ đề chứng minh được (8) | — | **6** |
+| Điểm phụ của lời giải chính thức trong 5 gợi ý đầu | — | **2/2** (đều đứng #1) |
+
+IMO 2013/4: điểm phụ gợi ý đầu là giao điểm thứ hai của XY với (BWN), chứng minh X, Y, H thẳng hàng bằng trục đẳng phương – đúng
+lời giải chính thức. Thời gian: khám phá cả 23 bài 0,6 s (cũ 0,13 s); tìm điểm phụ ≤ 4 s mỗi lần.
+
+## 3. Kiểm thử
+
+`npm test` 167 test (thêm `kham-pha.test.mjs`: ngưỡng thước đo, ca IMO 2013/4 có điểm phụ). Bộ khám phá cũ giữ nguyên – dữ liệu đối
+chiếu JS/Python không đổi, test Python đạt. `npm run test:browser` thêm `smoke11.mjs` (khám phá tự do, mục tiêu gõ tay chứng minh
+được + vì sao + chèn vào lời giải, mục tiêu từ đối tượng đang chọn, tìm và dựng điểm phụ rồi chứng minh được, đặt mục tiêu từ
+một quan hệ, tự khám phá lại).
+
+## 4. Hạn chế
+
+* Bộ máy chỉ biết biến đổi góc/độ dài và các quy tắc kể trên: chưa có Menelaus/Ceva, tỉ số kép, nghịch đảo, toạ độ/số phức;
+  2 kết luận vẫn không được báo, 21/28 kết luận chưa chứng minh được kể cả với điểm phụ. "Sâu" nghĩa là bộ máy chưa đủ sức,
+  không phải chắc chắn khó.
+* Chứng minh bỏ qua điều kiện không suy biến và thứ tự điểm (góc có hướng mod 180° nên không phân biệt hai phía).
+* Điểm phụ chỉ thử một điểm mỗi lần, trong các dạng kể trên; bài cần hai điểm phụ hoặc một đường tròn phụ thì chưa tìm được.
+* Tìm điểm phụ trên toàn bộ thước đo mất ~28 s nên chỉ chạy bằng dòng lệnh (`--diem-phu`), không nằm trong `npm test`.

@@ -93,7 +93,8 @@ class Ctx {
     if (own) return own.id;
     const p = this.vals.get(P), q = this.vals.get(Q);
     const tol = 1e-9 * (1 + G.dist(p, q));
-    const any = this.doc.steps.find((s) => this.k.get(s.id) === 'line' && this.vals.get(s.id) && G.distPointLine(p, this.vals.get(s.id)) < tol && G.distPointLine(q, this.vals.get(s.id)) < tol);
+    // khi kiểm tra / chứng minh (strict): "PQ" là đường qua P, Q – không lấy một đường khác chỉ tình cờ trùng về số
+    const any = !this.strict && this.doc.steps.find((s) => this.k.get(s.id) === 'line' && this.vals.get(s.id) && G.distPointLine(p, this.vals.get(s.id)) < tol && G.distPointLine(q, this.vals.get(s.id)) < tol);
     if (any) return any.id;
     return this.add('line', [P, Q], { aux: true });
   }
@@ -266,6 +267,7 @@ const CHECK_RULES = [
   [/^(.+) thang hang$/, (m, c) => ({ type: 'collinear', ids: c.pointIds(m[1], 3) })],
   [/^(.+) (?:dong vien|cung thuoc (?:mot )?duong tron)$/, (m, c) => ({ type: 'concyclic', ids: c.pointIds(m[1], 4) })],
   [/^goc (\S+) = goc (\S+)$/, (m, c) => ({ type: 'equal_angle', ids: [...c.pointIds(m[1], 3), ...c.pointIds(m[2], 3)] })],
+  [/^goc (\S+) \+ goc (\S+) = 180(?: ?(?:do|°))?$/, (m, c) => ({ type: 'sup_angle', ids: [...c.pointIds(m[1], 3), ...c.pointIds(m[2], 3)] })],
   [/^(\S+) (?:vuong goc|⊥)(?: voi)? (\S+)$/, (m, c) => ({ type: 'perpendicular', ids: [c.line(m[1]), c.line(m[2])] })],
   [/^(\S+) song song(?: voi)? (\S+)$/, (m, c) => ({ type: 'parallel', ids: [c.line(m[1]), c.line(m[2])] })],
   [/^(\S+) , (\S+) , (\S+) dong quy$/, (m, c) => ({ type: 'concurrent', ids: [c.line(m[1]), c.line(m[2]), c.line(m[3])] })],
@@ -274,7 +276,11 @@ const CHECK_RULES = [
     const P = c.pointIds(m[1], 1)[0], X = c.curve(m[2]);
     return { type: c.k.get(X) === 'circle' ? 'on_circle' : 'on_line', ids: [P, X] };
   }],
-  [/^(\S+) trung(?: voi)? (\S+)$/, (m, c) => ({ type: 'coincide', ids: [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]] })],
+  [/^(\S+) trung(?: voi)? (\S+)$/, (m, c) => {
+    if (c.byName(m[1], 'point')) return { type: 'coincide', ids: [c.pointIds(m[1], 1)[0], c.pointIds(m[2], 1)[0]] };
+    const a = c.curve(m[1]), b = c.curve(m[2]);
+    return { type: c.k.get(a) === 'circle' ? 'same_circle' : 'same_line', ids: [a, b] };
+  }],
   [/^(\S+) = (\S+)$/, (m, c) => ({ type: 'equal_len', ids: [...c.pointIds(m[1], 2), ...c.pointIds(m[2], 2)] })],
 ];
 
@@ -289,6 +295,7 @@ export function parseCommand(doc, text, ctx = {}) {
     const c = new Ctx(d, ctx);
     const chk = /^kiem tra (.+?)\??$/.exec(t);
     if (chk) {
+      c.strict = true;
       const r = CHECK_RULES.find(([re]) => re.test(chk[1]));
       if (!r) fail('Kiểm tra: thẳng hàng, đồng viên, AB = CD, góc ABC = góc DEF, d1 vuông góc d2, song song, đồng quy, tiếp xúc, thuộc, trùng');
       return { kind: 'check', claim: r[1](r[0].exec(chk[1]), c) };
