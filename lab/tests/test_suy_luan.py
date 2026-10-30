@@ -35,7 +35,7 @@ class TestSuyLuan(unittest.TestCase):
         self.assertEqual(kl_level("dxH"), 1)          # đối xứng của H qua BC nằm trên (O)
         self.assertEqual(kl_level("tbt", 1), 1)       # A, I, S_a, I_a thẳng hàng
         self.assertIsNone(kl_level("gergonne"))       # cần Ceva – ngoài tầm đuổi góc
-        self.assertEqual(kl_level("nagel"), 3)        # đường thẳng Nagel: cần tam giác đồng dạng (tỉ số)
+        self.assertIsNone(kl_level("nagel"))          # đường thẳng Nagel: cần tỉ số kiểu Ceva
 
     def test_duong_trung_binh(self):
         # M, N trung điểm AB, AC ⇒ MN ∥ BC (lớp affine)

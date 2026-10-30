@@ -129,7 +129,7 @@ def match(vals, pts, eps):
         return None
 
     out = []
-    for kind, xy, _ in atlas():
+    for kind, xy, key in atlas():
         ids = []
         for x, y in xy:
             p = find(x, y)
@@ -138,5 +138,5 @@ def match(vals, pts, eps):
             ids.append(p)
         else:
             if len(set(ids)) == len(ids):
-                out.append((kind, ids))
+                out.append((kind, ids, key))
     return out

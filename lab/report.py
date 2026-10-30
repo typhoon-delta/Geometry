@@ -72,6 +72,8 @@ h2{font-size:18px;margin:26px 0 4px;padding-top:6px;border-top:2px solid var(--l
 .toc a{margin-right:14px}
 .kho-hard{background:#fbeaea;color:var(--bad)}.kho-mid{background:#fdf3e1;color:var(--warn)}.kho-easy{background:#eaf4ee;color:var(--good)}
 ul.var{margin:4px 0 0 0;padding-left:18px}ul.var li{margin:3px 0}
+ol.pf{list-style:none;padding-left:4px;margin:6px 0}ol.pf li{margin:2px 0}.pf-aux{color:#6b4f9e}.pf-given{color:var(--muted)}
+.pf-step{color:var(--ink)}.pf-end{font-weight:600}.pf-vi{color:var(--muted);font-size:12.5px}
 """
 
 JS = r"""
@@ -204,7 +206,35 @@ def _variants(vs, cfg):
     return f'<details><summary>{len(items)} biến thể cùng ý (gom lại)</summary><ul class="var">{"".join(items)}</ul></details>'
 
 
-def _card(i, f, cfg, weights, variants=()):
+def _proof_html(f, doc, proofs):
+    """Lời giải từng bước của máy (khi bộ suy luận giải được), có lưu đệm theo khoá sự kiện."""
+    if not isinstance(f.get("kho"), int) and f.get("tang") == "kho":
+        return ""
+    if proofs is None:
+        proofs = {}
+    key = f["key"]
+    if key not in proofs:
+        from .reason.proof import loi_giai
+
+        lv, steps = loi_giai(f, doc)
+        proofs[key] = {"muc": lv, "buoc": steps}
+    pr = proofs[key]
+    steps = pr.get("buoc")
+    if not steps:
+        return ""
+    cls = {"phu": "pf-aux", "suy": "pf-step", "ket_luan": "pf-end"}
+    rows = []
+    for st in steps:
+        vi = f' <span class="pf-vi">— vì {", ".join(st["vi"])}</span>' if st.get("vi") else ""
+        rows.append(f'<li class="{cls.get(st["loai"], "pf-given")}"><b>{html.escape(st["so"])}</b> {html.escape(st["text"])}{vi}</li>')
+    n = sum(1 for st in steps if st["loai"] == "suy")
+    return (f'<details><summary>Lời giải của máy ({pr.get("muc")} vòng, {n} bước suy luận)</summary>'
+            f'<ol class="pf">{"".join(rows)}</ol><p class="meta">Chữ số trong ( ) là giả thiết / bổ đề / điểm phụ, '
+            f'trong [ ] là bước suy ra. Máy giải bằng đuổi góc, đẳng thức vectơ, tỉ số, tam giác đồng dạng, phương tích '
+            f'và kết luận các bổ đề trong thư viện.</p></details>')
+
+
+def _card(i, f, cfg, weights, variants=(), proofs=None):
     title = f"Sự kiện {i}"
     doc = display_doc(f, title=title)
     st = statement(f, doc)
@@ -242,6 +272,7 @@ def _card(i, f, cfg, weights, variants=()):
         lead = "Bản tổng quát (máy đã nới lỏng giả thiết)" if f.get("doc_goc") else "Thực chất"
         src += f'<p class="meta">{lead}: {describe(f["tong_quat"], nm.n, nm.curve)}.</p>'
     det = [_variants(variants, cfg)] if variants else []
+    det.append(_proof_html(f, doc, proofs))
     if f.get("doc_goc"):
         try:
             g = dict(f, doc=f["doc_goc"])
@@ -293,6 +324,8 @@ def build_report(run_id=None, cfg=None):
     loc = cfg.get("loc")
     for f in facts:
         f["tang"] = tier(f, loc)
+    proof_path = os.path.join(rdir, "loi-giai.json")
+    proofs = _read_json(proof_path, {})
     per = int(cfg["bao_cao"]["so_su_kien"])
     sections, n_card = [], 0
     for t, note in TIER_NOTES:
@@ -305,12 +338,19 @@ def build_report(run_id=None, cfg=None):
         for g in reps:
             n_card += 1
             try:
-                cards.append(_card(n_card, g[0], cfg, weights, variants=g[1:9]))
+                cards.append(_card(n_card, g[0], cfg, weights, variants=g[1:9], proofs=proofs))
             except Exception as e:  # noqa: BLE001 – một sự kiện lỗi không làm hỏng cả báo cáo
                 cards.append(f'<article class="card"><div>Sự kiện #{n_card}: lỗi khi trình bày ({html.escape(str(e))})</div></article>')
         more = f" (hiện {len(reps)} nhóm đầu)" if len(groups) > len(reps) else ""
         sections.append((t, len(fs), len(groups), f'<h2 id="tang-{t}">{TIER_LABELS[t]} – {len(fs)} sự kiện, {len(groups)} nhóm{more}</h2>'
                          f'<p class="tier-note">{note}</p>' + ("".join(cards) or "<p>Chưa có.</p>")))
+    try:
+        tmp_ = proof_path + ".tmp"
+        with open(tmp_, "w", encoding="utf-8") as fh:
+            json.dump(proofs, fh, ensure_ascii=False)
+        os.replace(tmp_, proof_path)
+    except OSError:
+        pass
     dropped = [f for f in facts if f["tang"] == "loai"]
     why = {"hệ quả trực tiếp của sự kiện khác": 0, "đối tượng gượng ép (độ tự nhiên thấp)": 0,
            "dễ (đuổi góc 1 bước) và không đặc sắc": 0, "có điểm chỉ để trang trí": 0, "bị đánh Chán": 0}

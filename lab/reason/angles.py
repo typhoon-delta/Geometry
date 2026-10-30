@@ -103,6 +103,14 @@ class AngleChaser:
         self._alt_done = set()
         self._sim_done = set()
         self.tangents = []  # (đường tròn, tiếp điểm, đường tiếp tuyến hoặc None, điểm ngoài hoặc None)
+        # ---- lời giải: mỗi phương trình mang nhãn "sự kiện" sinh ra nó; sự kiện suy ra có "mục tiêu" để giải ngược
+        self.facts = []  # dict(text, kind, round, targets, ne, nl)
+        self.elog, self.llog = [], []
+        self._tag = None
+        self.round = 0
+        self.vname = {}  # tên hiển thị của điểm ảo
+        self._defs = {}
+        self.goal_leaves = []
         self._build()
         self._reflected_circles()
         self._virtual_centers()
@@ -117,6 +125,7 @@ class AngleChaser:
         self._perp_bisectors()
         ids_doc = {s["id"] for s in doc["steps"]}
         for f in known:
+            self._fact("Đã biết: " + self._ftext(f), "biet")
             refs = [x for v in f.values() for x in v if isinstance(x, str)]
             if "col" in f or "cyc" in f:
                 key = "col" if "col" in f else "cyc"
@@ -150,6 +159,7 @@ class AngleChaser:
         if not terms:
             return
         self.eqs.append(terms)
+        self.elog.append((terms, self._tag))
 
     def _flush(self):
         self.span.resize(len(self.var))
@@ -180,6 +190,7 @@ class AngleChaser:
         terms = [(i, c) for i, c in terms if i is not None]
         if terms:
             self.leqs.append(terms)
+            self.llog.append((terms, self._tag))
 
     def _lvec(self, terms):
         vec = np.zeros(len(self.lvar))
@@ -202,6 +213,143 @@ class AngleChaser:
 
     def eq_len(self, o, x, y):
         return [(self.L(o, x), 1), (self.L(o, y), -1)]
+
+    # ---------------------------------------------------------------- lời giải: tên, sự kiện
+    def nm(self, x):
+        if x in self.vname:
+            return self.vname[x]
+        from ..present import label_text
+
+        st = next((t for t in self.doc["steps"] if t["id"] == x), None)
+        return label_text(st.get("name")) if st and st.get("name") else str(x)
+
+    def ns(self, *xs):
+        return "".join(self.nm(x) for x in xs)
+
+    def _fact(self, text, kind="suy", targets=None):
+        """Đăng ký một sự kiện (nhãn cho các phương trình sắp thêm). targets: [(không gian 'a'|'l', phương trình)] –
+        những gì cần suy ra được để có sự kiện này (dùng khi giải ngược)."""
+        self.facts.append({"text": text, "kind": kind, "round": self.round, "targets": targets or [],
+                           "ne": len(self.elog), "nl": len(self.llog)})
+        self._tag = len(self.facts) - 1
+        return self._tag
+
+    def _def(self, st):
+        """Nhãn "theo cách dựng" của một bước."""
+        if st["id"] not in self._defs:
+            from ..present import Namer, _step_sentence, label_text
+
+            try:
+                txt = _step_sentence(Namer(self.doc, label_text), st) or ""
+            except Exception:  # noqa: BLE001
+                txt = ""
+            txt = txt.rstrip(".") or f"{self.nm(st['id'])}: {STEP_TYPES[st['type']].label.lower()}"
+            self._fact("Giả thiết: " + txt, "gt")
+            self._defs[st["id"]] = self._tag
+        self._tag = self._defs[st["id"]]
+
+    def _aux_point(self, pid, P, desc):
+        """Thêm điểm phụ (ảo) – có tên Z₁, Z₂… và câu "Lấy điểm phụ…" trong lời giải."""
+        sub = "₀₁₂₃₄₅₆₇₈₉"
+        k = sum(1 for f in self.facts if f["kind"] == "phu") + 1
+        self.vname[pid] = "Z" + "".join(sub[int(c)] for c in str(k))
+        self.vals[pid], self.kind[pid] = P, "point"
+        self.pts.append(pid)
+        self._fact(f"Lấy điểm phụ {self.vname[pid]}: {desc}", "phu")
+        self._vfact = getattr(self, "_vfact", {})
+        self._vfact[pid] = self._tag
+
+    def _ftext(self, f):
+        if "col" in f:
+            return ", ".join(self.nm(x) for x in f["col"]) + " thẳng hàng"
+        if "cyc" in f:
+            return ", ".join(self.nm(x) for x in f["cyc"]) + " cùng nằm trên một đường tròn"
+        if "on" in f:
+            p, ref = f["on"]
+            return f"{self.nm(p)} nằm trên {self.nm(ref) if isinstance(ref, str) else 'một đường'}"
+        if "par" in f or "perp" in f:
+            return "hai đường " + ("song song" if "par" in f else "vuông góc")
+        return "quan hệ đã biết"
+
+    def loi_giai(self):
+        """Lời giải từng bước (sau khi level() thành công): danh sách dict {loai, text, vi} theo thứ tự trình bày."""
+        if not self.goal_leaves:
+            return None
+        self._flush()
+        ex = {"a": _Explainer(self.elog, len(self.var)), "l": _Explainer(self.llog, len(self.lvar))}
+        need, stack = set(), []
+
+        def add(tags):
+            for t_ in tags or ():
+                if t_ is not None and t_ not in need:
+                    need.add(t_)
+                    stack.append(t_)
+
+        top = set()
+        affpar = False
+        for (sp, terms), ne, nl in self.goal_leaves:
+            if sp == "affpar":
+                affpar = True
+                continue
+            sup = ex[sp].support(terms, ne if sp == "a" else nl)
+            top |= sup or set()
+            add(sup)
+        deps = {}
+        while stack:
+            fid = stack.pop()
+            f = self.facts[fid]
+            ds = set()
+            for sp, terms in f["targets"]:
+                if sp == "affpar":
+                    continue
+                sup = ex[sp].support(terms, f["ne"] if sp == "a" else f["nl"])
+                ds |= sup or set()
+            ds.discard(fid)
+            deps[fid] = ds
+            add(ds)
+        # điểm phụ được nhắc tới trong lời giải thì phải có câu "Lấy điểm phụ…"
+        vf = getattr(self, "_vfact", {})
+        by_name = {self.vname[p_]: vf[p_] for p_ in vf if p_ in self.vname}
+        changed = True
+        while changed:
+            changed = False
+            for i in list(need):
+                for nm_, fid in by_name.items():
+                    if fid not in need and nm_ in self.facts[i]["text"]:
+                        need.add(fid)
+                        changed = True
+        given = sorted((i for i in need if self.facts[i]["kind"] != "suy"), key=lambda i: (self.facts[i]["kind"] != "phu", i))
+        derived = sorted((i for i in need if self.facts[i]["kind"] == "suy"), key=lambda i: (self.facts[i]["round"], i))
+        label = {}
+        out = []
+        for k_, i in enumerate(given, 1):
+            label[i] = f"({k_})"
+            out.append({"loai": self.facts[i]["kind"], "so": label[i], "text": self.facts[i]["text"], "vi": []})
+        for k_, i in enumerate(derived, 1):
+            label[i] = f"[{k_}]"
+        for i in derived:
+            out.append({"loai": "suy", "so": label[i], "text": self.facts[i]["text"],
+                        "vi": sorted((label[d] for d in deps.get(i, ()) if d in label), key=lambda x: (x[0], int(x[1:-1])))})
+        # đánh số lại điểm phụ Z₁, Z₂… theo thứ tự xuất hiện trong lời giải
+        sub = "₀₁₂₃₄₅₆₇₈₉"
+        used = [nm_ for nm_ in sorted(by_name, key=lambda n_: by_name[n_]) if by_name[nm_] in need]
+        ren = {old_: "Z" + "".join(sub[int(c)] for c in str(k_)) for k_, old_ in enumerate(used, 1)}
+        if ren:
+            import re as _re
+
+            pat = _re.compile("|".join(sorted(map(_re.escape, ren), key=len, reverse=True)))
+            for o_ in out:
+                o_["text"] = pat.sub(lambda m_: ren[m_.group(0)], o_["text"])
+        vi = sorted((label[d] for d in top if d in label), key=lambda x: (x[0], int(x[1:-1])))
+        out.append({"loai": "ket_luan", "so": "⇒", "text": "Kết luận" + (" (tổ hợp các vectơ cùng phương)" if affpar else ""),
+                    "vi": vi})
+        return out
+
+    def _leaves(self, g):
+        """Các phương trình lá đã được thoả của mục tiêu g (để giải ngược)."""
+        rec = []
+        self._goal_ok(g, rec)
+        return rec
 
     # ---------------------------------------------------------------- các dạng sự kiện
     def eq_col(self, a, b, c):
@@ -369,6 +517,7 @@ class AngleChaser:
             d = STEP_TYPES.get(s["type"])
             if d is None or d.facts is None:
                 continue
+            self._def(s)
             try:
                 facts = d.facts(s, [k.get(a) for a in s["args"]], self.doc) or []
             except Exception:  # noqa: BLE001
@@ -378,6 +527,7 @@ class AngleChaser:
         # tâm của các đường tròn
         for s in steps:
             t, a, sid = s["type"], s["args"], s["id"]
+            self._def(s)
             if t == "circle":
                 e = self.circle_entity(sid)
                 e[1] = a[0]
@@ -405,6 +555,7 @@ class AngleChaser:
                         self.add_center_point(m, p)
         for s in steps:
             if s["type"] == "nine_point_circle":
+                self._def(s)
                 A, B, C = s["args"]
                 for sid, (x, y) in self.midpoints.items():
                     if {x, y} in ({A, B}, {B, C}, {C, A}):
@@ -413,6 +564,7 @@ class AngleChaser:
         cc = {frozenset(s["args"]): s["id"] for s in steps if s["type"] == "circumcenter"}
         for s in steps:
             if s["type"] in ("circumcircle", "circle_3pts") and frozenset(s["args"]) in cc:
+                self._def(s)
                 e = self.circle_entity(s["id"])
                 e[1] = cc[frozenset(s["args"])]
                 for p in e[0]:
@@ -420,6 +572,7 @@ class AngleChaser:
         # các tính chất góc riêng của từng loại bước
         for s in steps:
             t, a, sid = s["type"], s["args"], s["id"]
+            self._def(s)
             pr = lambda x, y: self.pair(x, y)  # noqa: E731
             if t in ("incenter", "excenter"):
                 A, B, C = a
@@ -488,6 +641,7 @@ class AngleChaser:
             if s_["type"] == "incircle_touch":
                 touch.setdefault(frozenset(s_["args"]), []).append((s_["id"], set(s_["args"][1:])))
         for tri, ts in touch.items():
+            self._fact("Tính chất tiếp điểm: IT vuông góc với cạnh, hai tiếp tuyến kẻ từ một đỉnh bằng nhau", "dl")
             inc = next((x["id"] for x in steps if x["type"] == "incenter" and frozenset(x["args"]) == tri), None)
             for t1, side in ts:
                 if inc:
@@ -510,6 +664,8 @@ class AngleChaser:
                 F = next((z for z in self.pts if G.dist(self.vals[z], Fp) < self.eps), None)
                 if F is None or F in (U, V, W, X):
                     continue
+                self._fact(f"Hệ thức trực tâm: {self.ns(F, U)}·{self.ns(F, X)} = {self.ns(F, V)}·{self.ns(F, W)} "
+                           f"({self.nm(X)} trực tâm tam giác {self.ns(U, V, W)})", "dl")
                 self.lequation([(self.L(F, U), 1), (self.L(F, X), 1), (self.L(F, V), -1), (self.L(F, W), -1)])
         # vị tự (trung điểm / đối xứng qua cùng một tâm): ảnh song song với gốc
         groups = {}
@@ -522,6 +678,7 @@ class AngleChaser:
                 groups.setdefault(("r", a[1]), {})[a[0]] = s["id"]
         for m in groups.values():
             for (x, mx), (y, my) in itertools.combinations(m.items(), 2):
+                self._fact(f"Đường trung bình / vị tự: {self.ns(mx, my)} ∥ {self.ns(x, y)}", "vecto")
                 self.equation([(self.pair(mx, my), 1), (self.pair(x, y), -1)])
 
     # ---------------------------------------------------------------- lớp affine
@@ -536,8 +693,9 @@ class AngleChaser:
         f = next((x for x in self.pts if self._may_reuse(x) and G.dist(self.vals[x], X) < self.eps), None)
         if f is None:
             f = "_f" + tag
-            self.vals[f], self.kind[f] = X, "point"
-            self.pts.append(f)
+            self._aux_point(f, X, f"hình chiếu của {self.nm(P)} lên đường thẳng {self.ns(U, V)}")
+        elif f in getattr(self, "_vfact", {}):
+            self._tag = self._vfact[f]
         if f not in (U, V):
             self.add_col([U, V, f])
         if f != P:
@@ -561,8 +719,9 @@ class AngleChaser:
             o = next((x for x in self.pts if self._may_reuse(x) and G.dist(self.vals[x], Oc) < self.eps), None)
             if o is None:
                 o = "_o" + s["id"]
-                self.vals[o], self.kind[o] = Oc, "point"
-                self.pts.append(o)
+                self._aux_point(o, Oc, f"tâm đường tròn ngoại tiếp tam giác {self.ns(*a)}")
+            elif o in getattr(self, "_vfact", {}):
+                self._tag = self._vfact[o]
             for x in a:
                 self.add_center_point(o, x)
 
@@ -612,8 +771,7 @@ class AngleChaser:
             if any(G.dist(self.vals[x], M) < self.eps for x in self.pts):
                 continue
             mv = "_m" + U + V
-            self.vals[mv], self.kind[mv] = M, "point"
-            self.pts.append(mv)
+            self._aux_point(mv, M, f"trung điểm của {self.ns(U, V)}")
             self.add_col([U, mv, V])
             self.add_center_point(mv, U)
             self.add_center_point(mv, V)
@@ -624,7 +782,18 @@ class AngleChaser:
         """Kiến thức của các bổ đề trong thư viện, so khớp theo vị trí (lab/reason/atlas.py)."""
         from .atlas import match
 
-        for kind, ids in match(self.vals, self.pts, self.eps):
+        from ..library import BY_KEY
+
+        for kind, ids, key in match(self.vals, self.pts, self.eps):
+            ten = BY_KEY[key].ten if key in BY_KEY else key
+            n_ = self.nm
+            txt = {"col": lambda: ", ".join(map(n_, ids)) + " thẳng hàng",
+                   "cyc": lambda: ", ".join(map(n_, ids)) + " cùng nằm trên một đường tròn",
+                   "eq": lambda: f"{n_(ids[0])} cách đều " + ", ".join(map(n_, ids[1:])),
+                   "pow": lambda: f"{self.ns(ids[0], ids[1])}·{self.ns(ids[0], ids[2])} = {self.ns(ids[0], ids[3])}²",
+                   "tch": lambda: f"đường tròn qua {n_(ids[2])}, {n_(ids[3])} tiếp xúc {self.ns(ids[0], ids[1])} tại {n_(ids[0])}",
+                   "mid": lambda: f"{n_(ids[0])} là trung điểm của {self.ns(ids[1], ids[2])}"}[kind]()
+            self._fact(f"Bổ đề ({ten}): {txt}", "bode")
             if kind == "col":
                 if frozenset(ids) not in self.known_col:
                     self.add_col(ids)
@@ -772,6 +941,7 @@ class AngleChaser:
                 u = G.sub(self.vals[y0], self.vals[x0])
                 v = G.sub(self.vals[y], self.vals[x])
                 if abs(G.cross(G.unit(u), G.unit(v))) < 1e-7:  # kiểm lại bằng số
+                    self._fact(f"Đẳng thức vectơ: {self.ns(x0, y0)} ∥ {self.ns(x, y)} (tỉ số không đổi)", "vecto")
                     self.equation([(self.pair(x, y), 1), (self.pair(x0, y0), -1)])
                     self.lequation([(self.L(x, y), 1), (self.L(x0, y0), -1)])  # (+ log tỉ số)
         self.affine = co
@@ -784,11 +954,14 @@ class AngleChaser:
         added = 0
         for P, P2, U, V in self.reflections:
             for X in self.pts:
-                if X in (P, P2) or (P, P2, X) in self._ax_done or not self._num_col(U, V, X):
+                if X in (P, P2) or (P, P2, X) in self._ax_done or not self._distinct(X, P, P2) or not self._num_col(U, V, X):
                     continue
                 if X not in (U, V) and frozenset((U, V, X)) not in self.known_col and not self._goal_ok(self.col_any(U, V, X)):
                     continue
                 self._ax_done.add((P, P2, X))
+                tg = [] if X in (U, V) or frozenset((U, V, X)) in self.known_col else self._leaves(self.col_any(U, V, X))
+                self._fact(f"{self.nm(X)} nằm trên trục đối xứng {self.ns(U, V)} của {self.nm(P)} và {self.nm(P2)} nên "
+                           f"{self.ns(X, P)} = {self.ns(X, P2)}", "suy", tg)
                 self.equation([(self.pair(X, P), 1), (self.pair(X, P2), 1), (self.pair(U, V), -2)])
                 self.add_center_point(X, P)
                 self.add_center_point(X, P2)
@@ -807,6 +980,8 @@ class AngleChaser:
             if len(pts) < 2 or any(self.vals.get(x) is None for x in pts[:2]):
                 continue
             U, V = pts[:2]
+            self._fact(f"Đường tròn đối xứng của {self.nm(a[0])} qua {self.ns(U, V)}: đi qua giao điểm với trục, ảnh của "
+                       f"các điểm trên {self.nm(a[0])}; đối xứng của (ABC) qua một cạnh đi qua trực tâm", "dl")
             e0, e = self.circle_entity(a[0]), self.circle_entity(sid)
             src = by_args = next((x for x in steps if x["id"] == a[0]), None)
             on0 = set(e0[0]) | (set(by_args["args"]) if src and src["type"] in ("circumcircle", "circle_3pts") else set())
@@ -832,8 +1007,7 @@ class AngleChaser:
             c2 = next((x for x in self.pts if self._may_reuse(x) and G.dist(self.vals[x], Oc) < self.eps), None)
             if c2 is None:
                 c2 = "_c" + sid
-                self.vals[c2], self.kind[c2] = Oc, "point"
-                self.pts.append(c2)
+                self._aux_point(c2, Oc, f"tâm của {self.nm(sid)} (đối xứng của tâm {self.nm(o)} qua {self.ns(U, V)})")
             e[1] = c2
             for X in list(e[0]):
                 self.add_center_point(c2, X)
@@ -894,9 +1068,16 @@ class AngleChaser:
                     if not any(g_ and self.lderivable(r_) for g_, r_ in zip(got, rat)):
                         self._sim_done.discard(k)  # có thể thành công ở vòng sau
                         continue
+                    i_ = next(i for i, (g_, r_) in enumerate(zip(got, rat)) if g_ and self.lderivable(r_))
+                    self._fact(f"Tam giác {self.ns(*v1)} đồng dạng tam giác {self.ns(*v2)} (c.g.c: góc tại "
+                               f"{self.nm(v1[i_])}, {self.nm(v2[i_])} bằng nhau và tỉ số hai cạnh kề bằng nhau)", "suy",
+                               [("a", eqs[i_]), ("l", rat[i_])])
                     for e, g_ in zip(eqs, got):
                         if not g_:
                             self.equation(e)
+                else:
+                    self._fact(f"Tam giác {self.ns(*v1)} đồng dạng tam giác {self.ns(*v2)} (g.g)", "suy",
+                               [("a", e) for e, g_ in zip(eqs, got) if g_][:2])
                 L = self.L
                 s0 = (L(v1[1], v1[2]), L(v2[1], v2[2]))
                 for s_ in ((L(v1[0], v1[2]), L(v2[0], v2[2])), (L(v1[0], v1[1]), L(v2[0], v2[1]))):
@@ -926,13 +1107,17 @@ class AngleChaser:
                 near = np.nonzero(np.hypot(Pm[:, 0] - Fp.x, Pm[:, 1] - Fp.y) < self.eps)[0]
                 for m_ in near:  # chân đường cao từ X: tra theo toạ độ thay vì dò mọi điểm
                     M = self.pts[m_]
-                    if M in (X, P, Q) or (X, P, Q, M) in self._alt_done:
+                    if M in (X, P, Q) or (X, P, Q, M) in self._alt_done or not self._distinct(X, P, Q, M):
                         continue
                     if not (self.derivable([(self.pair(X, P), 1), (self.pair(X, Q), -1)]) and
                             self._goal_ok(self.col_any(P, Q, M)) and
                             self.derivable([(self.pair(X, M), 1), (self.pair(P, Q), -1)])):
                         continue
                     self._alt_done.add((X, P, Q, M))
+                    self._fact(f"Hệ thức lượng trong tam giác {self.ns(X, P, Q)} vuông tại {self.nm(X)}, đường cao {self.ns(X, M)}: "
+                               f"{self.ns(X, P)}² = {self.ns(P, M)}·{self.ns(P, Q)}", "suy",
+                               [("a", [(self.pair(X, P), 1), (self.pair(X, Q), -1)]),
+                                ("a", [(self.pair(X, M), 1), (self.pair(P, Q), -1)])] + self._leaves(self.col_any(P, Q, M)))
                     L = self.L
                     self.lequation([(L(X, P), 2), (L(P, M), -1), (L(P, Q), -1)])
                     self.lequation([(L(X, Q), 2), (L(Q, M), -1), (L(P, Q), -1)])
@@ -947,12 +1132,15 @@ class AngleChaser:
         new = []
         for o, eq in list(self.centers.items()):
             for x, y in itertools.combinations(sorted(eq), 2):
-                if (o, frozenset((x, y))) in known or G.dist(self.vals[o], G.mid(self.vals[x], self.vals[y])) > self.eps:
+                if (o, frozenset((x, y))) in known or G.dist(self.vals[o], G.mid(self.vals[x], self.vals[y])) > self.eps or \
+                        not self._distinct(o, x, y):
                     continue
                 if not self._goal_ok(self.col_any(x, o, y)):
                     continue
                 new.append((o, x, y))
                 known.add((o, frozenset((x, y))))
+                self._fact(f"{self.nm(o)} là trung điểm của {self.ns(x, y)} ({self.nm(o)} cách đều {self.nm(x)}, {self.nm(y)} "
+                           f"và thẳng hàng với chúng)", "suy", [("l", self.eq_len(o, x, y))] + self._leaves(self.col_any(x, o, y)))
         if new:
             self.extra_mid += new
             for m in new:
@@ -966,9 +1154,12 @@ class AngleChaser:
         added = 0
         for m, a, b in self.mids:
             for o, eq in self.centers.items():
-                if o in (m, a, b) or a not in eq or b not in eq or (o, m, a, b) in self._pb_done:
+                if o in (m, a, b) or a not in eq or b not in eq or (o, m, a, b) in self._pb_done or \
+                        not self._distinct(o, m, a, b):
                     continue
                 self._pb_done.add((o, m, a, b))
+                self._fact(f"{self.ns(o, m)} ⊥ {self.ns(a, b)} ({self.nm(m)} là trung điểm {self.ns(a, b)}, "
+                           f"{self.ns(o, a)} = {self.ns(o, b)})", "suy", [("l", self.eq_len(o, a, b))])
                 self.equation([(self.pair(o, m), 1), (self.pair(a, b), -1)])
                 added += 1
         return added
@@ -1002,7 +1193,7 @@ class AngleChaser:
                 if P in S:
                     continue
                 prs = [(a, b) for a, b in itertools.combinations(S, 2)
-                       if a in self.vals and b in self.vals and self._num_col(a, b, P) and
+                       if a in self.vals and b in self.vals and self._distinct(a, b, P) and self._num_col(a, b, P) and
                        (frozenset((P, a, b)) in self.known_col or self._goal_ok(self.col_any(P, a, b)))]
                 prs += [(T, T) for cs, T in tan_by_pt.get(P, []) if T in S or len(cs & set(S)) >= 3]
                 for (a, b), (c, d) in itertools.combinations(prs, 2):
@@ -1010,6 +1201,12 @@ class AngleChaser:
                     if key in self._pow_done:
                         continue
                     self._pow_done.add(key)
+                    tg = []
+                    for u_, w_ in ((a, b), (c, d)):
+                        if u_ != w_ and frozenset((P, u_, w_)) not in self.known_col:
+                            tg += self._leaves(self.col_any(P, u_, w_))
+                    sq = lambda u_, w_: f"{self.ns(P, u_)}²" if u_ == w_ else f"{self.ns(P, u_)}·{self.ns(P, w_)}"  # noqa: E731
+                    self._fact(f"Phương tích của {self.nm(P)}: {sq(a, b)} = {sq(c, d)}", "suy", tg)
                     self.lequation([(self.L(P, a), 1), (self.L(P, b), 1), (self.L(P, c), -1), (self.L(P, d), -1)])
                     added += 1
         return added
@@ -1027,11 +1224,13 @@ class AngleChaser:
                 if i in (j, k) or abs(d[j] - d[k]) > self.eps or d[j] < self.eps:
                     continue
                 x, y = self.pts[j], self.pts[k]
-                if x in eq and y in eq:
+                if x in eq and y in eq or not self._distinct(x, y):
                     continue
                 if frozenset((o, x, y)) in self.known_col:
                     continue
                 if self.lderivable(self.eq_len(o, x, y)) or self.derivable(self.eq_iso(o, x, y)):
+                    tg = [("l", self.eq_len(o, x, y))] if self.lderivable(self.eq_len(o, x, y)) else [("a", self.eq_iso(o, x, y))]
+                    self._fact(f"{self.ns(o, x)} = {self.ns(o, y)}" + (" (tam giác cân)" if tg[0][0] == "a" else ""), "suy", tg)
                     self.add_center_point(o, x)
                     self.add_center_point(o, y)
                     eq = self.centers.get(o, set())
@@ -1141,7 +1340,7 @@ class AngleChaser:
         out = []
         for (p, q), (r, t) in (((a, b), (c, d)), ((a, c), (b, d)), ((a, d), (b, c))):
             for X in self.pts:
-                if X in (a, b, c, d) or X.startswith("_x"):
+                if X in (a, b, c, d) or X.startswith("_x") or not self._distinct(X, a, b, c, d):
                     continue
                 if self._num_col(p, q, X) and self._num_col(r, t, X):
                     out.append(("all", [self.col_any(X, p, q), self.col_any(X, r, t),
@@ -1155,6 +1354,11 @@ class AngleChaser:
         return sorted(self.lines.get(lid, set()))
 
     # ---------------------------------------------------------------- số
+    def _distinct(self, *xs):
+        """Các điểm đôi một khác vị trí (điểm ảo có thể trùng vị trí điểm thật: bộ điểm như vậy là suy biến)."""
+        P = [self.vals[x] for x in xs]
+        return all(G.dist(P[i], P[j]) > self.eps for i in range(len(P)) for j in range(i + 1, len(P)))
+
     def _num_col(self, a, b, c):
         A, B, C = (self.vals[x] for x in (a, b, c))
         return G.dist_point_line(C, G.line_through(A, B)) < self.eps if G.dist(A, B) > self.eps else False
@@ -1172,7 +1376,7 @@ class AngleChaser:
                 continue
             dist = np.abs((P[:, 0] - P[i, 0]) * d[1] - (P[:, 1] - P[i, 1]) * d[0]) / nd
             for k in np.nonzero(dist < self.eps)[0]:
-                if k > j:
+                if k > j and self._distinct(pts[i], pts[j], pts[k]):
                     key = frozenset((pts[i], pts[j], pts[k]))
                     if key not in self.known_col:
                         cols.append((pts[i], pts[j], pts[k]))
@@ -1182,7 +1386,7 @@ class AngleChaser:
                 continue
             dist = np.abs(np.hypot(P[:, 0] - c.c.x, P[:, 1] - c.c.y) - c.r)
             for m in np.nonzero(dist < self.eps)[0]:
-                if m > k:
+                if m > k and self._distinct(pts[i], pts[j], pts[k], pts[m]):
                     key = frozenset((pts[i], pts[j], pts[k], pts[m]))
                     if key not in self.known_cyc:
                         cycs.append((pts[i], pts[j], pts[k], pts[m]))
@@ -1253,28 +1457,50 @@ class AngleChaser:
                 Q = self.vals[q]
                 S = G.pt(2 * M.x - Q.x, 2 * M.y - Q.y)
                 s_id = next((x for x in self.pts if G.dist(self.vals[x], S) < self.eps), None)
-                if s_id is None or s_id in (p, r, q) or q > s_id:
+                if s_id is None or s_id in (p, r, q) or q > s_id or not self._distinct(p, q, r, s_id):
                     continue
                 if frozenset((q, m, s_id)) in self.known_col:
                     continue
                 if self.derivable([(self.pair(p, q), 1), (self.pair(s_id, r), -1)]) and \
                         self.derivable([(self.pair(p, s_id), 1), (self.pair(q, r), -1)]):
+                    self._fact(f"{self.ns(p, q, r, s_id)} là hình bình hành nên {self.nm(m)} là trung điểm {self.ns(q, s_id)}", "suy",
+                               [("a", [(self.pair(p, q), 1), (self.pair(s_id, r), -1)]),
+                                ("a", [(self.pair(p, s_id), 1), (self.pair(q, r), -1)])])
                     self.add_col([q, m, s_id])
                     self.add_center_point(m, q)
                     self.add_center_point(m, s_id)
                     added += 1
         return added
 
-    def _goal_ok(self, g):
+    def _goal_ok(self, g, rec=None):
         if isinstance(g, tuple) and g and g[0] == "any":
-            return any(self._goal_ok(x) for x in g[1])
+            for x in g[1]:
+                sub = [] if rec is not None else None
+                if self._goal_ok(x, sub):
+                    if rec is not None:
+                        rec += sub
+                    return True
+            return False
         if isinstance(g, tuple) and g and g[0] == "all":
-            return all(self._goal_ok(x) for x in g[1])
+            sub = [] if rec is not None else None
+            ok = all(self._goal_ok(x, sub) for x in g[1])
+            if ok and rec is not None:
+                rec += sub
+            return ok
         if isinstance(g, tuple) and g and g[0] == "len":
-            return self.lderivable(g[1])
+            ok = self.lderivable(g[1])
+            if ok and rec is not None:
+                rec.append(("l", g[1]))
+            return ok
         if isinstance(g, tuple) and g and g[0] == "affpar":
-            return self.affine_parallel(*g[1:])
-        return self.derivable(g)
+            ok = self.affine_parallel(*g[1:])
+            if ok and rec is not None:
+                rec.append(("affpar", g[1:]))
+            return ok
+        ok = self.derivable(g)
+        if ok and rec is not None:
+            rec.append(("a", g))
+        return ok
 
     def level(self, rtype, ids):
         """Số vòng suy luận cần để suy ra quan hệ (1, 2, …); None nếu không suy ra được; "?" nếu loại quan hệ
@@ -1288,9 +1514,7 @@ class AngleChaser:
                     X = Y
             if X is None:
                 return "?"
-            self.vals["_x"] = X
-            self.kind["_x"] = "point"
-            self.pts.append("_x")
+            self._aux_point("_x", X, f"giao điểm của {self.nm(a)} và {self.nm(b)}")
             self._add_fact({"on": ["_x", a]})
             self._add_fact({"on": ["_x", b]})
             terms = []
@@ -1307,19 +1531,25 @@ class AngleChaser:
 
     def _run(self, goals):
         for rnd in range(1, self.max_rounds + 1):
+            self.round = rnd
             if all(self._goal_ok(g) for g in goals):
+                self.goal_leaves = [(lf, len(self.elog), len(self.llog)) for g in goals for lf in self._leaves(g)]
                 return rnd
             cols, cycs = self._num_candidates()
             added = 0
             for c in cols:
-                if self._goal_ok(self.col_any(*c)):
+                lv = self._leaves(self.col_any(*c))
+                if lv:
+                    self._fact(", ".join(map(self.nm, c)) + " thẳng hàng", "suy", lv)
                     self.add_col(c)
                     added += 1
             for q in cycs:
                 a, b, c, d = q
                 # một đẳng thức góc nội tiếp là đủ (điểm ở vị trí tổng quát – đã kiểm bằng số)
-                if self.derivable(self.eq_cyc(a, b, c, d)) or self.derivable(self.eq_cyc(a, c, b, d)) or \
-                        self.derivable(self.eq_cyc(a, d, b, c)):
+                e_ok = next((e for e in (self.eq_cyc(a, b, c, d), self.eq_cyc(a, c, b, d), self.eq_cyc(a, d, b, c))
+                             if self.derivable(e)), None)
+                if e_ok is not None:
+                    self._fact(", ".join(map(self.nm, q)) + " cùng nằm trên một đường tròn (góc nội tiếp)", "suy", [("a", e_ok)])
                     self.add_cyc(list(q))
                     added += 1
             added += self._parallelograms()
@@ -1337,16 +1567,68 @@ class AngleChaser:
                     continue
                 a, b = st["args"]
                 for x in self.pts:
-                    if x in (a, b, m) or x in eq:
+                    if x in (a, b, m) or x in eq or not self._distinct(x, a, b, m):
                         continue
                     X, A, B = self.vals[x], self.vals[a], self.vals[b]
                     if abs(G.dot(G.sub(A, X), G.sub(B, X))) < self.eps * self.scale and \
                             self.derivable([(self.pair(x, a), 1), (self.pair(x, b), -1)]):
+                        self._fact(f"{self.ns(m, x)} = {self.ns(m, a)} (trung tuyến ứng với cạnh huyền {self.ns(a, b)})", "suy",
+                                   [("a", [(self.pair(x, a), 1), (self.pair(x, b), -1)])])
                         self.add_center_point(m, x)
                         added += 1
             if not added:
                 return None
         return None
+
+
+class _Explainer:
+    """Giải ngược: phương trình mục tiêu = tổ hợp những phương trình nào (gọn nhất có thể)."""
+
+    def __init__(self, log, nv):
+        self.log = log
+        self.nv = nv
+        self.M = np.zeros((len(log), nv))
+        for i, (t, _) in enumerate(log):
+            for idx, c in t:
+                self.M[i, idx] += c
+        # tập độc lập theo thứ tự xuất hiện (Gram–Schmidt): tiền tố của nó là tập độc lập của mọi tiền tố của log
+        Q = np.zeros((0, nv))
+        self.indep = []
+        for i in range(len(log)):
+            v = self.M[i]
+            nrm = np.linalg.norm(v)
+            if nrm < 1e-12:
+                continue
+            r = v - Q.T @ (Q @ v) if len(Q) else v.copy()
+            if np.linalg.norm(r) > 1e-8 * nrm:
+                Q = np.vstack([Q, r / np.linalg.norm(r)])
+                self.indep.append(i)
+
+    def support(self, terms, upto):
+        t = np.zeros(self.nv)
+        for idx, c in terms:
+            if idx is not None and idx < self.nv:
+                t[idx] += c
+        if np.linalg.norm(t) < 1e-12:
+            return set()
+        rows = [i for i in self.indep if i < upto]
+        if not rows:
+            return None
+
+        def fit(rs):
+            A = self.M[rs].T
+            lam, *_ = np.linalg.lstsq(A, t, rcond=None)
+            return lam, np.linalg.norm(A @ lam - t) < 1e-7 * max(1.0, np.linalg.norm(t))
+
+        lam, ok = fit(rows)
+        if not ok:
+            return None
+        keep = [r for r, l_ in zip(rows, lam) if abs(l_) > 1e-9]
+        for r in sorted(keep, key=lambda r: -r):  # bỏ bớt, ưu tiên giữ phương trình xuất hiện sớm (giả thiết)
+            trial = [x for x in keep if x != r]
+            if trial and fit(trial)[1]:
+                keep = trial
+        return {self.log[r][1] for r in keep}
 
 
 def point_form(doc, rtype, ids):
