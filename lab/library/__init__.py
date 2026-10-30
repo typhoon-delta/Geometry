@@ -6,7 +6,8 @@ thêm các bước riêng (id dạng "<khoá>_<số>"). Mỗi cấu hình khai b
 
     ten        tên tiếng Việt
     ket_luan   các KẾT LUẬN CHÍNH của bổ đề (coi là đã biết: không báo lại, và được dùng như kiến thức khi
-               đo độ khó) – các quan hệ khác nằm gọn trong một bổ đề vẫn được báo (trừ nhẹ điểm)
+               đo độ khó) – các quan hệ khác nằm gọn trong một bổ đề vẫn được báo (trừ nhẹ điểm). Ngoài các
+               loại quan hệ thường, có loại "midpoint" [M, X, Y]: M là trung điểm XY.
     the        nhãn (để ưu tiên ghép các cấu hình "hợp nhau")
 
 Khi ghép hai cấu hình, các đối tượng trùng nhau (bằng số) được gộp; quan hệ nối phần của cấu hình này với
@@ -102,6 +103,7 @@ def _tam_bang_tiep(b):
     c = b.add("circle", ["Sa", "B"])
     b.kl("on_circle", [c, "I", "C", J])
     b.kl("collinear", ["A", "I", "Sa", J])
+    b.kl("midpoint", ["Sa", "I", J])  # S_a là trung điểm II_a
 
 
 def _mixtilinear(b):
@@ -156,6 +158,9 @@ def _bang_tiep(b):
     U = b.add("foot", [b.add("excenter", ["A", "B", "C"], "J_a"), "B", "C"], "U")
     b.kl("concyclic", ["B", "C", Jb, Jc])
     b.kl("collinear", [Jb, "A", Jc])
+    M = b.add("midpoint", [Jb, Jc], "M")
+    b.kl("on_circle", [b.add("circle", [M, "B"]), "C", Jb, Jc])  # tâm là trung điểm I_bI_c (góc I_bBI_c vuông)
+    b.kl("midpoint", [M, Jb, Jc])
 
 
 def _feuerbach(b):
@@ -225,6 +230,8 @@ def _trung_diem_duong_cao(b):
     Mh = b.add("midpoint", ["A", "D"], "K")
     Ja = b.add("excenter", ["A", "B", "C"], "J_a")
     b.kl("collinear", [Mh, "Ta", Ja])
+    U = b.add("foot", [Ja, "B", "C"], "U")
+    b.kl("collinear", [Mh, U, "I"])  # bản đối ngẫu: I, trung điểm AD, tiếp điểm của (I_a) thẳng hàng
 
 
 def _BHC(b):
@@ -237,6 +244,9 @@ def _tiep_diem_doi_xung(b):
     Ja = b.add("excenter", ["A", "B", "C"], "J_a")
     U = b.add("foot", [Ja, "B", "C"], "U")
     b.kl("collinear", ["A", X, U])
+    Y = b.add("reflect", [U, Ja], "Y")
+    b.kl("collinear", ["A", "Ta", Y])  # vị tự tâm A biến (I_a) thành (I): điểm "trên cùng" của (I_a) ↦ T_a
+    b.kl("midpoint", ["Ma", "Ta", U])  # hai tiếp điểm đối xứng qua trung điểm BC
 
 
 def _cuc_doi_cuc(b):

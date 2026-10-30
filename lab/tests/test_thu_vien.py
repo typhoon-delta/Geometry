@@ -36,6 +36,8 @@ def holds(rtype, ids, v, eps):
         return min(abs(d - a.r - b.r), abs(d - abs(a.r - b.r))) < eps
     if rtype == "same_circle":
         return G.dist(P[0].c, P[1].c) < eps and abs(P[0].r - P[1].r) < eps
+    if rtype == "midpoint":
+        return G.dist(P[0], G.mid(P[1], P[2])) < eps
     raise AssertionError(rtype)
 
 

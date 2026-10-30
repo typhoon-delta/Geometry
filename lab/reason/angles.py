@@ -70,7 +70,7 @@ class Span:
 
 
 class AngleChaser:
-    def __init__(self, doc, known=(), max_rounds=5):
+    def __init__(self, doc, known=(), max_rounds=5, classical=True):
         self.doc = doc
         self.vals = evaluate(doc)
         self.kind = kinds(doc)
@@ -103,6 +103,12 @@ class AngleChaser:
         self.tangents = []  # (đường tròn, tiếp điểm, đường tiếp tuyến hoặc None, điểm ngoài hoặc None)
         self._build()
         self._reflected_circles()
+        self._virtual_centers()
+        self.extra_mid = []
+        self._partner_feet()
+        self._virtual_midpoints()
+        if classical:
+            self._classical()
         self._affine()
         self._axis_points()
         self._perp_bisectors()
@@ -453,6 +459,11 @@ class AngleChaser:
                 if ce[1]:
                     self.equation([(tl, 1), (pr(T, ce[1]), -1)])
                 self.tangents.append((c, T, sid, None))
+            elif t == "circle_tangent_at":
+                # đường tròn tiếp xúc với đường a0a1 tại a0
+                self.on_circle(a[0], sid)
+                self.on_circle(a[2], sid)
+                self.tangents.append((sid, a[0], ("pts", a[0], a[1]), None))
             elif t == "tangent_point":
                 c, P = a
                 ce = self.circle_entity(c)
@@ -475,6 +486,8 @@ class AngleChaser:
             for t1, side in ts:
                 if inc:
                     self.add_center_point(inc, t1)
+                    U_, V_ = sorted(side)
+                    self.equation([(self.pair(inc, t1), 1), (self.pair(U_, V_), -1)])  # IT ⊥ cạnh (+π/2)
             for (t1, s1), (t2, s2) in itertools.combinations(ts, 2):
                 for V in s1 & s2:
                     self.add_center_point(V, t1)
@@ -521,6 +534,99 @@ class AngleChaser:
         if f != P:
             self.equation([(self.pair(P, f), 1), (self.pair(U, V), -1)])  # (+π/2)
         return f
+
+    def _virtual_centers(self):
+        """Trực tâm của tam giác chưa có tâm ngoại tiếp đã biết: thêm tâm ngoại tiếp (điểm có sẵn trùng vị trí, hoặc
+        điểm ảo) cách đều ba đỉnh – để dùng Sylvester và sổ tri thức (vd tâm (IBC) là S_a)."""
+        for s in self.doc["steps"]:
+            if s["type"] != "orthocenter" or self.vals.get(s["id"]) is None:
+                continue
+            a = s["args"]
+            if any(set(a) <= eq for eq in self.centers.values()):
+                continue
+            if any(x["type"] == "circumcenter" and set(x["args"]) == set(a) for x in self.doc["steps"]):
+                continue
+            Oc = G.circumcenter(*(self.vals[x] for x in a))
+            if Oc is None:
+                continue
+            o = next((x for x in self.pts if G.dist(self.vals[x], Oc) < self.eps), None)
+            if o is None:
+                o = "_o" + s["id"]
+                self.vals[o], self.kind[o] = Oc, "point"
+                self.pts.append(o)
+            for x in a:
+                self.add_center_point(o, x)
+
+    def _partner_feet(self):
+        """Đã có chân đường vuông góc từ tâm nội tiếp / một tâm bàng tiếp xuống một cạnh ⇒ thêm chân của các tâm còn
+        lại (điểm có sẵn hoặc điểm ảo): các tiếp điểm "bạn đôi" (đối xứng qua trung điểm cạnh…)."""
+        steps = self.doc["steps"]
+        cen = {s["id"]: frozenset(s["args"]) for s in steps if s["type"] in ("incenter", "excenter")}
+        sides = set()
+        for s in steps:
+            if s["type"] == "foot" and s["args"][0] in cen:
+                sides.add((cen[s["args"][0]], s["args"][1], s["args"][2]))
+            elif s["type"] == "incircle_touch":
+                sides.add((frozenset(s["args"]), s["args"][1], s["args"][2]))
+        for tri, U, V in sides:
+            for c, t in cen.items():
+                if t == tri and self.vals.get(c) is not None:
+                    self._virtual_foot(c, U, V, "t" + c + U + V)
+
+    def _virtual_midpoints(self):
+        """Trung điểm ảo của các cạnh tam giác (đường trung bình, hình thang, tiếp điểm đối xứng qua M_a…)."""
+        self._vmids = []
+        pairs = [s["args"] for s in self.doc["steps"]
+                 if s["type"] in LINE_TYPES and all(self.kind.get(x) == "point" and x in self.vals for x in s["args"])]
+        if all(x in self.vals for x in "ABC"):
+            pairs += [["B", "C"], ["C", "A"], ["A", "B"]]
+        done = set()
+        for U, V in pairs:
+            if frozenset((U, V)) in done:
+                continue
+            done.add(frozenset((U, V)))
+            M = G.mid(self.vals[U], self.vals[V])
+            if any(G.dist(self.vals[x], M) < self.eps for x in self.pts):
+                continue
+            mv = "_m" + U + V
+            self.vals[mv], self.kind[mv] = M, "point"
+            self.pts.append(mv)
+            self.add_col([U, mv, V])
+            self.add_center_point(mv, U)
+            self.add_center_point(mv, V)
+            self.mids.append((mv, U, V))
+            self._vmids.append((mv, U, V))
+
+    def _classical(self):
+        """Kiến thức của các bổ đề trong thư viện, so khớp theo vị trí (lab/reason/atlas.py)."""
+        from .atlas import match
+
+        for kind, ids in match(self.vals, self.pts, self.eps):
+            if kind == "col":
+                if frozenset(ids) not in self.known_col:
+                    self.add_col(ids)
+            elif kind == "cyc":
+                if frozenset(ids) not in self.known_cyc:
+                    self.add_cyc(ids)
+            elif kind == "eq":
+                for x in ids[1:]:
+                    self.add_center_point(ids[0], x)
+            elif kind == "tch":
+                T, U, P, X = ids
+                ent = next((st["id"] for st in self.doc["steps"] if st["type"] == "circle_tangent_at"
+                            and st["args"][0] == T and st["args"][2] == P and self._num_col(T, U, st["args"][1])), None)
+                if ent is not None:
+                    self.on_circle(X, ent)  # cùng một đường tròn (tiếp xúc TU tại T, qua P)
+                else:  # góc tạo bởi tiếp tuyến và dây cung
+                    self.equation([(self.pair(T, U), 1), (self.pair(T, X), -1), (self.pair(P, T), -1), (self.pair(P, X), 1)])
+            elif kind == "mid":
+                m, x, y = ids
+                self.extra_mid.append((m, x, y))
+                self.mids.append((m, x, y))
+                if frozenset((m, x, y)) not in self.known_col:
+                    self.add_col([x, m, y])
+                self.add_center_point(m, x)
+                self.add_center_point(m, y)
 
     def _affine(self):
         steps = self.doc["steps"]
@@ -570,17 +676,50 @@ class AngleChaser:
                 co[sid] = comb((1.0, a[0]), (1.0, a[2]), (-1.0, a[1]))
             elif t == "nine_point_center":
                 O = next((x["id"] for x in steps if x["type"] == "circumcenter" and sorted(x["args"]) == sorted(a)), None)
+                O = O or next((o for o, eq in self.centers.items() if set(a) <= eq and o in self.vals), None)
                 H = next((x["id"] for x in steps if x["type"] == "orthocenter" and sorted(x["args"]) == sorted(a)), None)
                 if O and H:
                     co[sid] = comb((0.5, O), (0.5, H))
                     self.mids.append((sid, O, H))
+                elif O:  # N = (A + B + C − O)/2
+                    co[sid] = comb((0.5, a[0]), (0.5, a[1]), (0.5, a[2]), (-0.5, O))
+            elif t == "isogonal_conjugate":
+                # liên hợp đẳng giác kinh điển: của O là H, của H là O, của điểm Lemoine là trọng tâm
+                P, tri = a[0], a[1:]
+                if self.vals.get(P) is None or not G.triangle_ok(*(self.vals[x] for x in tri)):
+                    continue
+                T3 = [self.vals[x] for x in tri]
+                O = next((o for o, eq in self.centers.items() if set(tri) <= eq and o in self.vals), None)
+                Pv = self.vals[P]
+                if O is not None and G.dist(Pv, self.vals[O]) < self.eps and O == P:
+                    co[sid] = comb((1.0, tri[0]), (1.0, tri[1]), (1.0, tri[2]), (-2.0, O))
+                elif O is not None and G.dist(Pv, G.orthocenter(*T3)) < self.eps:
+                    co[sid] = dict(c(O))
+                elif G.dist(Pv, G.lemoine(*T3)) < self.eps and \
+                        any(x["id"] == P and x["type"] == "lemoine" and set(x["args"]) == set(tri) for x in steps):
+                    co[sid] = comb((1 / 3, tri[0]), (1 / 3, tri[1]), (1 / 3, tri[2]))
             elif t == "orthocenter":
                 O = next((x["id"] for x in steps if x["type"] == "circumcenter" and sorted(x["args"]) == sorted(a)), None)
                 if O is None:  # tâm ngoại tiếp đã biết khác: điểm cách đều ba đỉnh (vd O với tam giác PBC, P trên (O))
                     O = next((o for o, eq in self.centers.items() if set(a) <= eq and o in self.vals), None)
                 if O:  # Sylvester: OH = OA + OB + OC
                     co[sid] = comb((1.0, a[0]), (1.0, a[1]), (1.0, a[2]), (-2.0, O))
-        pts = [p for p in self.pts if p in ids or p.startswith("_f")]
+        for mv, U, V in self._vmids:
+            co[mv] = comb((0.5, U), (0.5, V))
+        # trung điểm biết từ sổ tri thức: thay điểm gốc bằng biểu thức (M = (X + Y)/2)
+        for m, x, y in self.extra_mid:
+            for tgt, expr in ((y, comb((2.0, m), (-1.0, x))), (x, comb((2.0, m), (-1.0, y))), (m, comb((0.5, x), (0.5, y)))):
+                if tgt in co or tgt in expr:
+                    continue
+                for k_, e_ in list(co.items()):
+                    if tgt in e_:
+                        f_ = e_.pop(tgt)
+                        for b_, v_ in expr.items():
+                            e_[b_] = e_.get(b_, 0.0) + f_ * v_
+                        co[k_] = {b_: v_ for b_, v_ in e_.items() if abs(v_) > 1e-12}
+                co[tgt] = expr
+                break
+        pts = [p for p in self.pts if p in ids or p.startswith("_")]
         basis = sorted({b for p in pts for b in c(p)})
         bi = {b: i for i, b in enumerate(basis)}
         M = np.zeros((len(pts), len(basis)))
@@ -606,6 +745,8 @@ class AngleChaser:
                     self.equation([(self.pair(x, y), 1), (self.pair(x0, y0), -1)])
                     self.lequation([(self.L(x, y), 1), (self.L(x0, y0), -1)])  # (+ log tỉ số)
         self.affine = co
+        self._aff_basis = bi
+        self._aff_dirs = {k_: g[0] for k_, g in groups.items()}
 
     def _axis_points(self):
         """X nằm trên trục đối xứng UV (đã biết) ⇒ X cách đều P và ảnh P' của nó, XU là phân giác của góc PXP'."""
@@ -731,7 +872,12 @@ class AngleChaser:
         tan_by_pt = {}
         for c, T, tl, P in self.tangents:
             e = self.circle_entity(c)
-            on = set(self.lines.get(tl, set())) | set(self._points_on_line_obj(tl)) if tl else {P}
+            if isinstance(tl, tuple):
+                _, U0, V0 = tl
+                on = {X for X in self.pts if X in (U0, V0) or
+                      (self._num_col(U0, V0, X) and self._goal_ok(self.col_any(U0, V0, X)))}
+            else:
+                on = set(self.lines.get(tl, set())) | set(self._points_on_line_obj(tl)) if tl else {P}
             for X in on:
                 if X and X != T:
                     tan_by_pt.setdefault(X, []).append((frozenset(e[0] | {T}), T))
@@ -776,6 +922,80 @@ class AngleChaser:
                     eq = self.centers.get(o, set())
                     added += 1
         return added
+
+    def _aff_vec(self, x):
+        co = getattr(self, "affine", None)
+        if co is None:
+            return None
+        v = np.zeros(len(self._aff_basis))
+        for b_, c_ in (co.get(x) or {x: 1.0}).items():
+            if b_ not in self._aff_basis:
+                return None
+            v[self._aff_basis[b_]] += c_
+        return v
+
+    def affine_parallel(self, p, q, r, t):
+        """(q − p) và (t − r) đều nằm trong không gian sinh (affine) của một họ cặp điểm ĐÃ BIẾT cùng phương
+        ⇒ cùng phương với họ đó (vd U − X = 2(O − M) − 2(I − T) với OM, IT cùng vuông góc BC)."""
+        vp, vq, vr, vt = (self._aff_vec(x) for x in (p, q, r, t))
+        if any(v is None for v in (vp, vq, vr, vt)):
+            return False
+        d1, d2 = vq - vp, vt - vr
+        if np.linalg.norm(d1) < 1e-12 or np.linalg.norm(d2) < 1e-12:
+            return False
+        P0, Q0 = self.vals[p], self.vals[q]
+        u = G.unit(G.sub(Q0, P0))
+        fam, ref = [], None
+        for x, y in itertools.combinations(self.pts, 2):
+            X, Y = self.vals[x], self.vals[y]
+            if G.dist(X, Y) < self.eps or abs(G.cross(u, G.unit(G.sub(Y, X)))) > 1e-7:
+                continue
+            vx, vy = self._aff_vec(x), self._aff_vec(y)
+            if vx is None or vy is None:
+                continue
+            if ref is None:
+                ref = (x, y)
+            elif not self.derivable([(self.pair(x, y), 1), (self.pair(*ref), -1)]):
+                continue
+            fam.append(vy - vx)
+        if len(fam) < 2:
+            return False
+        M = np.array(fam).T
+        for d in (d1, d2):
+            sol, *_ = np.linalg.lstsq(M, d, rcond=None)
+            if np.linalg.norm(M @ sol - d) > 1e-7 * max(1.0, np.linalg.norm(d)):
+                return False
+        return True
+
+    def trapezoid_goal(self, a, b, c, d):
+        """Hình thang cân: PQ ∥ RT và (lớp affine) vectơ nối trung điểm hai đáy ⊥ PQ ⇒ chung trung trực ⇒ đồng viên."""
+        out = []
+        co = getattr(self, "affine", None)
+        if co is None:
+            return out
+        bi = self._aff_basis
+        for (p, q), (r, t) in (((a, b), (c, d)), ((a, c), (b, d)), ((a, d), (b, c))):
+            P, Q, R, T = (self.vals[x] for x in (p, q, r, t))
+            if abs(G.cross(G.unit(G.sub(Q, P)), G.unit(G.sub(T, R)))) > 1e-7:
+                continue
+            vec = np.zeros(len(bi))
+            ok = True
+            for x, sg in ((p, 1), (q, 1), (r, -1), (t, -1)):
+                for b_, v_ in (co.get(x) or {x: 1.0}).items():
+                    if b_ not in bi:
+                        ok = False
+                        break
+                    vec[bi[b_]] += sg * v_
+            nz = np.nonzero(np.abs(vec) > 1e-9)[0]
+            if not ok or not len(nz):
+                continue
+            key = tuple(np.round(vec / vec[nz[0]], 7))
+            if key not in self._aff_dirs:
+                continue
+            x0, y0 = self._aff_dirs[key]
+            out.append(("all", [[(self.pair(p, q), 1), (self.pair(r, t), -1)],
+                                [(self.pair(x0, y0), 1), (self.pair(p, q), -1)]]))
+        return out
 
     def power_goal(self, a, b, c, d):
         """Đảo phương tích cho 4 điểm a, b, c, d: giao X của (ab), (cd) là một điểm có sẵn."""
@@ -833,10 +1053,11 @@ class AngleChaser:
     def goal_terms(self, rtype, ids):
         """Danh sách phương trình (mỗi phương trình là list (biến, hệ số)) tương đương với quan hệ; None nếu ngoài tầm."""
         if rtype == "collinear":
-            return [self.col_any(ids[0], ids[1], x) for x in ids[2:]]
+            return [("any", [self.col_any(ids[0], ids[1], x), ("affpar", ids[0], ids[1], ids[0], x)]) for x in ids[2:]]
         if rtype == "concyclic":
             return [("any", [self.eq_cyc(ids[0], ids[1], ids[2], x), self.eq_cyc(ids[0], ids[2], ids[1], x),
-                             self.eq_cyc(ids[1], ids[2], ids[0], x)] + self.power_goal(ids[0], ids[1], ids[2], x))
+                             self.eq_cyc(ids[1], ids[2], ids[0], x)] + self.power_goal(ids[0], ids[1], ids[2], x) +
+                     self.trapezoid_goal(ids[0], ids[1], ids[2], x))
                     for x in ids[3:]]
         if rtype == "on_line":
             pts = self._points_on_line_obj(ids[0])
@@ -912,6 +1133,8 @@ class AngleChaser:
             return all(self._goal_ok(x) for x in g[1])
         if isinstance(g, tuple) and g and g[0] == "len":
             return self.lderivable(g[1])
+        if isinstance(g, tuple) and g and g[0] == "affpar":
+            return self.affine_parallel(*g[1:])
         return self.derivable(g)
 
     def level(self, rtype, ids):
@@ -1001,9 +1224,9 @@ def point_form(doc, rtype, ids):
     return out
 
 
-def difficulty(doc, rtype, ids, known=(), max_rounds=5):
+def difficulty(doc, rtype, ids, known=(), max_rounds=5, classical=True):
     """Mức khó theo bộ đuổi góc: 1, 2, … (vòng suy luận), None (không suy ra được) hoặc "?" (ngoài tầm biểu diễn)."""
     try:
-        return AngleChaser(doc, known=known, max_rounds=max_rounds).level(rtype, ids)
+        return AngleChaser(doc, known=known, max_rounds=max_rounds, classical=classical).level(rtype, ids)
     except Exception:  # noqa: BLE001 – không làm đổ vòng khám phá
         return None

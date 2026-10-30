@@ -440,6 +440,9 @@ class Translator:
                     g.append(f"cong {o} {r} {o} {x}")
         elif rel_type == "coincide":
             g += self._coincide_goals(ids, extra_step)
+        elif rel_type == "midpoint":
+            m, x, y = (self.P(i) for i in ids)
+            g.append(f"midp {m} {x} {y}")
         else:
             raise NotTranslatable(f"chưa dịch được quan hệ '{rel_type}'")
         if not g:

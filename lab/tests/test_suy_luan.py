@@ -25,7 +25,7 @@ def tri(*extra):
 def kl_level(key, i=0):
     doc, _, kls = start_doc([key])
     _, rtype, ids = kls[i]
-    return difficulty(sub_doc(doc, ids, title=""), rtype, ids)
+    return difficulty(sub_doc(doc, ids, title=""), rtype, ids, classical=False)  # sức suy luận thuần, không sổ tri thức
 
 
 class TestSuyLuan(unittest.TestCase):
@@ -157,6 +157,13 @@ class TestSuyLuan(unittest.TestCase):
         d = mk([("P", "midpoint", ["Ma", "B"]), ("Q", "orthocenter", ["C", "B", "O"]), ("R", "reflect", ["Ma", "B"])],
                ["O", "P", "Q", "R"])
         self.assertEqual(difficulty(d, "concyclic", ["O", "P", "Q", "R"]), 1)
+        # đường thẳng Euler đội lốt: liên hợp đẳng giác của O là H, của điểm Lemoine là G
+        d = mk([("K", "lemoine", ["A", "B", "C"]), ("Q", "isogonal_conjugate", ["O", "A", "B", "C"]),
+                ("R", "isogonal_conjugate", ["K", "A", "B", "C"])], ["O", "Q", "R"])
+        self.assertEqual(difficulty(d, "collinear", ["O", "Q", "R"]), 1)
+        # N = (A + B + C − O)/2 kể cả khi hình không có H: A, N và đối xứng của O qua BC thẳng hàng
+        d = mk([("P", "reflect", ["O", "BC"])], ["A", "N", "P"])
+        self.assertEqual(difficulty(d, "collinear", ["A", "N", "P"]), 1)
 
 
 if __name__ == "__main__":

@@ -1145,3 +1145,23 @@ kiểm thử hồi quy (`test_suy_luan.py`):
 Chạy thử 6 phút sau khi sửa (4000 sự kiện giữ lại): Khó 26 %, Vừa 20 %, Dễ nhưng đẹp 1 %, lọc bỏ 53 %; khoảng 60 % sự
 kiện được tổng quát hoá (có điểm thừa). Còn lại trong tầng Khó: các bài cần một điểm phụ kinh điển mà hình không có
 (vd trung điểm AH), hoặc cần đồng dạng tổng quát – bộ suy luận chưa tự thêm điểm phụ.
+
+## 4. Sau lần chạy 1 tiếng (25 bài đứng đầu tầng Khó)
+
+Giải tay 25 bài: **14 bài là hệ quả ngắn** của vài bổ đề kinh điển về đường tròn nội tiếp – bàng tiếp mà máy "có" trong
+thư viện nhưng không dùng được (kiến thức gắn với tên đối tượng, chỉ cho đỉnh A, thiếu vài kết luận). 11 bài còn lại
+cần ý thật (vị tự, hàng điểm điều hoà, đối trung…). Đã sửa từ gốc, 25 bài thành kiểm thử `lab/tests/test_25_bai.py`:
+
+* **Sổ tri thức bổ đề theo vị trí** (`lab/reason/atlas.py`): kết luận của cả thư viện viết thành sự kiện giữa các điểm
+  (thẳng hàng, đồng viên, trung điểm, cách đều, đường tròn tiếp xúc), cho **cả 6 cách đặt tên đỉnh**; bộ suy luận so
+  khớp toạ độ – điểm nào trùng vị trí (kể cả điểm ảo) đều được dùng kiến thức đó.
+* Thêm kết luận: S_a là trung điểm II_a; tiếp điểm của (I) và (I_a) đối xứng qua M_a; vị tự tâm A (đỉnh của (I_a)
+  ↦ T_a); bản đối ngẫu của bổ đề trung điểm đường cao (I, trung điểm AD, tiếp điểm của (I_a) thẳng hàng); tâm của
+  (B, C, I_b, I_c) là trung điểm I_bI_c. Thêm loại kết luận "trung điểm"; Newclid dịch được (`midp`).
+* Bộ suy luận: tâm ngoại tiếp ảo cho trực tâm (Sylvester cho mọi tam giác), trung điểm ảo của ba cạnh, tiếp điểm
+  "bạn đôi", IT ⊥ cạnh, **tổ hợp affine của các vectơ cùng phương** (vd U − X = 2(O − M) − 2(I − T) ⊥ BC), hình thang
+  cân nội tiếp, phương tích với đường tròn tiếp xúc một đường tại một điểm, N = (A + B + C − O)/2, liên hợp đẳng giác
+  kinh điển (của O là H, của điểm Lemoine là G).
+
+Kết quả: 14/25 đo được là dễ (≤ 2 vòng khi dùng bổ đề), 11/25 vẫn khó. Chạy thử 6 phút: tầng Khó còn 11 % (trước 26 %).
+Tốc độ giảm khoảng 25 % (bộ suy luận làm nhiều việc hơn).

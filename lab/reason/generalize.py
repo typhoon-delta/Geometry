@@ -55,6 +55,8 @@ def holds(rtype, ids, v, eps):
             return False
         if rtype == "same_line":
             return abs(G.cross(G.unit(P[0].d), G.unit(P[1].d))) < eps and G.dist_point_line(P[1].p, P[0]) < eps
+        if rtype == "midpoint":
+            return G.dist(P[0], G.mid(P[1], P[2])) < eps
         if rtype == "same_circle":
             return G.dist(P[0].c, P[1].c) < eps and abs(P[0].r - P[1].r) < eps
     except (AttributeError, TypeError, ZeroDivisionError):
