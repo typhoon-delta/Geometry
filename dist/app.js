@@ -23951,7 +23951,7 @@ ${tk.v}
       }
     }
     const L = [];
-    L.push(`% ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
+    L.push(`% ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB TyphoonDelta Geometry`);
     L.push("% C\u1EA7n trong ph\u1EA7n m\u1EDF \u0111\u1EA7u: \\usepackage{tikz}");
     L.push("% \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc h\xECnh: s\u1EEDa x=\u2026, y=\u2026 (\u0111\u01A1n v\u1ECB c\u1EE7a m\u1ED9t \xF4 to\u1EA1 \u0111\u1ED9).");
     if (doc2.images && doc2.images.length) L.push(`% (${doc2.images.length} \u1EA3nh d\xE1n v\xE0o h\xECnh kh\xF4ng \u0111\u01B0\u1EE3c xu\u1EA5t sang TikZ)`);
@@ -25290,7 +25290,7 @@ ${tk.v}
       }
     }
     const L = [];
-    L.push(`// ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB H\xECnh h\u1ECDc \u0111\u1ED9ng`);
+    L.push(`// ${doc2.title ? doc2.title + " \u2014 " : ""}xu\u1EA5t t\u1EEB TyphoonDelta Geometry`);
     L.push("// Asymptote thu\u1EA7n; tr\xEAn AoPS d\xE1n gi\u1EEFa [asy] v\xE0 [/asy]. \u0110\u1ED5i k\xEDch th\u01B0\u1EDBc: s\u1EEDa unitsize.");
     L.push(`unitsize(${f32(unit2)}cm);`);
     L.push(`defaultpen(fontsize(10pt)+linewidth(${f32(baseWidth * PT_PER_PX2)}));`);

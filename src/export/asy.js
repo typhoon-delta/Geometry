@@ -163,7 +163,7 @@ export function toAsymptote(doc, opts = {}) {
   }
 
   const L = [];
-  L.push(`// ${doc.title ? doc.title + ' — ' : ''}xuất từ Hình học động`);
+  L.push(`// ${doc.title ? doc.title + ' — ' : ''}xuất từ TyphoonDelta Geometry`);
   L.push('// Asymptote thuần; trên AoPS dán giữa [asy] và [/asy]. Đổi kích thước: sửa unitsize.');
   L.push(`unitsize(${f3(unit)}cm);`);
   L.push(`defaultpen(fontsize(10pt)+linewidth(${f3(baseWidth * PT_PER_PX)}));`);

@@ -1,4 +1,4 @@
-# Hình học động
+# TyphoonDelta Geometry
 
 Công cụ hình học động chạy hoàn toàn trên trình duyệt, dùng để dạy Olympic Toán (ôn thi VMO) trên máy
 chiếu và chuẩn bị bài. Giao diện tiếng Việt, không cần máy chủ, **chạy được offline** (không tải gì từ
