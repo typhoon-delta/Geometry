@@ -1049,7 +1049,7 @@ chứng minh**, và (4) gợi ý **điểm phụ** – chỗ khó nhất của m
   quan hệ dính tới mục tiêu lên đầu; từ một quan hệ có thể *Đặt làm mục tiêu*, *Chèn vào lời giải*.
 * **Điểm phụ** (`src/explore/aux.js`): dựng thử giao điểm thứ hai của đường với đường tròn, trung điểm, chân đường vuông góc,
   điểm đối tâm, tâm ngoại tiếp, giao điểm hai đường tròn ngoại tiếp (Miquel), tâm đồng dạng quay; với mỗi điểm chạy lại bộ máy
-  (giới hạn 4 giây), xếp: làm mục tiêu chứng minh được → nhiều quan hệ mới không hiển nhiên. Xem trước khi rê chuột, *Dựng* để
+  (giới hạn 6 giây), xếp: làm mục tiêu chứng minh được → nhiều quan hệ mới không hiển nhiên. Xem trước khi rê chuột, *Dựng* để
   thêm.
 * Giao diện thẻ Khám phá viết lại (`src/ui/explorePanel.js`): nhãn trạng thái, "Vì sao?", tự khám phá lại 0,7 s sau khi hình đổi.
   Lệnh kiểm tra thêm `góc X + góc Y = 180`, "trùng" cho hai đường; trong lệnh kiểm tra "PQ" luôn là đường qua P, Q (trước đây
@@ -1068,7 +1068,7 @@ chứng minh**, và (4) gợi ý **điểm phụ** – chỗ khó nhất của m
 | Điểm phụ của lời giải chính thức trong 5 gợi ý đầu | — | **2/2** (đều đứng #1) |
 
 IMO 2013/4: điểm phụ gợi ý đầu là giao điểm thứ hai của XY với (BWN), chứng minh X, Y, H thẳng hàng bằng trục đẳng phương – đúng
-lời giải chính thức. Thời gian: khám phá cả 23 bài 0,6 s (cũ 0,13 s); tìm điểm phụ ≤ 4 s mỗi lần.
+lời giải chính thức. Thời gian: khám phá cả 23 bài 0,6 s (cũ 0,13 s); tìm điểm phụ tối đa 6 s mỗi lần (trang đứng trong lúc tìm).
 
 ## 3. Kiểm thử
 
